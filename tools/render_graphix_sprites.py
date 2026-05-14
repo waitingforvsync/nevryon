@@ -75,7 +75,13 @@ CATALOG = [
     (0x4090, "pickup_yellow",         2, 16),
     (0x40C0, "pickup_checker",        2, 16),
 
-    # 0x40E0..0x435F: still TBD (~640 bytes)
+    # &40E0..&435F: end-of-game / inter-stage text strings
+    # (&40E0..&40FF is a 2-col blank pad before GET READY!)
+    (0x4100, "text_get_ready",       16, 16),
+    (0x4200, "text_game",             8, 16),
+    (0x4280, "text_over",             8, 16),
+    (0x4300, "text_on",               6, 16),
+
     (0x4360, "enemy_slot19",          4, 32),
     # 0x43E0..0x48FF: trailing gap (~1312 B)
 ]
@@ -137,8 +143,6 @@ def main():
     print("Gaps (still unidentified):")
     render_gap(data, 0x38C0, 0x3A20, "between_helix_and_smallchars")
     print(f"  &38C0..&3A1F ({0x3A20-0x38C0} B)")
-    render_gap(data, 0x40E0, 0x4360, "between_pickups_and_slot19")
-    print(f"  &40E0..&435F ({0x4360-0x40E0} B)")
     render_gap(data, 0x43E0, 0x4900, "trailing_to_irq")
     print(f"  &43E0..&48FF ({0x4900-0x43E0} B)")
     print()
