@@ -97,8 +97,9 @@ CATALOG = [
     # &4750..&476F: 2×16 graphic — purpose TBD
     (0x4750, "graphic_4750",          2, 16),
     # &4770..&477F: 16 B padding
-    # &4780..&47FF: text glyphs, 8 cols × 16 lines = 128 B
-    (0x4780, "text_4780",             8, 16),
+    # &4780..&47EF: text glyphs, 8 cols × 14 lines = 112 B
+    # &47F0..&47FF: 16 B padding
+    (0x4780, "text_4780",             8, 14),
     # &4800..&483F: 8 small icons (1×8 each = 8 B), generic naming
     (0x4800, "icon_seq", 1, 8, [
         "icon_10", "icon_11", "icon_12", "icon_13",
