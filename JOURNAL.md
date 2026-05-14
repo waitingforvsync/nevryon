@@ -6,13 +6,13 @@ Newest entries at the top.
 
 ## 2026-05-14 — Session 2: maps and LEVD format
 
-### Per-level palettes — partly solved (mechanism + tables)
+### Per-level palettes — solved (mechanism + tables + override code)
 
-User confirmed each scenario uses a different MODE 5 palette. The
-**rendering mechanism** is now fully decoded; the **per-scenario
-palette-override code** is still missing.
+User confirmed each scenario uses a different MODE 5 palette and
+that the palette source must be the IRQ split routine. Both the
+IRQ side and the per-scenario override side are now decoded.
 
-What we've decoded:
+Rendering mechanism:
 
   - `$.GRAPHIX` at file offset `0x1280` (CPU `&4900`) is the
     `irq_palette_split` IRQ handler. On a vsync IRQ it walks
@@ -22,22 +22,33 @@ What we've decoded:
     `palette_bottom` (`&494F`, 12 bytes) and writes those too —
     that's the screen split.
   - `irq_install` at `&497E` hooks IRQ1V (`&0204`/`&0205`) to
-    `&4900` and saves the prior vector at zp `&64`/`&65`.
-  - On-disk `&493F` already holds the scenario-1 playfield palette
-    (red/yellow); on-disk `&494F` is the always-blue/cyan scoreboard
-    palette. The bottom is constant across all scenarios.
+    `&4900` and saves the prior vector at zp `&64`/`&65`. Loader2
+    line 1000 calls it via `CALL&497E`.
+  - The IRQ only writes 12 entries per band (not 16) — the last 4
+    bytes of each table are present but never reach `&FE21`. In
+    MODE 5 only ULA entries 0, 3, 12, 15 are actually displayed
+    (the BBC's "interleaved" 4-color bit-replication), so the 12
+    writes cover entries 0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13. The
+    "white" at entry 15 is set once by Loader2's `VDU 19,3,7;` and
+    never overridden.
 
-What's still missing:
+Per-scenario palette override (Loader2 lines 940-970, defs at
+1130-1200):
 
-  - The code that **overwrites `&493F[0..11]` per scenario** for
-    scenarios 2-4 is not yet located. No `STA &49xx` instruction
-    targets that range in any of CODE/CODE2/CODE3/Loader2/Loader3,
-    no byte-pattern matching the expected lev2/3/4 palette tables
-    appears in any extracted file, and no PROC in any BASIC loader
-    POKEs into `&493F`. It could be (a) constructed dynamically by
-    code path I haven't disassembled, (b) loaded as part of a level
-    overlay I haven't isolated, or (c) carried inside the LEVD1
-    file at an unexpected offset for scenarios 2-4.
+  - Loader2 reads start-level `L% = ?&9D` and dispatches one of
+    four PROCs.
+  - `PROCLV12` (L%=1,2): no-op, keeps the lev1 palette already
+    shipped in GRAPHIX at `&493F`.
+  - `PROCL34` (L%=3,4): `RESTORE 1160: FOR T%=0 TO 15: READ T%?&493F: NEXT`
+    pokes 16 bytes from `DATA 7,23,71,87,35,51,99,115,129,145,193,209,160,176,224,240` into `&493F`.
+  - `PROCL56` (L%=5,6): same loop from `DATA 7,23,71,87,38,54,102,118,133,149,197,213,160,176,224,240`.
+  - `PROCL78` (L%=7,8): same loop from `DATA 7,23,71,87,38,54,102,118,130,146,194,210,160,176,224,240`.
+
+(Note: my earlier round of searches missed these because the BASIC
+DATA values are stored as ASCII digit-strings, not raw bytes, so
+`grep`-ing for the expected hex bytes turned up nothing. The PROC
+defs were also outside the line range I'd been scanning. Lesson
+logged.)
 
 The MODE 5 pixel→latch-entry mapping is the BBC's "interleaved" form:
 `pixel V → entry [0, 3, 12, 15][V]`. With that, each scenario's

@@ -68,19 +68,20 @@ def palette_from_mapping(logical_to_physical: dict[int, int]) -> list[tuple[int,
     return pal
 
 
-# Nevryon in-game palettes — one per scenario. The actual mechanism:
+# Nevryon in-game palettes — one per scenario. The mechanism:
 #
 # A split-screen palette IRQ in GRAPHIX (irq_palette_split at &4900)
 # writes &493F[0..11] to the Video ULA palette latch (&FE21) at vsync
 # (top-half/playfield palette) and &494F[0..11] mid-frame at a User
-# VIA T1 IRQ (bottom-half/scoreboard palette). The IRQ source bytes
-# in the on-disk GRAPHIX file are the scenario-1 playfield palette
-# at &493F and the (always-blue/cyan) scoreboard palette at &494F.
+# VIA T1 IRQ (bottom-half/scoreboard palette).
 #
-# Scenarios 2-4 must rewrite &493F[0..11] at level load — but the code
-# that does this hasn't been positively located in CODE/CODE2/CODE3.
-# The four palettes here were derived by inspection of in-emulator
-# screenshots.
+# Per-scenario palette override lives in Loader2 BASIC (lines 940-1200):
+#   PROCLV12 (L%=1,2): no-op  → use the lev1 palette shipped in GRAPHIX
+#   PROCL34  (L%=3,4): POKEs DATA from line 1160 → blue/cyan
+#   PROCL56  (L%=5,6): POKEs DATA from line 1180 → red/green
+#   PROCL78  (L%=7,8): POKEs DATA from line 1200 → red/magenta
+# Each PROC runs `FOR T%=0 TO 15: READ T%?&493F: NEXT` to fill the
+# top palette table before Loader3 hands control to the game CODE.
 #
 # MODE 5 effective mapping: pixel value V (0..3) selects palette
 # latch entry E where E = [0, 3, 12, 15][V] (the BBC ULA bit-

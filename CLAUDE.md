@@ -95,16 +95,24 @@ Each scenario (1-4) uses a different MODE 5 palette. The mechanism:
     IRQ. This split gives the top of the screen one palette and the
     scoreboard another within the same frame.
   - `irq_install` (`&497E`) hooks IRQ1V (`&0204`/`&0205`) to point at
-    `&4900`, saving the prior vector at zp `&64`/`&65`.
+    `&4900`, saving the prior vector at zp `&64`/`&65`. Loader2 line
+    1000 (`?&9C=0:IF Q%<>1 CALL&497E`) does the install.
   - The bytes in the on-disk GRAPHIX file at `&493F` are the scenario-1
     palette (black/red/yellow/white). `&494F` is the always-on
     scoreboard palette (black/blue/cyan/white).
-  - Scenarios 2-4 rewrite `&493F[0..11]` at level load. **The code
-    that does this rewrite hasn't been located yet** — it isn't a
-    direct `STA &49xx`, doesn't appear as a raw byte-pattern in any
-    extracted file, and doesn't appear in any BASIC loader. Treat
-    the per-scenario palettes here as observation-derived until
-    located.
+  - Scenarios 2-4 rewrite `&493F[0..11]` at level load via
+    **Loader2 PROCs** dispatched from lines 940-970 based on start
+    level `L% = ?&9D`:
+
+    | L%       | PROC called  | Effect                                |
+    |----------|--------------|---------------------------------------|
+    | 1, 2     | `PROCLV12`   | none — keeps shipped lev1 palette     |
+    | 3, 4     | `PROCL34`    | `READT%?&493F` over DATA line 1160    |
+    | 5, 6     | `PROCL56`    | `READT%?&493F` over DATA line 1180    |
+    | 7, 8     | `PROCL78`    | `READT%?&493F` over DATA line 1200    |
+
+    Each POKE loop runs `FOR T%=0 TO 15: READ T%?&493F: NEXT`, so it
+    writes 16 bytes — but only the first 12 are read by the IRQ.
 
 MODE 5 pixel→palette mapping: `pixel V → palette latch entry
 [0, 3, 12, 15][V]` (the BBC ULA bit-replicates the 2-bit pixel into

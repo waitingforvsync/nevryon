@@ -152,6 +152,10 @@ class DisasmConfig:
     comments: dict[int, str] = field(default_factory=dict)
     # OS / external addresses to give friendly names
     extern_labels: dict[int, str] = field(default_factory=dict)
+    # Immediate-operand overrides keyed by the PC of the # instruction.
+    # Value is a literal BeebAsm expression that replaces the raw value
+    # (e.g. "LO(some_label)" / "HI(some_label)").
+    immediate_overrides: dict[int, str] = field(default_factory=dict)
 
     @classmethod
     def from_json(cls, path: str) -> "DisasmConfig":
@@ -172,6 +176,8 @@ class DisasmConfig:
             c.comments[int(k, 0)] = v
         for k, v in j.get("extern_labels", {}).items():
             c.extern_labels[int(k, 0)] = v
+        for k, v in j.get("immediate_overrides", {}).items():
+            c.immediate_overrides[int(k, 0)] = v
         return c
 
 
@@ -238,7 +244,9 @@ def collect_branch_targets(data: bytes, base: int, region: Region,
 
 def disasm_code_region(data: bytes, base: int, region: Region,
                        labels: dict[int, str], extern_labels: dict[int, str],
-                       comments: dict[int, str], lines: list[str]):
+                       comments: dict[int, str], lines: list[str],
+                       immediate_overrides: dict[int, str] | None = None):
+    immediate_overrides = immediate_overrides or {}
     pc = region.start
     while pc < region.end:
         # Emit pending label if this PC has one
@@ -267,7 +275,11 @@ def disasm_code_region(data: bytes, base: int, region: Region,
 
         if mode == "imm":
             value = operand_lo
-            operand_str = fmt_operand(mode, value, None)
+            override = immediate_overrides.get(pc)
+            if override is not None:
+                operand_str = f"#{override}"
+            else:
+                operand_str = fmt_operand(mode, value, None)
         elif mode in ("zp", "zpx", "zpy", "inx", "iny"):
             value = operand_lo
             tgt_lbl = (labels.get(value) or extern_labels.get(value))
@@ -380,7 +392,7 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
             lines.append(f"\\ {r.comment}")
         if r.kind == "code":
             disasm_code_region(data, cfg.base, r, cfg.labels, cfg.extern_labels,
-                               cfg.comments, lines)
+                               cfg.comments, lines, cfg.immediate_overrides)
         else:
             disasm_data_region(data, cfg.base, r, cfg.labels, cfg.comments, lines)
         cursor = r.end
