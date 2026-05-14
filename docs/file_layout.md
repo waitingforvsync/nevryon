@@ -3,7 +3,18 @@
 What each file on the disk image contains, where it loads, and what's
 inside. Source: `extracted/_manifest.tsv` plus reverse-engineering
 notes from `disasm/CODE.cfg.json`, `disasm/GRAPHIX.cfg.json`, and the
-Loader2 / Loader3 BASIC.
+BASIC loader chain.
+
+Working disk image: `4thDimension/Nevryon.ssd` — the stairwaytohell.com
+40-track image (101632 bytes, md5 `fbd3ddef3dff2f74190531d73ae63fea`).
+This is the original, unmodified release. (An 80-track version from
+bbcmicro.co.uk also exists but has had the original boot chain stripped
+out — it rolls `$.LOADER3` + `$.Runner` + `$.Loader4` into a single
+beefed-up `$.Loader3` and bulks out `$.NEVRYON` with extra intro
+content. The core game files — `$.CODE`, `$.CODE2`, `$.CODE3`,
+`$.GRAPHIX`, all twelve `N.LEVD*` — are byte-identical between the
+two images, so any disassembly / level-data work done against the
+bbcmicro one is still valid.)
 
 Addresses use the BBC `&hex` convention. File offsets use `0x`.
 
@@ -12,24 +23,32 @@ Addresses use the BBC `&hex` convention. File offsets use `0x`.
 ## At a glance
 
 ```
-$.!BOOT       → $.NEVRYON      (intro)
-              → $.Options      (option screen)
-              → $.Loader2      (title + scenario selection)
-              → $.Loader3      (loads game, drives stage cycle)
-                  ↻ stage 1 = LEVD2 → game → if not last stage:
-                  ↻ stage 2 = LEVD3 → game → end-of-scenario
-              → back to $.Loader2 (next scenario) or $.GmOv
-              → $.WELLDON      (victory)
+$.!BOOT       → $.!LOAD            (boot stub)
+              → $.LOAD             (publisher loader)
+              → $.4THDIM           ("THE 4TH DIMENSION" logo screen)
+              → $.options          (option screen)
+              → $.Loader2          (title + scenario menu + palette setup)
+              → $.LOADER3          (loads CODE/CODE2/CODE3, chains to RUNNER)
+              → $.Runner           (stage-cycle driver: runs game, loads LEVD3, runs again)
+              → $.Loader4          (on stage end: next scenario or game over)
+                  ↳ $.Loader2      (next scenario)
+                  ↳ $.GmOv         (game over)
+              → $.WELLDON          (victory)
 ```
 
-| File              | Load   | Size   | Kind                | Purpose                                 |
-|-------------------|--------|--------|---------------------|------------------------------------------|
-| `$.!BOOT`         | &0000  |    48  | BASIC               | `*BASIC / PAGE=&1900 / CHAIN "NEVRYON"`  |
-| `$.NEVRYON`       | &1900  | 11519  | BASIC               | Intro / story / instructions             |
-| `$.Options`       | &1100  |  3588  | BASIC               | Option screen (skill, speed, start lvl…) |
-| `$.Loader2`       | &1100  |  5370  | BASIC               | Title, scenario menu, palette setup      |
-| `$.Loader3`       | &3200  |   245  | BASIC               | Loads CODE/2/3, drives stage cycle       |
-| `$.GmOv`          | &1100  |   714  | BASIC               | Game-over screen (overlays CODE)         |
+| File              | Load   | Size   | Kind                | Purpose                                          |
+|-------------------|--------|--------|---------------------|---------------------------------------------------|
+| `$.!BOOT`         | &0000  |    14  | BASIC               | Boot stub                                         |
+| `$.!LOAD`         | &0000  |    87  | machine code        | Publisher boot loader (loads `$.LOAD`)            |
+| `$.LOAD`          | &1900  |   272  | machine code        | Stage-2 loader (loads `$.4THDIM` + chains)        |
+| `$.4THDIM`        | &7E00  |   320  | MODE 1 graphic data | "THE 4TH DIMENSION" publisher logo bitmap pieces  |
+| `$.NEVRYON`       | &1900  |   164  | BASIC               | Tiny intro stub (extracted-version-dependent)     |
+| `$.options`       | &0E00  |  3588  | BASIC               | Option screen (skill, speed, start level…)        |
+| `$.Loader2`       | &1100  |  5370  | BASIC               | Title, scenario menu, palette setup (PROCL34/L56/L78), installs palette IRQ via `CALL &497E` |
+| `$.LOADER3`       | &0E00  |    97  | BASIC               | Loads CODE/CODE2/CODE3, then `CHAIN "RUNNER"`     |
+| `$.Runner`        | &3200  |   159  | BASIC               | Stage cycle: `CALL &1100`, increment level, load `N.LEVD3` if needed, run again, then `CHAIN "LOADER4"` |
+| `$.Loader4`       | &0E00  |    55  | BASIC               | On end-of-scenario: `CHAIN "GmOv"` if game over, else `CHAIN "LOADER2"` for next scenario |
+| `$.GmOv`          | &0E00  |   714  | BASIC               | Game-over screen                                  |
 | `$.WELLDON`       | &3000  | 10240  | MODE 1 bitmap       | Victory screen — "VICTORY"               |
 | `$.SCR`           | &2E00  |  8192  | MODE 1 bitmap       | Title-screen "NEVRYON" logo image        |
 | `$.OPSC`          | &3000  | 17408  | MODE 2 bitmap       | Option screen background                 |
@@ -88,20 +107,56 @@ The big one. It:
    region (`119 119 - - - - 112 112`).
 7. Chains to `LOADER3`.
 
-### `$.Loader3`
-245 bytes of BASIC. Loads `CODE`, `CODE2`, then patches `?&283D` with
-`256-V%` (the sound volume), then loads `CODE3`. Calls the game at
-`&1100`. When the game returns:
+### `$.LOADER3`
+97 bytes. Loads `CODE`, `CODE2`, patches `?&283D` with `256-V%` (sound
+volume), then loads `CODE3` and chains to `RUNNER`.
 
-- If `?&9D < 2` (first half of a scenario): construct the filename
-  `N.LEVD3` (where `N = (?&9D+1)/2`), load it via OSCLI `*LOAD`, and
-  call the game again at `&1100`.
-- If `?&9D >= 2`: scenario complete — chain to `LOADER2` for the
-  next scenario, or `GmOv` if game over.
+```basic
+10 HIMEM=&3300
+20 *FX200,3
+30 *L.CODE 1100
+40 *LO.CODE2
+50 ?&283D=256-V%
+60 *L. CODE3
+70 CHAIN"RUNNER"
+```
+
+### `$.Runner`
+The stage-cycle driver. Calls the game (`CALL &1100`), and on return
+either fires the second half of the scenario (loading `N.LEVD3` and
+calling the game again) or chains to `LOADER4`.
+
+```basic
+10 CALL&1100:?&9D=?&9D+1:IF?&9D<2 THEN PAGE=&1100:CHAIN"LOADER4"
+20 A%=?&9D+1:A%=A%/2:$&7B00="L."+STR$(A%)+".LEVD3":X%=0:Y%=&7B:CALL&FFF7:
+    CALL&1100:?&9D=?&9D+1:PAGE=&1100:CHAIN"LOADER4"
+```
+
+`?&9D` is the per-stage counter — incremented after each `CALL &1100`.
+On the first call (`?&9D == 0`) it falls through to line 20, which
+constructs `"L." + STR$(scenario) + ".LEVD3"`, OSCLI-loads it (which
+overlays the LEVD2 enemy region at `&7380`), and re-enters the game.
+After that re-entry, increments `?&9D` again and chains to LOADER4.
+
+### `$.Loader4`
+End-of-scenario dispatch. If `?&9D < 2` chain to `GmOv` (game over),
+otherwise chain to `LOADER2` for the next scenario menu.
+
+```basic
+10 *FX200,3
+20 ?&9C=1:IF ?&9D<2 CHAIN"GmOv"
+30 CHAIN"LOADER2"
+```
 
 ### `$.GmOv` / `$.WELLDON`
 End-screen overlays. `GmOv` is a BASIC program loaded over `CODE`;
 `WELLDON` is a pre-rendered MODE 1 bitmap.
+
+### `$.!LOAD` / `$.LOAD` / `$.4THDIM`
+The publisher boot chain. `!BOOT` `*RUN`s `!LOAD`, which loads `LOAD`,
+which displays the "THE 4TH DIMENSION" logo (from the `4THDIM`
+graphic-data file) before chaining into `options`. We haven't yet
+disassembled these — they're not in the gameplay path.
 
 ---
 
