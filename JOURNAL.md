@@ -47,22 +47,92 @@ maps look exactly like what the scenario descriptions promise:
   - **Lev 4 (Alien Beast)**: dense organic biomechanical patterns —
     the inside of the giant alien.
 
-### LEVD3 has different structure — TODO
+### LEVD3 layout — solved
 
-Same render with each level's LEVD3 substituted for LEVD2 produces
-garbage at the `&A90`/`&B90` table offsets — because LEVD3 is only 2176
-bytes (= 17 × 128-byte tile slots) and doesn't extend that far. The
-user confirmed LEVD3 contains its own graphics on top of new map data.
+`LEVD3` for scenarios 1-3 is **2176 bytes = `&880`** — *exactly the
+size of LEVD2's lower-memory region* (`&7380`-`&7BFF`). It overwrites
+just that lower half. Everything `&7C00`+ — including the map tile
+tables at `&7E10`/`&7F10` — stays as LEVD2 left it. So the "second
+map" in scenarios 1-3 *uses the same scenery layout*; what changes is
+**enemy waves + sprite catalog**.
 
-Rendering LEVD3's first 17 × 128 bytes as a tile grid shows what look
-like **enemy / force-field sprites** rather than scenery — wavy
-vertical bars (force fields), tank/turret enemies, conduits. So LEVD3
-overlays:
-  - New sprites (enemies, force fields, second-half ground assets)
-  - A new map definition
+`4.LEVD3` is **3200 bytes**, the same as LEVD2 — replaces the full
+region. But its tile tables turn out to be **byte-identical to
+4.LEVD2's** (240/240 matches in both upper and lower). So even level
+4's second half uses the same map geometry; only the enemy data
+changes.
 
-Need to find LEVD3's map-table addresses (probably loaded via a
-runtime relocation by either the loader or CODE3). Open task.
+### Enemy sprite/pointer/spawn tables (decoded)
+
+In LEVD2 (loaded at `&7380`):
+
+| File off | Mem addr | Bytes | Contents |
+|----------|----------|-------|----------|
+| `&000`-`&6FF` | `&7380`-`&7A7F` | 1792 | **Enemy sprite graphics** (column-major; pointers below resolve here for in-LEVD2 sprites) |
+| `&700`-`&73F` | `&7A80`-`&7ABF` | 64 | Enemy sprite ptr LOW (64 slots) |
+| `&740`-`&77F` | `&7AC0`-`&7AFF` | 64 | Enemy sprite ptr HIGH (paired with LOW) |
+| `&780`-`&7FF` | `&7B00`-`&7B7F` | 128 | **Enemy spawn-column schedule** (sorted; `&FF` = terminator) |
+| `&800`-`&87F` | `&7B80`-`&7BFF` | 128 | **Enemy attribute byte** per spawn (low 5 bits = sprite-index into ptr table; bit 7 = mirror flag) |
+| `&880`-`&A8F` | `&7C00`-`&7E0F` | 528 | More tables — TBD (force-field positions?) |
+| `&A90`-`&B7F` | `&7E10`-`&7EFF` | 240 | Map LOWER tile id per column |
+| `&B80`-`&B8F` | `&7F00`-`&7F0F` | 16 | Gap/pad |
+| `&B90`-`&C7F` | `&7F10`-`&7FFF` | 240 | Map UPPER tile id per column |
+
+Sprite pointer table entries point into **three regions**:
+
+  - `&73__`-`&7A__` (LEVD2 itself) — level-specific enemy sprites
+  - `&3700`-`&3780` (GRAPHIX, file offset `&80`-`&100`) — **shared
+    enemy sprites across all levels** (small generic enemies)
+  - `&4A__`-`&5__` (LEVD1) — some enemies use level scenery palette
+  - `&7C__`-`&7D__` (LEVD2 upper region, before the map tables) —
+    occasional larger enemy
+
+`tools/extract_enemies.py` follows the table back to whichever file
+holds the bytes and renders the full enemy catalog per level. Results
+look like the genuine enemies described in the manual:
+
+  - **Lev 1 (Battle Cruiser)**: gun-towers, sphere drones, tank
+    bodies, eye-shaped drones, arches, portal rings.
+  - **Lev 2 (Asteroid Base)**: dinosaur-like aliens (!), pillars,
+    cannon emplacements, crystal eggs, crescent moons.
+  - **Lev 3 (Planet/Caves)**: red lanced ships, anti-aircraft cannons,
+    organic blobs, spider-walkers.
+  - **Lev 4 (Alien Beast)**: TBD (haven't rendered yet).
+
+### Disasm references locked in
+
+In CODE.beebasm:
+  - `L13D1` — main per-frame routine: reads tile tables, advances
+    sprite ptrs, scrolls, runs game iteration ×4 per frame.
+  - `L208A` — enemy spawn checker: matches `&80` (scroll col) against
+    `&7B00[&7B]`; on hit, populates active-enemy slots.
+  - `L21BC` onwards — enemy plot routine: reads `&7A80[X]` / `&7AC0[X]`
+    for sprite source, plots at 4×32 dims.
+  - `L1F8E` — level init: zeros most state, sets player pos
+    `&81=5, &82=&C8`, scroll counter `&80=0`, sprite pointers
+    initialised to `&7D80` (= LEVD2 offset `&A00`, the unknown tail
+    area).
+
+### Tooling additions
+
+```
+tools/extract_enemies.py    # follow LEVD2 ptr tables → render enemy
+                             # grid per level, regardless of which file
+                             # the actual sprite bytes live in
+```
+
+### Next
+
+1. Find force-field renderer (4 callers of `lfsr_random` in CODE).
+2. Decode the 528-byte block at `&7C00`-`&7E0F` (LEVD2 offset
+   `&880`-`&A8F`) — probably force-field positions / per-column flags
+   (shootable items / pickups). Force fields are procedural so the
+   table likely just gives "where to draw a vertical strip" rather
+   than the strip contents themselves.
+3. Render LEVD3-overlay enemies (same tool, just substitute LEVD3 in
+   for LEVD2 when rebuilding the table). Should reveal the
+   *second-wave* enemy lineup.
+4. Annotate CODE2.beebasm with the sound queue routine at the top.
 
 ### Tooling additions
 
