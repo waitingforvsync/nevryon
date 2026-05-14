@@ -1,0 +1,83 @@
+\ ============================================================
+\ Nevryon — unified BeebAsm source
+\ ============================================================
+\ Builds all four runtime binaries — CODE, CODE2, CODE3, GRAPHIX —
+\ from the per-binary .6502 source files in this directory. Labels
+\ defined in any included file are visible to all the others, so
+\ cross-file calls can use real label names once they're added to
+\ the corresponding .cfg.json file.
+\
+\ Run from the disasm/ directory:
+\     beebasm -i Nevryon.6502 -v
+\ (or use ../build.sh / ..\build.bat which set the output directory)
+\
+\ The four output binaries match the original $.CODE, $.CODE2,
+\ $.CODE3 and $.GRAPHIX byte-for-byte. CODE3 and GRAPHIX overlap
+\ in RAM at &3680..&368F — GRAPHIX is loaded last in the real boot
+\ chain, so its bytes win in memory. The assembly order below
+\ saves CODE3 before GRAPHIX overwrites that 16-byte tail.
+
+\ ----- Shared externs ----------------------------------------
+
+\ Zero-page locations used by the engine
+zp_old_irq_vec_lo         = &0064
+zp_old_irq_vec_hi         = &0065
+zp_screen_ptr_lo          = &0070
+zp_screen_ptr_hi          = &0071
+zp_sprite_cols_remaining  = &0074
+zp_sprite_height          = &0075
+zp_dest_x_lo              = &0076
+zp_dest_x_hi              = &0077
+zp_sprite_end_index       = &0078
+zp_sprite_dir_flag        = &0079
+zp_sprite_src2_hi         = &008B
+zp_sprite_src2_lo         = &008C
+zp_sprite_src_hi          = &008D
+zp_sprite_src_lo          = &008E
+zp_irq_enable             = &009C
+zp_level_num              = &009D
+
+\ Interrupt vectors
+irq1v_lo                  = &0204
+irq1v_hi                  = &0205
+
+\ Cross-file LXXXX labels (auto-generated from branch targets) and
+\ mid-instruction equates (sprite_src_lo/hi, LXXXX inside CODE2 etc.)
+\ are emitted inline in each per-binary .6502 file, not here.
+
+\ BBC hardware (VIA + palette)
+via_palette_latch         = &FE21
+svia_ifr                  = &FE4D
+uvia_t1l_l                = &FE64
+uvia_t1l_h                = &FE65
+uvia_acr                  = &FE6B
+uvia_ifr                  = &FE6D
+uvia_ier                  = &FE6E
+
+\ MOS API
+OSRDCH                    = &FFE0
+OSWRCH                    = &FFEE
+OSWORD                    = &FFF1
+OSBYTE                    = &FFF4
+OSCLI                     = &FFF7
+
+
+\ ----- $.CODE — &1100..&27E6 (5863 B) -------------------------
+INCLUDE "CODE.6502"
+SAVE "../build/CODE",    &1100, &27E7
+
+\ ----- $.CODE2 — &2800..&31E8 (2537 B) ------------------------
+INCLUDE "CODE2.6502"
+SAVE "../build/CODE2",   &2800, &31E9
+
+\ ----- $.CODE3 — &3300..&368F (912 B) -------------------------
+\ Save before GRAPHIX is assembled — its last 16 B share RAM with
+\ GRAPHIX's first 16 B. The CLEAR below releases that range so
+\ GRAPHIX can re-assemble into it.
+INCLUDE "CODE3.6502"
+SAVE "../build/CODE3",   &3300, &3690
+CLEAR &3680, &3690
+
+\ ----- $.GRAPHIX — &3680..&49FF (4992 B) ----------------------
+INCLUDE "GRAPHIX.6502"
+SAVE "../build/GRAPHIX", &3680, &4A00

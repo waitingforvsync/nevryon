@@ -2,24 +2,24 @@
 \ Auto-disassembly — base &3680
 \ ============================================================
 
-\ External / OS addresses:
-zp_old_irq_vec_lo = &0064
-zp_old_irq_vec_hi = &0065
-zp_irq_enable    = &009C
-irq1v_lo         = &0204
-irq1v_hi         = &0205
-via_palette_latch = &FE21
-svia_ifr         = &FE4D
-uvia_t1l_l       = &FE64
-uvia_t1l_h       = &FE65
-uvia_acr         = &FE6B
-uvia_ifr         = &FE6D
-uvia_ier         = &FE6E
-OSRDCH           = &FFE0
-OSWRCH           = &FFEE
-OSWORD           = &FFF1
-OSBYTE           = &FFF4
-OSCLI            = &FFF7
+\ Extern labels defined in master Nevryon.6502 wrapper:
+\   zp_old_irq_vec_lo = &0064
+\   zp_old_irq_vec_hi = &0065
+\   zp_irq_enable = &009C
+\   irq1v_lo = &0204
+\   irq1v_hi = &0205
+\   via_palette_latch = &FE21
+\   svia_ifr = &FE4D
+\   uvia_t1l_l = &FE64
+\   uvia_t1l_h = &FE65
+\   uvia_acr = &FE6B
+\   uvia_ifr = &FE6D
+\   uvia_ier = &FE6E
+\   OSRDCH = &FFE0
+\   OSWRCH = &FFEE
+\   OSWORD = &FFF1
+\   OSBYTE = &FFF4
+\   OSCLI = &FFF7
 
 ORG &3680
 

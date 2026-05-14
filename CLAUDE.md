@@ -24,11 +24,13 @@ tools/                       # Python utilities (DFS, sprite, map decode)
   disasm6502.py              # 6502 → BeebAsm disassembler with annotations
 work/                        # PNG previews, scratch
 disasm/                      # BeebAsm-format reconstruction in progress
-  CODE.beebasm               # annotated disassembly of $.CODE
-  CODE.cfg.json              # region/label/comment annotations for $.CODE
-  GRAPHIX.beebasm            # annotated disassembly of $.GRAPHIX
-  GRAPHIX.cfg.json
-  CODE2.beebasm, CODE3.beebasm  # unannotated (annotate as we learn)
+  Nevryon.6502               # master — INCLUDEs all four per-binary sources
+  CODE.6502 + CODE.cfg.json  # annotated disassembly of $.CODE
+  CODE2.6502 + CODE2.cfg.json
+  CODE3.6502 + CODE3.cfg.json
+  GRAPHIX.6502 + GRAPHIX.cfg.json
+build/                       # output of build.sh — byte-identical to $.CODE etc.
+build.sh / build.bat         # invoke BeebAsm on Nevryon.6502 + verify byte-identity
 docs/
   file_layout.md             # per-file content reference (load addrs, byte maps)
 CLAUDE.md                    # this file — workflow & conventions
@@ -50,10 +52,20 @@ binary (or vice-versa), this is the first thing to check.
 
 ### Disassembly target is BeebAsm, not da65
 `tools/disasm6502.py` emits BeebAsm syntax (`&hex`, `.label`, `EQUB`,
-`ORG`, `\ comment`). Goal: a roundtrip-able source that BeebAsm can
-re-assemble into the original binary. Drive it via the annotation JSON
-(`disasm/<file>.cfg.json`) — add a region/label/comment any time we
-identify one, then re-run. Do not hand-edit `.beebasm` output.
+`ORG`, `\ comment`) in `disasm/<file>.6502`. Goal: a roundtrip-able
+source that BeebAsm can re-assemble into the original binary. Drive
+it via the annotation JSON (`disasm/<file>.cfg.json`) — add a
+region/label/comment any time we identify one, then re-run. Do not
+hand-edit `.6502` output.
+
+`disasm/Nevryon.6502` is the **master** — it declares the shared
+extern equates (OS, hardware regs, ZP, cross-file refs) once and
+`INCLUDE`s each per-binary `.6502` in order, with `SAVE` between
+`CODE3.6502` and `GRAPHIX.6502` because those overlap in RAM at
+`&3680..&368F`. Per-binary cfgs set `"emit_externs": false` so the
+externs aren't duplicated when included. When the disasm tool adds
+or removes externs (auto-promoted mid-instruction labels, new
+cross-file refs), the master's preamble must be kept in sync.
 
 ### Self-modifying code
 The sprite engine self-modifies its `LDA &XXXX,X` source operand at

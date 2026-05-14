@@ -2,62 +2,64 @@
 \ Auto-disassembly — base &1100
 \ ============================================================
 
-\ External / OS addresses:
-zp_screen_ptr_lo = &0070
-zp_screen_ptr_hi = &0071
-zp_sprite_cols_remaining = &0074
-zp_sprite_height = &0075
-zp_dest_x_lo     = &0076
-zp_dest_x_hi     = &0077
-zp_sprite_end_index = &0078
-zp_sprite_dir_flag = &0079
-zp_sprite_src2_hi = &008B
-zp_sprite_src2_lo = &008C
-zp_sprite_src_hi = &008D
-zp_sprite_src_lo = &008E
-zp_level_num     = &009D
+\ Mid-instruction labels (referenced by branches/jumps):
 sprite_src_lo    = &1194
 sprite_src_hi    = &1195
 L1C21            = &1C21
-code2_2800       = &2800
-code2_2811       = &2811
-code2_2822       = &2822
-code2_284C       = &284C
-code2_28D7       = &28D7
-code2_2975       = &2975
-code2_29E7       = &29E7
-code2_2A20       = &2A20
-code2_2AA2       = &2AA2
-code2_2BA4       = &2BA4
-code2_2CCA       = &2CCA
-code2_2E94       = &2E94
-code2_2EED       = &2EED
-code2_30F8       = &30F8
-code2_3115       = &3115
-code2_3170       = &3170
-code3_3300       = &3300
-code3_3325       = &3325
-code3_3432       = &3432
-code3_3513       = &3513
-OSRDCH           = &FFE0
-OSWRCH           = &FFEE
-OSWORD           = &FFF1
-OSBYTE           = &FFF4
-OSCLI            = &FFF7
+
+\ Extern labels defined in master Nevryon.6502 wrapper:
+\   zp_screen_ptr_lo = &0070
+\   zp_screen_ptr_hi = &0071
+\   zp_sprite_cols_remaining = &0074
+\   zp_sprite_height = &0075
+\   zp_dest_x_lo = &0076
+\   zp_dest_x_hi = &0077
+\   zp_sprite_end_index = &0078
+\   zp_sprite_dir_flag = &0079
+\   zp_sprite_src2_hi = &008B
+\   zp_sprite_src2_lo = &008C
+\   zp_sprite_src_hi = &008D
+\   zp_sprite_src_lo = &008E
+\   zp_level_num = &009D
+\   L2800 = &2800
+\   L2811 = &2811
+\   L2822 = &2822
+\   L284C = &284C
+\   L28D7 = &28D7
+\   L2975 = &2975
+\   L29E7 = &29E7
+\   L2A20 = &2A20
+\   L2AA2 = &2AA2
+\   L2BA4 = &2BA4
+\   L2CCA = &2CCA
+\   L2E94 = &2E94
+\   L2EED = &2EED
+\   L30F8 = &30F8
+\   L3115 = &3115
+\   L3170 = &3170
+\   L3300 = &3300
+\   L3325 = &3325
+\   L3432 = &3432
+\   L3513 = &3513
+\   OSRDCH = &FFE0
+\   OSWRCH = &FFEE
+\   OSWORD = &FFF1
+\   OSBYTE = &FFF4
+\   OSCLI = &FFF7
 
 ORG &1100
 
 
 \ ----- code &1100..&116B -----
 .main_init
-    JSR code2_3115  \ Entry: jsr to three init routines then drop into main loop
+    JSR L3115  \ Entry: jsr to three init routines then drop into main loop
     JSR L1F8E
-    JSR code2_2CCA
+    JSR L2CCA
 .main_loop
     JSR L13D1
     LDA &2051
     BNE L1114
-    JMP code3_3432
+    JMP L3432
 .L1114
     LDX #&8F
     JSR L155B
@@ -67,15 +69,15 @@ ORG &1100
     JSR L1E47
     LDA #&00
     STA zp_level_num
-    JSR code2_30F8
-    JSR code2_2E94
-    JMP code3_3300
+    JSR L30F8
+    JSR L2E94
+    JMP L3300
 .L1130
     LDA data_268F
     BEQ main_loop
-    JSR code3_3325
-    JSR code2_284C
-    JMP code3_3300
+    JSR L3325
+    JSR L284C
+    JMP L3300
     JMP main_loop
 .lfsr_random
     LDY #&20  \ Sprite plot routine: $76/$77 = dest screen addr; L1194/L1195 = sprite src (self-mod); $74 = width-in-byte-cols; $75 = height-in-scanlines; $79 = direction flag (1 = forward)
@@ -258,7 +260,7 @@ ORG &1100
 .L127B
     JSR L1309
     JSR L210A
-    JSR code3_3513
+    JSR L3513
     LDX #&27
     LDY #&FF
     JSR calc_screen_addr
@@ -478,16 +480,16 @@ ORG &1100
     LDX #&C8
     JSR L155B
     BNE L1438
-    JSR code2_3170
+    JSR L3170
 .L1438
     LDA #&00
     STA &8F
 .L143C
     LDA &2051
     BEQ L1477
-    JSR code2_2AA2
-    JSR code2_29E7
-    JSR code2_28D7
+    JSR L2AA2
+    JSR L29E7
+    JSR L28D7
     INC &8F
     JSR L13BC
     JSR L1AEB
@@ -503,7 +505,7 @@ ORG &1100
     AND #&01
     BNE L1471
     INC &7A
-    JSR code3_3513
+    JSR L3513
 .L1471
     LDA &8F
     CMP #&04
@@ -988,8 +990,8 @@ ORG &1100
     STA &16ED,X
     LDA data_2554
     STA &8A
-    JSR code2_2800
-    JMP code2_2975
+    JSR L2800
+    JMP L2975
 .L17E7
     LDX #&06
 .L17E9
@@ -1190,7 +1192,7 @@ ORG &1100
     LDA #&14
     STA &2065,X
     JSR L25E5
-    JSR code2_2822
+    JSR L2822
     LDX &16F5
     RTS
 .L1983
@@ -1391,7 +1393,7 @@ ORG &1100
     STA tbl_1A92,X
     LDA #&08
     STA &7E
-    JMP code2_2811
+    JMP L2811
 .L1AEB
     LDX #&08
 .L1AED
@@ -1673,7 +1675,7 @@ ORG &1100
     BCC L1D02
     RTS
 .L1D02
-    JSR code2_2822
+    JSR L2822
     TYA
     TAX
     LDA #&00
@@ -1843,7 +1845,7 @@ ORG &1100
     STA &82
     TAY
     JSR calc_screen_addr
-    JSR code2_2822
+    JSR L2822
     LDX #&04
     LDY #&20
     LDA &7A95
@@ -1935,7 +1937,7 @@ ORG &1100
     JSR sprite_plot_xy
     LDA &2051
     BEQ L1F50
-    JSR code2_2BA4
+    JSR L2BA4
 .L1F50
     LDX #&20
     LDY #&5F
@@ -2384,7 +2386,7 @@ ORG &1100
 .L22CF
     CMP #&06
     BNE L22D6
-    JMP code2_2A20
+    JMP L2A20
 .L22D6
     CMP #&07
     BNE L22DD
@@ -2428,7 +2430,7 @@ ORG &1100
     SEC
     SBC #&10
     STA tbl_1A92,X
-    JSR code2_2800
+    JSR L2800
     LDX &16F5
     RTS
 .forcefield_render
@@ -2557,7 +2559,7 @@ ORG &1100
     BCC L241A
     RTS
 .L241A
-    JSR code2_2822
+    JSR L2822
     TYA
     TAX
     LDA #&00
@@ -2788,7 +2790,7 @@ ORG &1100
     STA &2690
     LDA #&01
     STA &2692
-    JMP code2_2EED
+    JMP L2EED
 .L25D7
     CLC
     LDA &2A06
@@ -3019,7 +3021,7 @@ ORG &1100
     LDX #&03
     LDY #&10
     JSR sprite_plot_xy
-    JSR code2_2EED
+    JSR L2EED
     JSR L25E5
     LDX #&08
     LDY #&57

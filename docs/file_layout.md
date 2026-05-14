@@ -18,6 +18,13 @@ bbcmicro one is still valid.)
 
 Addresses use the BBC `&hex` convention. File offsets use `0x`.
 
+The four runtime binaries (`CODE`, `CODE2`, `CODE3`, `GRAPHIX`) are
+reproduced byte-for-byte from `disasm/*.6502` via BeebAsm. Run
+`./build.sh` (or `build.bat` on Windows) from the repo root — it
+assembles `disasm/Nevryon.6502` (which `INCLUDE`s the four per-binary
+sources in the right order) and writes outputs to `build/`,
+verifying each against `extracted/`.
+
 ---
 
 ## At a glance

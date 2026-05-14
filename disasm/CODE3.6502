@@ -2,6 +2,9 @@
 \ Auto-disassembly — base &3300
 \ ============================================================
 
+\ Mid-instruction labels (referenced by branches/jumps):
+L3685            = &3685
+
 ORG &3300
 
 
@@ -24,6 +27,7 @@ ORG &3300
     LDY #&0B
     JSR L3560
     JMP &30F8
+.L3325
     LDA #&34
     STA &95
     LDA #&36
@@ -154,6 +158,7 @@ ORG &3300
     DEX
     BNE L341C
     RTS
+.L3432
     LDA &91
     CMP #&00
     BNE L343B
@@ -267,6 +272,7 @@ ORG &3300
     LDX #&01
     LDY #&35
     JMP &FFF1
+.L3513
     LDA #&01
     STA &79
     LDA &80

@@ -2,6 +2,13 @@
 \ Auto-disassembly — base &2800
 \ ============================================================
 
+\ Mid-instruction labels (referenced by branches/jumps):
+L2975            = &2975
+L2FE2            = &2FE2
+L300E            = &300E
+L3018            = &3018
+L30AC            = &30AC
+
 ORG &2800
 
 
@@ -18,6 +25,7 @@ ORG &2800
     EQUB &4B  \ ?? opcode &4B
     BRK
     ORA (&00,X)
+.L2811
     LDA #&07
     LDX #&1A
     LDY #&28
@@ -149,6 +157,7 @@ ORG &2800
     NOP
     NOP
     NOP
+.L28D7
     LDA &25A5
     CMP #&01
     BEQ L28DF
@@ -329,6 +338,7 @@ ORG &2800
     LDX #&01
     LDY #&08
     JMP &1173
+.L2A20
     LDA &8F
     CMP #&02
     BNE L2A3E
@@ -390,6 +400,7 @@ ORG &2800
 .L2A9E
     LDX &28D4
     RTS
+.L2AA2
     LDX #&00
     LDA &2B9A,X
     CMP #&FF
@@ -642,6 +653,7 @@ ORG &2800
     STA &8F
     JSR L2EFF
     JMP L2822
+.L2CCA
     JSR L284C
     JSR &1309
     LDA #&08
@@ -863,6 +875,7 @@ ORG &2800
     BRK
     EQUB &03  \ ?? opcode &03
     BRK
+.L2E94
     LDA #&06
     NOP
     NOP
@@ -903,6 +916,7 @@ ORG &2800
     JMP L2EA4
 .L2EEA
     JMP L284C
+.L2EED
     LDA #&07
     LDX #&F6
     LDY #&2E
@@ -1223,6 +1237,7 @@ ORG &2800
     EQUB &02  \ ?? opcode &02
     EQUB &02  \ ?? opcode &02
     EQUB &02  \ ?? opcode &02
+.L30F8
     JSR L2E60
     LDX #&00
 .L30FD
@@ -1236,6 +1251,7 @@ ORG &2800
     LDA &2051
     STA &0CF3
     RTS
+.L3115
     LDX #&00
 .L3117
     LDA &0CF4,X
@@ -1275,6 +1291,7 @@ ORG &2800
     STA &1195
     JMP &1173
     RTS
+.L3170
     LDX #&10
     LDY #&D0
     JSR &1236

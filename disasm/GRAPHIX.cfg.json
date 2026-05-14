@@ -1,5 +1,6 @@
 {
   "base": "0x3680",
+  "emit_externs": false,
   "entries": ["0x4900", "0x497E"],
   "regions": [
     {"start": "0x3680", "end": "0x4900", "kind": "data", "width": 16, "comment": "shared sprite atlas — column-major 4×N sprites. Sprite-start addresses below are derived from `LDA #lo;STA &1194; LDA #hi;STA &1195` patterns in CODE/CODE2/CODE3 plus the LEVD2 enemy-ptr-table entries that point into this region. Boundaries are approximate where the code references don't pin them down — refine as we learn more."},

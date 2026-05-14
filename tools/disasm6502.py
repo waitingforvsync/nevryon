@@ -163,6 +163,10 @@ class DisasmConfig:
     # declared `data` regions are still honoured (they're treated as
     # forced data even if reached by the tracer).
     entries: list[int] = field(default_factory=list)
+    # If false, the per-file extern_labels equates are not emitted at
+    # the top of the .6502 output (the master .6502 wrapper declares
+    # them once instead). Defaults to true for standalone-style output.
+    emit_externs: bool = True
 
     @classmethod
     def from_json(cls, path: str) -> "DisasmConfig":
@@ -187,6 +191,7 @@ class DisasmConfig:
             c.immediate_overrides[int(k, 0)] = v
         for e in j.get("entries", []):
             c.entries.append(int(e, 0) if isinstance(e, str) else e)
+        c.emit_externs = j.get("emit_externs", True)
         return c
 
 
@@ -582,6 +587,7 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
             extern_labels=dict(cfg.extern_labels),
             immediate_overrides=dict(cfg.immediate_overrides),
             entries=cfg.entries,
+            emit_externs=cfg.emit_externs,
         )
 
         # Auto-label JMP/JSR/branch targets that fell inside reached code
@@ -667,10 +673,30 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
     lines.append(f"\\ Auto-disassembly — base {fmt_hex(cfg.base, 4)}")
     lines.append("\\ ============================================================")
     lines.append("")
-    if cfg.extern_labels:
-        lines.append("\\ External / OS addresses:")
-        for addr, name in sorted(cfg.extern_labels.items()):
+    # Split extern_labels into in-range (mid-instruction equates for
+    # labels that fall inside this binary) and out-of-range (OS, HW,
+    # cross-file refs). In-range equates are always emitted because
+    # they're file-local. Out-of-range ones are gated by emit_externs.
+    end_addr_for_split = cfg.base + len(data)
+    in_range_ext = {a: n for a, n in cfg.extern_labels.items()
+                    if cfg.base <= a < end_addr_for_split}
+    out_range_ext = {a: n for a, n in cfg.extern_labels.items()
+                     if not (cfg.base <= a < end_addr_for_split)}
+
+    if in_range_ext:
+        lines.append("\\ Mid-instruction labels (referenced by branches/jumps):")
+        for addr, name in sorted(in_range_ext.items()):
             lines.append(f"{name:16} = {fmt_hex(addr, 4)}")
+        lines.append("")
+    if out_range_ext and cfg.emit_externs:
+        lines.append("\\ External / OS addresses:")
+        for addr, name in sorted(out_range_ext.items()):
+            lines.append(f"{name:16} = {fmt_hex(addr, 4)}")
+        lines.append("")
+    elif out_range_ext:
+        lines.append("\\ Extern labels defined in master Nevryon.6502 wrapper:")
+        for addr, name in sorted(out_range_ext.items()):
+            lines.append(f"\\   {name} = {fmt_hex(addr, 4)}")
         lines.append("")
     lines.append(f"ORG {fmt_hex(cfg.base, 4)}")
     lines.append("")
