@@ -53,6 +53,14 @@ BBC_PHYSICAL = [
 ]
 
 
+# MODE 2's 16-colour set: 0-7 are the solid BBC physical colours, 8-15
+# are flashing colours that alternate between the first 8 and their
+# negative. For a static image we just render flashing colours as their
+# "first-phase" colour (which is identical to the corresponding base
+# colour 0-7).
+MODE2_DEFAULT_PALETTE = BBC_PHYSICAL + BBC_PHYSICAL
+
+
 def palette_from_mapping(logical_to_physical: dict[int, int]) -> list[tuple[int, int, int]]:
     pal = list(DEFAULT_PALETTE)
     for logical, physical in logical_to_physical.items():
@@ -67,12 +75,27 @@ NEVRYON_GAME_PALETTE = palette_from_mapping({0: 0, 1: 1, 2: 6, 3: 7})
 
 
 def decode_byte(b: int) -> list[int]:
-    """Return the 4 logical colours (0..3) for one byte, left-to-right."""
+    """MODE 1/5: return the 4 logical colours (0..3) for one byte."""
     out = []
     for n in range(4):
         hi = (b >> (7 - n)) & 1
         lo = (b >> (3 - n)) & 1
         out.append((hi << 1) | lo)
+    return out
+
+
+def decode_byte_mode2(b: int) -> list[int]:
+    """MODE 2: 4 bpp = 2 pixels per byte. Pixel n (n=0,1) uses bits
+    (7-n), (5-n), (3-n), (1-n) — the BBC's interleaved layout extended
+    to 4 bits.
+    """
+    out = []
+    for n in range(2):
+        c3 = (b >> (7 - n)) & 1
+        c2 = (b >> (5 - n)) & 1
+        c1 = (b >> (3 - n)) & 1
+        c0 = (b >> (1 - n)) & 1
+        out.append((c3 << 3) | (c2 << 2) | (c1 << 1) | c0)
     return out
 
 
@@ -152,6 +175,48 @@ def render_mode1(data: bytes, width_chars: int = 40, height_chars: int = 32,
     return bytes(img), width_px, height_px
 
 
+def render_mode2(data: bytes, width_chars: int = 20, height_chars: int = 32,
+                 palette=MODE2_DEFAULT_PALETTE) -> tuple[bytes, int, int]:
+    """Render raw MODE 2 buffer to RGB pixel bytes.
+
+    MODE 2: 160 px × 256 px, 16 colours, 4 bpp.
+            80 bytes per scanline, 2 pixels per byte.
+            Char cell = 8 px wide (= 4 bytes per scanline) × 8 lines tall
+            = 32 bytes per cell. Memory layout: each cell stores its 8
+            scanlines as 4 sequential 8-byte groups (left-to-right within
+            each scanline), with the 8-line groupings being contiguous per
+            byte-column position. Concretely: each cell is 4 byte-columns,
+            and the 32 bytes are arranged as 8 bytes per byte-column,
+            byte-columns laid out left-to-right within the cell.
+    """
+    width_px = width_chars * 8
+    height_px = height_chars * 8
+    cell_bytes_x = 4
+    bytes_per_line = width_chars * cell_bytes_x      # = 80 for 20 chars
+    bytes_per_char_row = bytes_per_line * 8           # = 640
+
+    img = bytearray(width_px * height_px * 3)
+    for cy in range(height_chars):
+        for sub in range(8):
+            for cx in range(width_chars):
+                cell_base = cy * bytes_per_char_row + cx * 32
+                # 4 byte-columns within a cell; each byte-column is 8 bytes
+                for bc in range(cell_bytes_x):
+                    byte_off = cell_base + bc * 8 + sub
+                    if byte_off >= len(data):
+                        continue
+                    pixels = decode_byte_mode2(data[byte_off])
+                    y = cy * 8 + sub
+                    x_base = cx * 8 + bc * 2
+                    for p in range(2):
+                        col = palette[pixels[p]]
+                        idx = (y * width_px + x_base + p) * 3
+                        img[idx] = col[0]
+                        img[idx + 1] = col[1]
+                        img[idx + 2] = col[2]
+    return bytes(img), width_px, height_px
+
+
 def write_ppm(path: str, rgb: bytes, w: int, h: int):
     with open(path, "wb") as f:
         f.write(f"P6\n{w} {h}\n255\n".encode("ascii"))
@@ -175,7 +240,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input", help="raw BBC screen buffer")
     ap.add_argument("output", help="output PNG path")
-    ap.add_argument("--mode", type=int, choices=[1, 5], default=5)
+    ap.add_argument("--mode", type=int, choices=[1, 2, 5], default=5)
     ap.add_argument("--offset", type=lambda s: int(s, 0), default=0,
                     help="byte offset in input to start at")
     ap.add_argument("--width-chars", type=int, default=None,
@@ -192,6 +257,10 @@ def main():
         w = args.width_chars or 20
         h = args.height_chars or 32
         rgb, wpx, hpx = render_mode5(data, w, h)
+    elif args.mode == 2:
+        w = args.width_chars or 20
+        h = args.height_chars or 32
+        rgb, wpx, hpx = render_mode2(data, w, h)
     else:
         w = args.width_chars or 40
         h = args.height_chars or 32

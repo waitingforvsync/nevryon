@@ -4,6 +4,90 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-14 — Session 2: maps and LEVD format
+
+### OPSC corrected to MODE 2
+
+User noted `$.OPSC` is MODE 2 (16-colour, 4 bpp), not MODE 1. Added MODE 2
+support to `render_screen.py`: 160 × 256, 80 bytes/scanline, 2 px/byte,
+char cell = 32 bytes (4 byte-cols × 8 lines). Re-rendered OPSC — now
+shows the full 16-colour opening screen with yellow/red NEVRYON logo,
+yellow spaceship, blue alien, green/red enemy, planet/galaxy, and the
+icon bar at the bottom.
+
+### Map renderer working
+
+Traced the map-rendering setup at `L13D1` in `$.CODE`:
+
+  - Scroll column index lives at `&80`.
+  - For each column, the routine reads two 8-bit tile IDs from parallel
+    tables in **LEVD2** (loaded at `&7380`):
+      - `&7E10[col]` — LOWER tile id (file offset `&A90`)
+      - `&7F10[col]` — UPPER tile id (file offset `&B90`)
+    Each table is 240 entries (col index wraps `&F0` → `&00` via the
+    explicit `CMP #&F1 / LDA #&F0` at L141E+).
+  - Each tile is **16 px wide × 32 px tall**, column-major,
+    `4 byte-cols × 32 scanlines = 128 bytes`.
+  - Tile catalog is in **LEVD1** at `&4F00` (file offset `&500`); the
+    `(tile_id + 1)`-step walk in the disassembly means tile 0 lives at
+    `&4F00`, tile 1 at `&4F80`, etc. (Tile slot at `&4E80` is reserved
+    for the player-ship sprite — 24×22 = 132 bytes — which actually
+    overlaps the first 4 bytes of tile 0; presumably the engine doesn't
+    rely on those 4 bytes of tile 0.)
+
+`tools/render_map.py` reconstructs each level. Renders of all four LEVD2
+maps look exactly like what the scenario descriptions promise:
+
+  - **Lev 1 (Battle Cruiser)**: cyan/red metallic walls, geometric
+    towers, doorways — clearly the interior of a starship.
+  - **Lev 2 (Asteroid Base)**: red rock surfaces over a starfield, with
+    blue gun emplacements and crystal "eggs".
+  - **Lev 3 (Planet Surface/Caves)**: cyan/white snowy mountains with
+    red gun turrets and what looks like a tank/transport in the middle.
+  - **Lev 4 (Alien Beast)**: dense organic biomechanical patterns —
+    the inside of the giant alien.
+
+### LEVD3 has different structure — TODO
+
+Same render with each level's LEVD3 substituted for LEVD2 produces
+garbage at the `&A90`/`&B90` table offsets — because LEVD3 is only 2176
+bytes (= 17 × 128-byte tile slots) and doesn't extend that far. The
+user confirmed LEVD3 contains its own graphics on top of new map data.
+
+Rendering LEVD3's first 17 × 128 bytes as a tile grid shows what look
+like **enemy / force-field sprites** rather than scenery — wavy
+vertical bars (force fields), tank/turret enemies, conduits. So LEVD3
+overlays:
+  - New sprites (enemies, force fields, second-half ground assets)
+  - A new map definition
+
+Need to find LEVD3's map-table addresses (probably loaded via a
+runtime relocation by either the loader or CODE3). Open task.
+
+### Tooling additions
+
+```
+tools/render_map.py          # LEVD1 tiles + LEVD2/LEVD3 column tables
+                             # → full level-strip PNG (3840×64 per map)
+```
+
+### Next
+
+1. Decode LEVD3's map-table position (the second map per scenario).
+2. Identify what occupies LEVD2 offsets `0`..`0xA8F` (2704 bytes before
+   the tile tables). Hypotheses: enemy spawn schedule, force-field
+   positions, more sprite data, scrolling-speed-per-column.
+3. Look at LEVD2 references `&7A95-&7A9A` / `&7AD5-&7ADA` —
+   the disasm pattern at lines 1828+ uses these as a sprite-source
+   pointer table (lo/hi pair at +&40). That table addresses sprites
+   at `&4Exx` (LEVD1 catalog) — so this is the **per-level decoration
+   sprite list**.
+4. Find the force-field renderer (calls to `lfsr_random` at lines
+   908/917/1341/2458 in CODE).
+5. Annotate CODE2 / CODE3 with regions.
+
+---
+
 ## 2026-05-14 — Session 1, part 4: PAYOFF — player ship & GRAPHIX text decoded
 
 ### Major fix: catalog parser was wrong (byte-6 packing)
