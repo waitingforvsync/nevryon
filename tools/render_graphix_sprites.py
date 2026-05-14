@@ -83,7 +83,31 @@ CATALOG = [
     (0x4300, "text_on",               6, 16),
 
     (0x4360, "enemy_slot19",          4, 32),
-    # 0x43E0..0x48FF: trailing gap (~1312 B)
+
+    # &43E0..&440F: 48 B blank padding before missiles
+    # Five missile sprites at &4410, &4438, &4460, &4488, &44B0 (5×8 each = 40 B)
+    (0x4410, "missile_0",             5, 8),
+    (0x4438, "missile_1",             5, 8),
+    (0x4460, "missile_2",             5, 8),
+    (0x4488, "missile_3",             5, 8),
+    (0x44B0, "missile_4",             5, 8),
+    # &44D8..&44FF: 40 B padding
+    # &4500..&474F: unknown_table, 592 B — needs disasm investigation
+    (0x4500, "unknown_table",         1, 592),  # rendered as a strip; really a data table
+    # &4750..&476F: 2×16 graphic — purpose TBD
+    (0x4750, "graphic_4750",          2, 16),
+    # &4770..&477F: 16 B padding
+    # &4780..&47FF: text glyphs, 8 cols × 16 lines = 128 B
+    (0x4780, "text_4780",             8, 16),
+    # &4800..&483F: 8 small icons (1×8 each = 8 B), generic naming
+    (0x4800, "icon_seq", 1, 8, [
+        "icon_10", "icon_11", "icon_12", "icon_13",
+        "icon_14", "icon_15", "icon_16", "icon_17",
+    ]),
+    # &4840..&4847: 8 B pad
+    # &4848..&484F: bomb/ball (1×8)
+    (0x4848, "bomb",                  1, 8),
+    # &4850..&48FF: gap (176 B) — render at 24 lines tall to spot patterns
 ]
 
 
@@ -143,8 +167,8 @@ def main():
     print("Gaps (still unidentified):")
     render_gap(data, 0x38C0, 0x3A20, "between_helix_and_smallchars")
     print(f"  &38C0..&3A1F ({0x3A20-0x38C0} B)")
-    render_gap(data, 0x43E0, 0x4900, "trailing_to_irq")
-    print(f"  &43E0..&48FF ({0x4900-0x43E0} B)")
+    render_gap(data, 0x4850, 0x4900, "trailing_after_bomb", h=24)
+    print(f"  &4850..&48FF ({0x4900-0x4850} B, 24 lines high)")
     print()
     print(f"Total sprites rendered: {count}")
 
