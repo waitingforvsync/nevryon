@@ -2,12 +2,24 @@
   "base": "0x3300",
   "emit_externs": false,
   "regions": [
-    {"start": "0x3300", "end": "0x3690", "kind": "code"}
+    {
+      "start": "0x3300",
+      "end": "0x3690",
+      "kind": "code"
+    }
   ],
   "labels": {
     "0x3300": "L3300",
     "0x3325": "L3325",
     "0x3432": "L3432",
     "0x3513": "L3513"
+  },
+  "immediate_overrides": {
+    "0x3408": "LO(gfx_icon_11)",
+    "0x340D": "HI(gfx_icon_11)",
+    "0x3534": "LO(gfx_text_get_ready)",
+    "0x3539": "HI(gfx_text_get_ready)",
+    "0x3552": "LO(lev_erase_brush)",
+    "0x3557": "HI(lev_erase_brush)"
   }
 }

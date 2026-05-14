@@ -41,6 +41,13 @@ zp_level_num              = &009D
 irq1v_lo                  = &0204
 irq1v_hi                  = &0205
 
+\ Per-level data referenced from CODE/CODE2/CODE3 sprite-source
+\ self-mod patterns. The player ship sits in LEVD1 at &4E80, and
+\ the LEVD2 zero region from &7D00..&7E0F doubles as the universal
+\ "erase brush" — overlays touch it at +&80, +&B0, +&100, +&102.
+lev_player_sprite         = &4E80
+lev_erase_brush           = &7D00
+
 \ Cross-file LXXXX labels (auto-generated from branch targets) and
 \ mid-instruction equates (sprite_src_lo/hi, LXXXX inside CODE2 etc.)
 \ are emitted inline in each per-binary .6502 file, not here.

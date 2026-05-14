@@ -166,9 +166,9 @@ ORG &2800
     LDX &2972
     LDY &2973
     JSR &1236
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA &1195
     LDX #&02
     LDY #&0C
@@ -423,9 +423,9 @@ ORG &2800
     LDY &2B9C,X
     TAX
     JSR &1236
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA &1195
     LDX #&01
     LDY #&06
@@ -467,9 +467,9 @@ ORG &2800
     LDY &2B9C,X
     TAX
     JSR &1236
-    LDA #&B0
+    LDA #LO(gfx_icon_08)
     STA &1194
-    LDA #&3A
+    LDA #HI(gfx_icon_08)
     STA &1195
     LDX #&01
     LDY #&06
@@ -502,9 +502,9 @@ ORG &2800
     LDA &2B9A,X
     TAX
     JSR &1236
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA &1195
     LDX #&01
     LDY #&06
@@ -534,9 +534,9 @@ ORG &2800
     LDX &28D3
     LDY #&57
     JSR &1236
-    LDA #&00
+    LDA #LO(gfx_icon_10)
     STA &1194
-    LDA #&48
+    LDA #HI(gfx_icon_10)
     STA &1195
     LDX #&01
     LDY #&08
@@ -561,9 +561,9 @@ ORG &2800
     JSR &1236
     LDX #&08
     LDY #&10
-    LDA #&00
+    LDA #LO(gfx_text_get_ready)
     STA &1194
-    LDA #&41
+    LDA #HI(gfx_text_get_ready)
     STA &1195
     JSR &1173
     LDX #&14
@@ -571,9 +571,9 @@ ORG &2800
     JSR &1236
     LDX #&08
     LDY #&10
-    LDA #&80
+    LDA #LO(gfx_text_get_ready + &80)
     STA &1194
-    LDA #&41
+    LDA #HI(gfx_text_get_ready + &80)
     STA &1195
     JSR &1173
     LDA #&13
@@ -585,9 +585,9 @@ ORG &2800
     JSR &1236
     LDX #&08
     LDY #&10
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA &1195
     JSR &1173
     LDX #&14
@@ -595,9 +595,9 @@ ORG &2800
     JSR &1236
     LDX #&08
     LDY #&10
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA &1195
     JSR &1173
     LDX #&00
@@ -627,9 +627,9 @@ ORG &2800
     JSR &1236
     LDX #&08
     LDY #&10
-    LDA #&00
+    LDA #LO(gfx_text_game)
     STA &1194
-    LDA #&42
+    LDA #HI(gfx_text_game)
     STA &1195
     JSR &1173
     LDX #&16
@@ -637,9 +637,9 @@ ORG &2800
     JSR &1236
     LDX #&05
     LDY #&10
-    LDA #&00
+    LDA #LO(gfx_text_on)
     STA &1194
-    LDA #&43
+    LDA #HI(gfx_text_on)
     STA &1195
     JSR &1173
     LDA #&13
@@ -662,9 +662,9 @@ ORG &2800
     LDX &28D3
     LDY #&57
     JSR &1236
-    LDA #&00
+    LDA #LO(gfx_icon_10)
     STA &1194
-    LDA #&48
+    LDA #HI(gfx_icon_10)
     STA &1195
     LDX #&01
     LDY #&08
@@ -676,9 +676,9 @@ ORG &2800
     LDX #&20
     LDY #&5F
     JSR &1236
-    LDA #&08
+    LDA #LO(gfx_icon_11)
     STA &1194
-    LDA #&48
+    LDA #HI(gfx_icon_11)
     STA &1195
     LDX &9A
     LDY #&08
@@ -686,9 +686,9 @@ ORG &2800
     LDX #&20
     LDY #&57
     JSR &1236
-    LDA #&08
+    LDA #LO(gfx_icon_11)
     STA &1194
-    LDA #&48
+    LDA #HI(gfx_icon_11)
     STA &1195
     LDX #&06
     LDY #&08
@@ -698,9 +698,9 @@ ORG &2800
     LDX #&07
     LDY #&FD
     JSR &1236
-    LDA #&00
+    LDA #LO(gfx_logo_4thdim)
     STA &1194
-    LDA #&3D
+    LDA #HI(gfx_logo_4thdim)
     STA &1195
     LDX #&07
     LDY #&20
@@ -708,9 +708,9 @@ ORG &2800
     LDX #&11
     LDY #&F7
     JSR &1236
-    LDA #&60
+    LDA #LO(gfx_punct_ampersand)
     STA &1194
-    LDA #&3F
+    LDA #HI(gfx_punct_ampersand)
     STA &1195
     LDX #&08
     LDY #&10
@@ -718,9 +718,9 @@ ORG &2800
     LDX #&19
     LDY #&F7
     JSR &1236
-    LDA #&E0
+    LDA #LO(gfx_text_gpr90 + &60)
     STA &1194
-    LDA #&3F
+    LDA #HI(gfx_text_gpr90 + &60)
     STA &1195
     LDX #&08
     LDY #&10
@@ -728,9 +728,9 @@ ORG &2800
     LDX #&0A
     LDY #&82
     JSR &1236
-    LDA #&C0
+    LDA #LO(gfx_text_press_space)
     STA &1194
-    LDA #&3B
+    LDA #HI(gfx_text_press_space)
     STA &1195
     LDX #&0A
     LDY #&10
@@ -738,9 +738,9 @@ ORG &2800
     LDX #&14
     LDY #&82
     JSR &1236
-    LDA #&60
+    LDA #LO(gfx_text_press_space + &A0)
     STA &1194
-    LDA #&3C
+    LDA #HI(gfx_text_press_space + &A0)
     STA &1195
     LDX #&0A
     LDY #&10
@@ -768,9 +768,9 @@ ORG &2800
     LDX #&0F
     LDY #&D2
     JSR &1236
-    LDA #&E0
+    LDA #LO(gfx_text_score)
     STA &1194
-    LDA #&3D
+    LDA #HI(gfx_text_score)
     STA &1195
     LDX #&09
     LDY #&10
@@ -778,9 +778,9 @@ ORG &2800
     LDX #&0B
     LDY #&D2
     JSR &1236
-    LDA #&80
+    LDA #LO(gfx_text_last)
     STA &1194
-    LDA #&3E
+    LDA #HI(gfx_text_last)
     STA &1195
     LDX #&07
     LDY #&10
@@ -790,9 +790,9 @@ ORG &2800
     LDX #&14
     LDY #&AA
     JSR &1236
-    LDA #&E0
+    LDA #LO(gfx_text_score)
     STA &1194
-    LDA #&3D
+    LDA #HI(gfx_text_score)
     STA &1195
     LDX #&09
     LDY #&10
@@ -800,9 +800,9 @@ ORG &2800
     LDX #&0B
     LDY #&AA
     JSR &1236
-    LDA #&F0
+    LDA #LO(gfx_text_high)
     STA &1194
-    LDA #&3E
+    LDA #HI(gfx_text_high)
     STA &1195
     LDX #&07
     LDY #&10
@@ -896,9 +896,9 @@ ORG &2800
     JSR &1236
     LDX #&08
     LDY #&10
-    LDA #&00
+    LDA #LO(gfx_text_game)
     STA &1194
-    LDA #&42
+    LDA #HI(gfx_text_game)
     STA &1195
     JSR &1173
     LDX #&15
@@ -906,9 +906,9 @@ ORG &2800
     JSR &1236
     LDX #&08
     LDY #&10
-    LDA #&80
+    LDA #LO(gfx_text_over)
     STA &1194
-    LDA #&42
+    LDA #HI(gfx_text_over)
     STA &1195
     JSR &1173
     LDA #&13
@@ -998,9 +998,9 @@ ORG &2800
     JSR &1236
     LDX #&05
     LDY #&16
-    LDA #&80
+    LDA #LO(lev_player_sprite)
     STA &1194
-    LDA #&4E
+    LDA #HI(lev_player_sprite)
     STA &1195
     JSR &1173
     INC &90
@@ -1015,9 +1015,9 @@ ORG &2800
     JSR &1236
     LDX #&04
     LDY #&10
-    LDA #&90
+    LDA #LO(gfx_muzzle_flash_frame0 + &10)
     STA &1194
-    LDA #&36
+    LDA #HI(gfx_muzzle_flash_frame0 + &10)
     STA &1195
     LDA &2EFE
     CMP #&01
@@ -1037,9 +1037,9 @@ ORG &2800
     JSR &1236
     LDX #&01
     LDY #&10
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
 .L2FE5
     STA &1195
     JSR &1173
@@ -1053,9 +1053,9 @@ ORG &2800
     TAX
     LDY #&C4
     JSR &1236
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA &1195
     LDX #&04
     LDY #&10
@@ -1073,9 +1073,9 @@ ORG &2800
     JSR &1236
     LDX #&06
     LDY #&16
-    LDA #&80
+    LDA #LO(lev_player_sprite)
     STA &1194
-    LDA #&4E
+    LDA #HI(lev_player_sprite)
     STA &1195
     JSR &1173
     DEC &90
@@ -1269,9 +1269,9 @@ ORG &2800
     LDX &28D3
     LDY #&57
     JSR &1236
-    LDA #&00
+    LDA #LO(gfx_icon_10)
     STA &1194
-    LDA #&48
+    LDA #HI(gfx_icon_10)
     STA &1195
     LDX #&01
     LDY #&08
@@ -1285,9 +1285,9 @@ ORG &2800
     JSR &1236
     LDX &2051
     LDY #&08
-    LDA #&08
+    LDA #LO(gfx_icon_11)
     STA &1194
-    LDA #&48
+    LDA #HI(gfx_icon_11)
     STA &1195
     JMP &1173
     RTS
@@ -1295,9 +1295,9 @@ ORG &2800
     LDX #&10
     LDY #&D0
     JSR &1236
-    LDA #&80
+    LDA #LO(gfx_text_pause)
     STA &1194
-    LDA #&47
+    LDA #HI(gfx_text_pause)
     STA &1195
     LDX #&09
     LDY #&0E
@@ -1314,9 +1314,9 @@ ORG &2800
     LDX #&10
     LDY #&D0
     JSR &1236
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA &1195
     LDX #&09
     LDY #&0E
@@ -1336,9 +1336,9 @@ ORG &2800
     JSR &1236
     LDX #&05
     LDY #&16
-    LDA #&80
+    LDA #LO(lev_player_sprite)
     STA &1194
-    LDA #&4E
+    LDA #HI(lev_player_sprite)
     STA &1195
     JSR &1173
     INC &90

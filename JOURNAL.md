@@ -4,6 +4,107 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-15 — Session 4: unified build + gfx_ prefix + sprite-source overrides
+
+### Build system
+
+Renamed `disasm/*.beebasm` → `disasm/*.6502`. New master
+`disasm/Nevryon.6502` declares the shared externs (OS, ZP, IRQ
+vectors, hardware-VIA regs) once and `INCLUDE`s each per-binary file
+in order, with `SAVE` between `CODE3` and `GRAPHIX` (and a `CLEAR`)
+because they overlap at `&3680..&368F` (GRAPHIX is loaded last in
+the real boot chain, so its bytes win in memory after loading; we
+SAVE CODE3 first so we capture its true on-disk contents).
+
+`build.sh` / `build.bat` wrap BeebAsm and verify byte-identity for
+all four binaries against `extracted/$.CODE` etc. — all four
+currently rebuild byte-identical.
+
+### Disasm tool changes
+
+- `emit_externs: false` cfg flag suppresses the inline extern block
+  in each per-binary `.6502` (the master declares them once).
+- Externs split at emit time: **in-range** (mid-instruction equates
+  like `sprite_src_lo = &1194` that fall inside the binary) are
+  always emitted in the per-binary file; **out-of-range** (OS / HW /
+  cross-file refs) are gated by `emit_externs`.
+- `immediate_overrides` keyed by the PC of an `LDA #imm` instruction
+  to substitute a BeebAsm expression (e.g. `LO(gfx_pickup_yellow)`)
+  for the raw byte. Mechanics already existed — now actually used
+  at scale.
+- Cross-file refs use the auto-generated `LXXXX` label naming
+  (defined in the target file), replacing the previous `code2_*` /
+  `code3_*` alias scheme. Per-binary cfgs now list the cross-file
+  entry addresses in their `labels` block so the included file
+  actually defines the symbol.
+
+### gfx_ prefix + sprite-source overrides
+
+All 85 GRAPHIX sprite-atlas labels (sprites + pads + the still-
+unknown table) gained a `gfx_` prefix. IRQ-handler / palette labels
+at `&4900+` kept their existing names. `docs/file_layout.md` and
+`render_graphix_sprites.py` updated.
+
+Scanned CODE / CODE2 / CODE3 for the canonical
+`LDA #lo ; STA &1194 ; LDA #hi ; STA &1195` self-modified sprite-
+source pattern. **69 sites** total (28 in CODE, 38 in CODE2, 3 in
+CODE3). Generated immediate_overrides so each pair renders as
+`LDA #LO(gfx_xxx) ; … ; LDA #HI(gfx_xxx)` in the .6502 output.
+
+Two new master externs were needed:
+
+  - `lev_player_sprite = &4E80` — player ship in LEVD1 (drawn at
+    `&1483`, plus three sites in CODE2 — see CODE2.cfg overrides).
+  - `lev_erase_brush = &7D00` — the LEVD2 zero region; the engine
+    touches it at `+&80`, `+&B0`, `+&100`, `+&102` as the universal
+    erase brush.
+
+### Inexact references — to revisit
+
+Four sites target a sprite address that's *inside* a named sprite
+rather than its base. Worth a closer look at what's drawn there:
+
+| Site         | Target | Expression                        | Hypothesis                                                          |
+|--------------|--------|-----------------------------------|---------------------------------------------------------------------|
+| CODE2 &2C0B  | &4180  | `gfx_text_get_ready + &80`        | 2nd half of GET READY! (16 cols → drawn as two 8-col blits)         |
+| CODE2 &2D5F  | &3FE0  | `gfx_text_gpr90 + &60`            | 2nd half of GPR'90! (14 cols → 6+8 split)                           |
+| CODE2 &2D8F  | &3C60  | `gfx_text_press_space + &A0`      | 2nd half of PRESS SPACE! (20 cols → 10+10 split)                    |
+| CODE2 &2FAE  | &3690  | `gfx_muzzle_flash_frame0 + &10`   | reads from column 1 of muzzle_flash — partial-tip plot? unclear     |
+
+First three are likely "split wide text into two narrower blits"
+because the sprite blitter's max width per call is ≤16 byte-cols.
+The muzzle_flash one is the odd one out — when we trace the caller
+context we should figure out why it skips the leftmost column.
+
+### Other holdouts
+
+- **CODE @ &1C25 / &1C36** → &4C20 / &4C68 (both LEVD1). These have
+  a split setup (LO byte set in a small subroutine, HI byte set
+  later in a different code path with an RTS in between) so the
+  scan picks them up with `dist=12`. Left as raw hex for now — they
+  point into the LEVD1 decoration sprite bank, which we haven't yet
+  named slot-by-slot. Once those slots are labelled, add overrides.
+- **`gfx_unknown_table` at &4500..&474F**: a thorough scan
+  (`tools/find_sprite_refs.py`) found **zero** code references —
+  no direct (`LDA/STA abs`), no indexed (`abs,X/Y`), no indirect
+  (`(zp),Y` via any zp pointer set to anywhere in &4400..&47FF).
+  Likely either dead data left over from compilation or referenced
+  only by the BASIC loaders. Worth a peek at `Loader2` / `LOADER3`
+  for `?&XXXX` POKEs into that range, but otherwise it can sit.
+
+### Next
+
+  - Check BASIC loaders for any references to `&4500..&474F`.
+  - Inspect the four offset-into-named sprite call sites listed
+    above to confirm the hypotheses (and maybe carve `text_get_ready`
+    into two distinct half-labels if that's what the code reads).
+  - Label LEVD1 decoration sprite slots so the &1C25/&1C36 sites
+    can become explicit too.
+  - The 91 B of trailing data at `&49A5-&49FF` after `irq_install`
+    — likely small LUTs, not yet decoded.
+
+---
+
 ## 2026-05-15 — Session 3: GRAPHIX sprite catalog
 
 Carved the entire shared sprite atlas at `&3680-&48FF` into named

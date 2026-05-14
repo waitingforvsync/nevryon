@@ -1,10 +1,24 @@
 {
   "base": "0x1100",
   "emit_externs": false,
-  "entries": ["0x1100"],
+  "entries": [
+    "0x1100"
+  ],
   "regions": [
-    {"start": "0x1209", "end": "0x121F", "kind": "data", "width": 1, "comment": "screen line LUT - low byte for each of 22 char rows (MODE 5, base &5800, stride &140)"},
-    {"start": "0x121F", "end": "0x1235", "kind": "data", "width": 1, "comment": "screen line LUT - high byte (corresponds to L1209 entries)"}
+    {
+      "start": "0x1209",
+      "end": "0x121F",
+      "kind": "data",
+      "width": 1,
+      "comment": "screen line LUT - low byte for each of 22 char rows (MODE 5, base &5800, stride &140)"
+    },
+    {
+      "start": "0x121F",
+      "end": "0x1235",
+      "kind": "data",
+      "width": 1,
+      "comment": "screen line LUT - high byte (corresponds to L1209 entries)"
+    }
   ],
   "labels": {
     "0x1100": "main_init",
@@ -41,8 +55,8 @@
   "comments": {
     "0x1100": "Entry: jsr to three init routines then drop into main loop",
     "0x1141": "Sprite plot routine: $76/$77 = dest screen addr; L1194/L1195 = sprite src (self-mod); $74 = width-in-byte-cols; $75 = height-in-scanlines; $79 = direction flag (1 = forward)",
-    "0x1209": "Screen char-row low-byte LUT — MODE 5 with base &5800, stride &140 per char row",
-    "0x121F": "Screen char-row high-byte LUT — pairs with screen_row_lo_lut",
+    "0x1209": "Screen char-row low-byte LUT \u2014 MODE 5 with base &5800, stride &140 per char row",
+    "0x121F": "Screen char-row high-byte LUT \u2014 pairs with screen_row_lo_lut",
     "0x1236": "Compute screen address from X (char-col) and Y (logical row); result in $76/$77"
   },
   "extern_labels": {
@@ -71,5 +85,64 @@
     "0x3325": "L3325",
     "0x3432": "L3432",
     "0x3513": "L3513"
+  },
+  "immediate_overrides": {
+    "0x1483": "LO(lev_player_sprite)",
+    "0x1488": "HI(lev_player_sprite)",
+    "0x1651": "LO(lev_erase_brush + &80)",
+    "0x1656": "HI(lev_erase_brush + &80)",
+    "0x1670": "LO(lev_erase_brush + &80)",
+    "0x1675": "HI(lev_erase_brush + &80)",
+    "0x1811": "LO(lev_erase_brush + &102)",
+    "0x1816": "HI(lev_erase_brush + &102)",
+    "0x18E2": "LO(lev_erase_brush + &80)",
+    "0x18E7": "HI(lev_erase_brush + &80)",
+    "0x1954": "LO(lev_erase_brush + &80)",
+    "0x1959": "HI(lev_erase_brush + &80)",
+    "0x1C47": "LO(lev_erase_brush + &B0)",
+    "0x1C4D": "LO(lev_erase_brush + &80)",
+    "0x1C52": "HI(lev_erase_brush + &80)",
+    "0x1D19": "LO(lev_erase_brush + &80)",
+    "0x1D1E": "HI(lev_erase_brush + &80)",
+    "0x1D62": "LO(lev_erase_brush + &102)",
+    "0x1D67": "HI(lev_erase_brush + &102)",
+    "0x1D84": "LO(lev_erase_brush + &100)",
+    "0x1D89": "HI(lev_erase_brush + &100)",
+    "0x1DD9": "LO(lev_erase_brush + &102)",
+    "0x1DDE": "HI(lev_erase_brush + &102)",
+    "0x1E15": "LO(gfx_icon_03)",
+    "0x1E21": "HI(gfx_icon_03)",
+    "0x211A": "LO(lev_erase_brush + &80)",
+    "0x211F": "HI(lev_erase_brush + &80)",
+    "0x21D7": "LO(lev_erase_brush + &80)",
+    "0x21DC": "HI(lev_erase_brush + &80)",
+    "0x2237": "LO(lev_erase_brush + &80)",
+    "0x223C": "HI(lev_erase_brush + &80)",
+    "0x23AB": "LO(lev_erase_brush + &80)",
+    "0x23B0": "HI(lev_erase_brush + &80)",
+    "0x2435": "LO(lev_erase_brush + &80)",
+    "0x243A": "HI(lev_erase_brush + &80)",
+    "0x24A6": "LO(lev_erase_brush + &80)",
+    "0x24AB": "HI(lev_erase_brush + &80)",
+    "0x26BE": "LO(lev_erase_brush + &80)",
+    "0x26C3": "HI(lev_erase_brush + &80)",
+    "0x2703": "LO(gfx_pickup_yellow)",
+    "0x2708": "HI(gfx_pickup_yellow)",
+    "0x2710": "LO(gfx_pickup_red)",
+    "0x2715": "HI(gfx_pickup_red)",
+    "0x271D": "LO(gfx_pickup_checker)",
+    "0x2722": "HI(gfx_pickup_checker)",
+    "0x272A": "LO(gfx_text_pause)",
+    "0x272F": "HI(gfx_text_pause)",
+    "0x2737": "LO(gfx_pickup_red)",
+    "0x273C": "HI(gfx_pickup_red)",
+    "0x2744": "LO(gfx_pickup_checker)",
+    "0x2749": "HI(gfx_pickup_checker)",
+    "0x2751": "LO(gfx_pickup_white)",
+    "0x2756": "HI(gfx_pickup_white)",
+    "0x278E": "LO(lev_erase_brush + &80)",
+    "0x2793": "HI(lev_erase_brush + &80)",
+    "0x27AC": "LO(gfx_icon_01)",
+    "0x27B1": "HI(gfx_icon_01)"
   }
 }

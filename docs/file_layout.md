@@ -206,66 +206,66 @@ in parentheses. Renders of every sprite are in `graphix/`.
 
 | CPU addr | Size px (B)    | Name / description                                                  |
 |----------|----------------|---------------------------------------------------------------------|
-| `&3680`  | 16×16 (64)     | `muzzle_flash_frame0` — player gun flash, frame 0                   |
-| `&36C0`  | 16×16 (64)     | `muzzle_flash_frame1` — player gun flash, frame 1                   |
-| `&3700`  | 16×32 (128)    | `enemy_slot15` — LEVD2/3 ptr-table slot 15 (shared cross-scenario)  |
-| `&3780`  | 16×32 (128)    | `enemy_slot16` — LEVD2/3 ptr-table slot 16                          |
-| `&3800`  | 24×16 (96)     | `text_wow` — "WOW!" inter-stage banner                              |
-| `&3860`  |  8×12 (24)     | `ball_frame0` — chomping-orb animation, frame 0                     |
-| `&3878`  |  8×12 (24)     | `ball_frame1`                                                       |
-| `&3890`  |  8×12 (24)     | `ball_frame2`                                                       |
-| `&38A8`  |  8×12 (24)     | `ball_frame3`                                                       |
-| `&38C0`  |  8×12 (24)     | `ball_frame4`                                                       |
-| `&38D8`  |  8×12 (24)     | `ball_frame5`                                                       |
+| `&3680`  | 16×16 (64)     | `gfx_muzzle_flash_frame0` — player gun flash, frame 0                   |
+| `&36C0`  | 16×16 (64)     | `gfx_muzzle_flash_frame1` — player gun flash, frame 1                   |
+| `&3700`  | 16×32 (128)    | `gfx_enemy_slot15` — LEVD2/3 ptr-table slot 15 (shared cross-scenario)  |
+| `&3780`  | 16×32 (128)    | `gfx_enemy_slot16` — LEVD2/3 ptr-table slot 16                          |
+| `&3800`  | 24×16 (96)     | `gfx_text_wow` — "WOW!" inter-stage banner                              |
+| `&3860`  |  8×12 (24)     | `gfx_ball_frame0` — chomping-orb animation, frame 0                     |
+| `&3878`  |  8×12 (24)     | `gfx_ball_frame1`                                                       |
+| `&3890`  |  8×12 (24)     | `gfx_ball_frame2`                                                       |
+| `&38A8`  |  8×12 (24)     | `gfx_ball_frame3`                                                       |
+| `&38C0`  |  8×12 (24)     | `gfx_ball_frame4`                                                       |
+| `&38D8`  |  8×12 (24)     | `gfx_ball_frame5`                                                       |
 | `&38F0`  | — (16)         | Alignment pad — pushes the next sprite onto a page boundary         |
-| `&3900`  | 12×24 (72)     | `enemy_saucer_frame0` — rotating saucer, frame 0                    |
+| `&3900`  | 12×24 (72)     | `gfx_enemy_saucer_frame0` — rotating saucer, frame 0                    |
 | `&3948`  | — (24)         | Blank separator column (1×24)                                       |
-| `&3960`  | 12×24 (72)     | `enemy_saucer_frame1`                                               |
+| `&3960`  | 12×24 (72)     | `gfx_enemy_saucer_frame1`                                               |
 | `&39A8`  | — (24)         | Blank separator                                                     |
-| `&39C0`  | 12×24 (72)     | `enemy_saucer_frame2`                                               |
+| `&39C0`  | 12×24 (72)     | `gfx_enemy_saucer_frame2`                                               |
 | `&3A08`  | — (24)         | Trailing blank                                                      |
 | `&3A20`  |  4×8 (8) ×8    | `icon_00..icon_07` — 8 small 4×8 glyphs (small-char bank, first 8)  |
 | `&3A60`  |  4×8 (8) ×10   | `digit_0..digit_9` — 10 small 4×8 digits                            |
-| `&3AB0`  |  4×8 (8) ×2    | `icon_08`, `icon_09` — two more small 4×8 glyphs                    |
+| `&3AB0`  |  4×8 (8) ×2    | `gfx_icon_08`, `gfx_icon_09` — two more small 4×8 glyphs                    |
 | `&3AC0`  | — (64)         | Blank pad — unused tail of the 28-slot small-char bank              |
-| `&3B00`  | 32×8 (64)      | `flame_frame0` — engine flame, frame 0                              |
-| `&3B40`  | 32×8 (64)      | `flame_frame1`                                                      |
-| `&3B80`  | 32×8 (64)      | `flame_frame2`                                                      |
-| `&3BC0`  | 80×16 (320)    | `text_press_space` — "PRESS SPACE!"                                 |
-| `&3D00`  | 28×32 (224)    | `logo_4thdim` — small "4TH DIM" logo block                          |
-| `&3DE0`  | 36×16 (144)    | `text_score` — "SCORE"                                              |
-| `&3E70`  |  4×16 (16)     | `punct_colon` — ":"                                                 |
-| `&3E80`  | 28×16 (112)    | `text_last` — "LAST"                                                |
-| `&3EF0`  | 28×16 (112)    | `text_high` — "HIGH"                                                |
-| `&3F60`  |  8×16 (32)     | `punct_ampersand` — "&"                                             |
-| `&3F80`  | 56×16 (224)    | `text_gpr90` — "GPR'90!"                                            |
-| `&4060`  |  8×16 (32)     | `pickup_red` — red pickup                                           |
-| `&4090`  |  8×16 (32)     | `pickup_yellow` — yellow pickup                                     |
-| `&40C0`  |  8×16 (32)     | `pickup_checker` — checker pickup                                   |
+| `&3B00`  | 32×8 (64)      | `gfx_flame_frame0` — engine flame, frame 0                              |
+| `&3B40`  | 32×8 (64)      | `gfx_flame_frame1`                                                      |
+| `&3B80`  | 32×8 (64)      | `gfx_flame_frame2`                                                      |
+| `&3BC0`  | 80×16 (320)    | `gfx_text_press_space` — "PRESS SPACE!"                                 |
+| `&3D00`  | 28×32 (224)    | `gfx_logo_4thdim` — small "4TH DIM" logo block                          |
+| `&3DE0`  | 36×16 (144)    | `gfx_text_score` — "SCORE"                                              |
+| `&3E70`  |  4×16 (16)     | `gfx_punct_colon` — ":"                                                 |
+| `&3E80`  | 28×16 (112)    | `gfx_text_last` — "LAST"                                                |
+| `&3EF0`  | 28×16 (112)    | `gfx_text_high` — "HIGH"                                                |
+| `&3F60`  |  8×16 (32)     | `gfx_punct_ampersand` — "&"                                             |
+| `&3F80`  | 56×16 (224)    | `gfx_text_gpr90` — "GPR'90!"                                            |
+| `&4060`  |  8×16 (32)     | `gfx_pickup_red` — red pickup                                           |
+| `&4090`  |  8×16 (32)     | `gfx_pickup_yellow` — yellow pickup                                     |
+| `&40C0`  |  8×16 (32)     | `gfx_pickup_checker` — checker pickup                                   |
 | `&40E0`  | — (32)         | Pre-text pad                                                        |
-| `&4100`  | 64×16 (256)    | `text_get_ready` — "GET READY!"                                     |
-| `&4200`  | 32×16 (128)    | `text_game` — "GAME"                                                |
-| `&4280`  | 32×16 (128)    | `text_over` — "OVER"                                                |
-| `&4300`  | 24×16 (96)     | `text_on` — "ON!"                                                   |
-| `&4360`  | 16×32 (128)    | `enemy_slot19` — LEVD2/3 ptr-table slot 19                          |
+| `&4100`  | 64×16 (256)    | `gfx_text_get_ready` — "GET READY!"                                     |
+| `&4200`  | 32×16 (128)    | `gfx_text_game` — "GAME"                                                |
+| `&4280`  | 32×16 (128)    | `gfx_text_over` — "OVER"                                                |
+| `&4300`  | 24×16 (96)     | `gfx_text_on` — "ON!"                                                   |
+| `&4360`  | 16×32 (128)    | `gfx_enemy_slot19` — LEVD2/3 ptr-table slot 19                          |
 | `&43E0`  | — (48)         | Pre-missile pad                                                     |
-| `&4410`  | 20×8 (40)      | `missile_0` — projectile sprite, frame 0                            |
-| `&4438`  | 20×8 (40)      | `missile_1`                                                         |
-| `&4460`  | 20×8 (40)      | `missile_2`                                                         |
-| `&4488`  | 20×8 (40)      | `missile_3`                                                         |
-| `&44B0`  | 20×8 (40)      | `missile_4`                                                         |
+| `&4410`  | 20×8 (40)      | `gfx_missile_0` — projectile sprite, frame 0                            |
+| `&4438`  | 20×8 (40)      | `gfx_missile_1`                                                         |
+| `&4460`  | 20×8 (40)      | `gfx_missile_2`                                                         |
+| `&4488`  | 20×8 (40)      | `gfx_missile_3`                                                         |
+| `&44B0`  | 20×8 (40)      | `gfx_missile_4`                                                         |
 | `&44D8`  | — (40)         | Post-missile pad                                                    |
-| `&4500`  | — (592)        | `unknown_table` — 592 B data block, purpose TBD (no code ref yet)   |
-| `&4750`  |  8×16 (32)     | `pickup_white` — 4th pickup variant                                 |
+| `&4500`  | — (592)        | `gfx_unknown_table` — 592 B data block, purpose TBD (no code ref yet)   |
+| `&4750`  |  8×16 (32)     | `gfx_pickup_white` — 4th pickup variant                                 |
 | `&4770`  | — (16)         | Pad                                                                 |
-| `&4780`  | 36×14 (126)    | `text_pause` — "PAUSE"                                              |
+| `&4780`  | 36×14 (126)    | `gfx_text_pause` — "PAUSE"                                              |
 | `&47FE`  | — (2)          | Pad                                                                 |
 | `&4800`  |  4×8 (8) ×8    | `icon_10..icon_17` — 8 more small 4×8 glyphs                        |
 | `&4840`  | — (8)          | Pad                                                                 |
-| `&4848`  |  4×8 (8)       | `bomb` — small bomb/ball sprite                                     |
+| `&4848`  |  4×8 (8)       | `gfx_bomb` — small bomb/ball sprite                                     |
 | `&4850`  | — (8)          | Pad                                                                 |
-| `&4858`  | 12×24 (72)     | `enemy_small_frame0` — small enemy animation, frame 0               |
-| `&48A0`  | 12×24 (72)     | `enemy_small_frame1` — frame 1                                      |
+| `&4858`  | 12×24 (72)     | `gfx_enemy_small_frame0` — small enemy animation, frame 0               |
+| `&48A0`  | 12×24 (72)     | `gfx_enemy_small_frame1` — frame 1                                      |
 | `&48E8`  | — (24)         | Trailing blank                                                      |
 
 The sprite-engine entry point (`sprite_plot_xy` at `&1173` in CODE)

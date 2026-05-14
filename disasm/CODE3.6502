@@ -135,9 +135,9 @@ ORG &3300
     LDX #&20
     LDY #&57
     JSR &1236
-    LDA #&08
+    LDA #LO(gfx_icon_11)
     STA &1194
-    LDA #&48
+    LDA #HI(gfx_icon_11)
     STA &1195
     LDX &2051
     LDY #&08
@@ -292,9 +292,9 @@ ORG &3300
     JSR &1236
     LDX #&0F
     LDY #&10
-    LDA #&00
+    LDA #LO(gfx_text_get_ready)
     STA &1194
-    LDA #&41
+    LDA #HI(gfx_text_get_ready)
     STA &1195
     JMP &1173
 .L3541
@@ -306,9 +306,9 @@ ORG &3300
     JSR &1236
     LDX #&0F
     LDY #&10
-    LDA #&00
+    LDA #LO(lev_erase_brush)
     STA &1194
-    LDA #&7D
+    LDA #HI(lev_erase_brush)
     STA &1195
     JMP &1173
 .L355F

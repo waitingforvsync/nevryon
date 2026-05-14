@@ -518,9 +518,9 @@ ORG &1100
     JSR calc_screen_addr
     LDX #&06
     LDY #&16
-    LDA #&80
+    LDA #LO(lev_player_sprite)
     STA sprite_src_lo
-    LDA #&4E
+    LDA #HI(lev_player_sprite)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDA &25A3
@@ -759,9 +759,9 @@ ORG &1100
     JSR calc_screen_addr
     LDX #&05
     LDY #&08
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
 .L165E
@@ -772,9 +772,9 @@ ORG &1100
     JSR calc_screen_addr
     LDX #&05
     LDY #&08
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
 .L167D
@@ -1011,9 +1011,9 @@ ORG &1100
     STA &16E6,X
     LDX #&02
     LDY #&02
-    LDA #&02
+    LDA #LO(lev_erase_brush + &102)
     STA sprite_src_lo
-    LDA #&7E
+    LDA #HI(lev_erase_brush + &102)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
@@ -1118,9 +1118,9 @@ ORG &1100
     JSR calc_screen_addr
     LDX #&03
     LDY #&02
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
@@ -1177,9 +1177,9 @@ ORG &1100
     JSR calc_screen_addr
     LDX #&03
     LDY #&02
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
@@ -1575,13 +1575,13 @@ ORG &1100
     STA &1A6B,X
     LDA #&4C
     STA sprite_src_hi
-    LDA #&B0
+    LDA #LO(lev_erase_brush + &B0)
     STA sprite_src_lo
     RTS
 .L1C4D
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDA #&00
     STA &1A6B,X
@@ -1685,9 +1685,9 @@ ORG &1100
     JSR calc_screen_addr
     LDX #&05
     LDY #&08
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
@@ -1718,9 +1718,9 @@ ORG &1100
     STA tbl_1A8B,X
     LDX #&02
     LDY #&02
-    LDA #&02
+    LDA #LO(lev_erase_brush + &102)
     STA sprite_src_lo
-    LDA #&7E
+    LDA #HI(lev_erase_brush + &102)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
@@ -1733,9 +1733,9 @@ ORG &1100
     JSR calc_screen_addr
     LDX #&03
     LDY #&02
-    LDA #&00
+    LDA #LO(lev_erase_brush + &100)
     STA sprite_src_lo
-    LDA #&7E
+    LDA #HI(lev_erase_brush + &100)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
@@ -1780,9 +1780,9 @@ ORG &1100
     JSR calc_screen_addr
     LDX #&02
     LDY #&02
-    LDA #&02
+    LDA #LO(lev_erase_brush + &102)
     STA sprite_src_lo
-    LDA #&7E
+    LDA #HI(lev_erase_brush + &102)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
@@ -1806,12 +1806,12 @@ ORG &1100
     JSR calc_screen_addr
     LDA #&48
     STA sprite_src_hi
-    LDA #&38
+    LDA #LO(gfx_icon_03)
     STA sprite_src_lo
     LDY data_1E46
     CPY #&00
     BNE L1E2B
-    LDA #&3A
+    LDA #HI(gfx_icon_03)
     STA sprite_src_hi
     LDA #&B8
     STA sprite_src_lo
@@ -2169,9 +2169,9 @@ ORG &1100
     LDX data_23C5
     LDY &23C6
     JSR calc_screen_addr
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDX #&02
     LDY #&20
@@ -2262,9 +2262,9 @@ ORG &1100
     LDY &205C,X
     TAX
     JSR calc_screen_addr
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDX #&01
     LDY #&20
@@ -2305,9 +2305,9 @@ ORG &1100
     TAX
     JMP L21BC
 .L2237
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDX #&01
     LDY #&20
@@ -2493,9 +2493,9 @@ ORG &1100
     RTS
 .forcefield_erase
     JSR calc_screen_addr
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDX #&02
     LDY #&20
@@ -2571,9 +2571,9 @@ ORG &1100
     STA zp_sprite_dir_flag
     LDX #&05
     LDY #&08
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
@@ -2628,9 +2628,9 @@ ORG &1100
     LDX &249A
     LDY &249B
     JSR calc_screen_addr
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDX #&08
     LDY #&08
@@ -2920,9 +2920,9 @@ ORG &1100
     LDX #&00
     LDY &2691
     JSR calc_screen_addr
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDX #&03
     LDY #&10
@@ -2952,42 +2952,42 @@ ORG &1100
     STA &2692
     JMP L2737
 .L2703
-    LDA #&90
+    LDA #LO(gfx_pickup_yellow)
     STA sprite_src_lo
-    LDA #&40
+    LDA #HI(gfx_pickup_yellow)
     STA sprite_src_hi
     JMP sprite_plot_xy
-    LDA #&60
+    LDA #LO(gfx_pickup_red)
     STA sprite_src_lo
-    LDA #&40
+    LDA #HI(gfx_pickup_red)
     STA sprite_src_hi
     JMP sprite_plot_xy
-    LDA #&C0
+    LDA #LO(gfx_pickup_checker)
     STA sprite_src_lo
-    LDA #&40
+    LDA #HI(gfx_pickup_checker)
     STA sprite_src_hi
     JMP sprite_plot_xy
-    LDA #&80
+    LDA #LO(gfx_text_pause)
     STA sprite_src_lo
-    LDA #&47
+    LDA #HI(gfx_text_pause)
     STA sprite_src_hi
     JMP sprite_plot_xy
 .L2737
-    LDA #&60
+    LDA #LO(gfx_pickup_red)
     STA sprite_src_lo
-    LDA #&40
+    LDA #HI(gfx_pickup_red)
     STA sprite_src_hi
     JMP sprite_plot_xy
 .L2744
-    LDA #&C0
+    LDA #LO(gfx_pickup_checker)
     STA sprite_src_lo
-    LDA #&40
+    LDA #HI(gfx_pickup_checker)
     STA sprite_src_hi
     JMP sprite_plot_xy
 .L2751
-    LDA #&50
+    LDA #LO(gfx_pickup_white)
     STA sprite_src_lo
-    LDA #&47
+    LDA #HI(gfx_pickup_white)
     STA sprite_src_hi
     JMP sprite_plot_xy
 .L275E
@@ -3014,9 +3014,9 @@ ORG &1100
     LDX &2690
     LDY &2691
     JSR calc_screen_addr
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDX #&03
     LDY #&10
@@ -3026,9 +3026,9 @@ ORG &1100
     LDX #&08
     LDY #&57
     JSR calc_screen_addr
-    LDA #&28
+    LDA #LO(gfx_icon_01)
     STA sprite_src_lo
-    LDA #&3A
+    LDA #HI(gfx_icon_01)
     STA sprite_src_hi
     INC &259F
     LDX &259F
