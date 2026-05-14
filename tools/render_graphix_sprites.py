@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Render the catalog of confirmed GRAPHIX sprites to work/graphix_<addr>_<name>.png.
+"""Render the catalog of confirmed GRAPHIX sprites to graphix/<addr>_<name>.png.
 
-The list below is the current state of our knowledge of what lives in
-$.GRAPHIX. Each entry is (start_addr, name, w_cols, h_lines, count). If
-count > 1 the bytes are rendered as a horizontal strip of `count` sprites,
-each of (w_cols × h_lines) col-major bytes.
+The catalog below is the current state of our knowledge of what lives in
+$.GRAPHIX. Each entry is one of:
 
-Where the boundaries are still uncertain ("gap" entries), the bytes are
-dumped as a long debugging strip at 16 lines tall — useful for visual
-inspection.
+  (start_addr, name, w_cols, h_lines)
+      A single column-major sprite of (w_cols × 4) px wide × h_lines tall.
+
+  (start_addr, name_prefix, w_cols, h_lines, items)
+      A run of `items` consecutive sprites, each (w_cols × h_lines) bytes.
+      `items` is either an int (renders <prefix>_<index>) or a list of
+      explicit names (one per sprite, len must match the number of
+      sprites; use None to skip).
+
+Where the boundaries are still uncertain, a "gap" block is dumped to
+graphix/gap_<addr>.png as a long 16-line-tall column-major strip.
 """
 
 from __future__ import annotations
@@ -24,79 +30,71 @@ from PIL import Image
 
 GRAPHIX_BASE = 0x3680
 SCALE = 6
+OUT = "graphix"
 
-# (addr, name, w_cols, h_lines, count)
+
+# Format: (addr, name, w_cols, h_lines) for a single sprite, OR
+#         (addr, name_prefix, w_cols, h_lines, items_or_namelist) for a run.
 CATALOG = [
-    (0x3680, "muzzle_flash_frame0", 4, 16, 1),
-    (0x36C0, "muzzle_flash_frame1", 4, 16, 1),
-    (0x3700, "enemy_slot15",         4, 32, 1),
-    (0x3780, "enemy_slot16",         4, 32, 1),
-    (0x3800, "text_wow",             6, 16, 1),
-    (0x3860, "sprite_helix",         6, 16, 1),
+    (0x3680, "muzzle_flash_frame0",  4, 16),
+    (0x36C0, "muzzle_flash_frame1",  4, 16),
+    (0x3700, "enemy_slot15",          4, 32),
+    (0x3780, "enemy_slot16",          4, 32),
+    (0x3800, "text_wow",              6, 16),
+    (0x3860, "sprite_helix",          6, 16),
     # 0x38C0..0x3A1F: 352-byte gap — purpose still TBD
-    # 0x3A00 first column = 1×32 padding strip
-    (0x3A20, "small_chars_first12",  1,  8, 12),
-    (0x3A80, "small_chars_next16",   1,  8, 16),
-    (0x3B00, "small_chars_last3",    1,  8, 3),
-    # 0x3B18 .. 0x3BBF: three 28×8 flame frames
-    (0x3B18, "flame_frame0",         7,  8, 1),
-    (0x3B50, "flame_frame1",         7,  8, 1),
-    (0x3B88, "flame_frame2",         7,  8, 1),
-    # text + decorations from 0x3BC0..0x435F (8×16 column-major chars)
-    (0x3BC0, "text_press_space",     2, 16, 12),
-    (0x3D40, "logo_4thdim_inset",    2, 16, 5),
-    (0x3DE0, "text_score_last_high_at", 2, 16, 15),
-    (0x3FC0, "small_sprite_3FC0",    2, 16, 1),
-    (0x3FE0, "text_gpr_90",          2, 16, 7),
-    (0x40C0, "text_dots",            2, 16, 2),
-    (0x4100, "shape_circle_red",     2, 16, 1),
-    (0x4120, "shape_circle_yellow",  2, 16, 1),
-    (0x4140, "shape_circle_checker", 2, 16, 1),
-    (0x4160, "small_sprite_4160",    2, 16, 1),
-    (0x4180, "text_get_ready_game",  2, 16, 14),
-    (0x4340, "trailing_3char_4340",  2, 16, 1),
-    (0x4360, "enemy_slot19",         4, 32, 1),
-    # 0x43E0 .. 0x4900: 1312-byte trailing region — still TBD
+
+    # Small chars at &3A20..&3B0F: 30 cells of 4×8 col-major.
+    # Non-blank ones (20 total) get their own files; blanks skipped.
+    (0x3A20, "small_char", 1, 8, [
+        "icon_00", "icon_01", "icon_02", "icon_03",
+        "icon_04", "icon_05", "icon_06", "icon_07",
+        "digit_0", "digit_1", "digit_2", "digit_3",
+        "digit_4", "digit_5", "digit_6", "digit_7",
+        "digit_8", "digit_9", "icon_08", "icon_09",
+        None, None, None, None, None, None, None, None, None, None,
+    ]),
+
+    # Flame frames at &3B10..&3BBF: three 7×8 frames (56 B each)
+    (0x3B10, "flame_frame0",          7, 8),
+    (0x3B48, "flame_frame1",          7, 8),
+    (0x3B80, "flame_frame2",          7, 8),
+
+    # Text region: 8×16 chars (& special 32-line logo) between &3BC0 and &4060
+    (0x3BC0, "text_press_space",     20, 16),
+    (0x3D00, "logo_4thdim",           7, 32),
+    (0x3DE0, "text_score",            9, 16),
+    (0x3E70, "punct_colon",           1, 16),
+    (0x3E80, "text_last",             7, 16),
+    (0x3EF0, "text_high",             7, 16),
+    (0x3F60, "punct_ampersand",       2, 16),
+    (0x3F80, "text_gpr90",           14, 16),
+
+    # Pickups at &4060..&40DF: three 2×16 sprites with 1-col blanks between
+    (0x4060, "pickup_red",            2, 16),
+    (0x4090, "pickup_yellow",         2, 16),
+    (0x40C0, "pickup_checker",        2, 16),
+
+    # 0x40E0..0x435F: still TBD (~640 bytes)
+    (0x4360, "enemy_slot19",          4, 32),
+    # 0x43E0..0x48FF: trailing gap (~1312 B)
 ]
 
 
-def render_strip(data, base_addr, name, w_cols, h_lines, count, scale=SCALE):
+def render_one(data, addr, name, w_cols, h_lines, scale=SCALE):
     cw, ch = w_cols * 4, h_lines
-    pad = 1
-    img_w = count * (cw + pad) + pad
-    img_h = ch + pad * 2
-    buf = bytearray(img_w * img_h * 3)
-    for i in range(img_w * img_h):
-        buf[i * 3] = 30
-        buf[i * 3 + 1] = 30
-        buf[i * 3 + 2] = 60
-
-    for k in range(count):
-        addr = base_addr + k * w_cols * h_lines
-        off = addr - GRAPHIX_BASE
-        if off + w_cols * h_lines > len(data):
-            break
-        rgb, w, hh = render_column_major(data, off, w_cols, h_lines,
-                                          NEVRYON_GAME_PALETTE)
-        ox = pad + k * (cw + pad)
-        for y in range(hh):
-            for x in range(w):
-                si = (y * w + x) * 3
-                di = ((pad + y) * img_w + (ox + x)) * 3
-                buf[di] = rgb[si]
-                buf[di + 1] = rgb[si + 1]
-                buf[di + 2] = rgb[si + 2]
-
-    im = Image.frombytes("RGB", (img_w, img_h), bytes(buf))
+    off = addr - GRAPHIX_BASE
+    rgb, w, hh = render_column_major(data, off, w_cols, h_lines,
+                                      NEVRYON_GAME_PALETTE)
+    im = Image.frombytes("RGB", (w, hh), rgb)
     if scale > 1:
-        im = im.resize((img_w * scale, img_h * scale), Image.NEAREST)
-    out = f"work/graphix_{base_addr:04X}_{name}.png"
+        im = im.resize((w * scale, hh * scale), Image.NEAREST)
+    out = f"{OUT}/graphix_{addr:04X}_{name}.png"
     im.save(out)
     return out
 
 
 def render_gap(data, start_addr, end_addr, name, h=16):
-    """Render an unknown region as a long 16-line-tall column-major strip."""
     n_cols = (end_addr - start_addr) // h
     if n_cols <= 0:
         return None
@@ -104,25 +102,47 @@ def render_gap(data, start_addr, end_addr, name, h=16):
     rgb, w, hh = render_column_major(data, off, n_cols, h, NEVRYON_GAME_PALETTE)
     im = Image.frombytes("RGB", (w, hh), rgb).resize(
         (w * SCALE, hh * SCALE), Image.NEAREST)
-    out = f"work/graphix_{start_addr:04X}_gap_{name}.png"
+    out = f"{OUT}/gap_{start_addr:04X}_{name}.png"
     im.save(out)
     return out
 
 
 def main():
+    os.makedirs(OUT, exist_ok=True)
     data = open("extracted/$.GRAPHIX", "rb").read()
-    print(f"GRAPHIX size: {len(data)} bytes\n")
-    print("Catalog:")
-    for addr, name, w, h, count in CATALOG:
-        out = render_strip(data, addr, name, w, h, count)
-        size = w * h * count
-        print(f"  &{addr:04X} ({size:>4}B) {w}×{h}×{count:>2} → {out}")
+    print(f"GRAPHIX size: {len(data)} bytes — rendering to {OUT}/\n")
+
+    count = 0
+    for entry in CATALOG:
+        if len(entry) == 4:
+            addr, name, w, h = entry
+            out = render_one(data, addr, name, w, h)
+            print(f"  &{addr:04X} {w*4:>3}×{h:<3} {name:<28} → {out}")
+            count += 1
+        elif len(entry) == 5:
+            addr, prefix, w, h, items = entry
+            if isinstance(items, int):
+                names = [f"{prefix}_{i:02d}" for i in range(items)]
+            else:
+                names = items
+            for i, nm in enumerate(names):
+                if nm is None:
+                    continue
+                child_addr = addr + i * w * h
+                out = render_one(data, child_addr, nm, w, h)
+                print(f"  &{child_addr:04X} {w*4:>3}×{h:<3} {nm:<28} → {out}")
+                count += 1
+
     print()
     print("Gaps (still unidentified):")
     render_gap(data, 0x38C0, 0x3A20, "between_helix_and_smallchars")
-    print(f"  &38C0..&3A1F ({0x3A20-0x38C0:>4}B) → work/graphix_38C0_gap_between_helix_and_smallchars.png")
+    print(f"  &38C0..&3A1F ({0x3A20-0x38C0} B)")
+    render_gap(data, 0x40E0, 0x4360, "between_pickups_and_slot19")
+    print(f"  &40E0..&435F ({0x4360-0x40E0} B)")
     render_gap(data, 0x43E0, 0x4900, "trailing_to_irq")
-    print(f"  &43E0..&48FF ({0x4900-0x43E0:>4}B) → work/graphix_43E0_gap_trailing_to_irq.png")
+    print(f"  &43E0..&48FF ({0x4900-0x43E0} B)")
+    print()
+    print(f"Total sprites rendered: {count}")
 
 
 if __name__ == "__main__":
