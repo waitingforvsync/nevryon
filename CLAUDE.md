@@ -85,9 +85,26 @@ as part of the LDA instruction.
 - Rows 22-31 (`&7380`-`&7FFF`): screen RAM, but CRTC trimmed off-display.
   Used as storage for LEVD2/LEVD3 data.
 
-### Game palette (set in Loader2)
-`VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` → logical 0=black, 1=red, 2=cyan,
-3=white. Use `NEVRYON_GAME_PALETTE` from `render_screen.py`.
+### Game palette
+**In-game (verified from emulator screenshot):** BBC default 4-colour —
+logical 0=black, 1=red, 2=yellow, 3=white. Use `NEVRYON_GAME_PALETTE`.
+
+**Loader screens (title/options/scoreboard):** Loader2 line 990 sets
+`VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` → 2=cyan instead of yellow. Use
+`NEVRYON_LOADER_PALETTE` for any pre-gameplay rendering.
+
+The game CODE overrides the loader palette before gameplay starts
+(several `LDA #&13` candidates in `$.CODE2` are likely VDU 19 calls).
+
+### Map tile layout
+- Upper tile id table at `&7F10` (LEVD2 file offset `&B90`), 240 entries.
+- Lower tile id table at `&7E10` (file offset `&A90`), 240 entries.
+- Tile catalog at `&4F00` in LEVD1, 128 bytes per tile (4 col × 32 lines).
+- **Upper tile is rendered vertically mirrored** (`zp_sprite_dir_flag=0`
+  in `L127B` draw routine — read column-major bytes in reverse).
+- Upper tile at screen char rows 0-3 (top of playfield), lower tile at
+  rows 16-19 (bottom). 12-row (96 px) gap between is shared with
+  player ship, enemies, force-fields, and starfield.
 
 ### Sprite format (column-major)
 - Stored as W byte-columns × H scanlines.

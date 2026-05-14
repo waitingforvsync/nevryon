@@ -6,6 +6,44 @@ Newest entries at the top.
 
 ## 2026-05-14 — Session 2: maps and LEVD format
 
+### Map render: ceiling mirror, gap, palette fix
+
+User shared an in-emulator screenshot of the start of level 1 showing
+the actual game in MODE 5. Several corrections fell out:
+
+  1. **In-game palette is BBC default 4-colour** — black / red /
+     YELLOW / white. `Loader2` line 990 sets logical 2 to physical 6
+     (cyan), but the game CODE overrides this back to default before
+     gameplay starts. (Found several `LDA #&13` patterns in
+     `$.CODE2` consistent with VDU 19 calls — likely the override.)
+     Renamed the old palette to `NEVRYON_LOADER_PALETTE` and made
+     `NEVRYON_GAME_PALETTE` use yellow.
+
+  2. **Upper tile is vertically mirrored**. Tile draw routine at
+     `L127B` clears `zp_sprite_dir_flag` (=0) before plotting upper,
+     which makes `sprite_plot_inner` start its column index at
+     `height-1` and decrement — i.e. read the column-major source
+     bytes in reverse, producing a vertical flip. The lower tile uses
+     `dir_flag = 1` (normal forward read).
+
+  3. **Upper at screen rows 0-3, lower at rows 16-19** — the call
+     `calc_screen_addr` with `Y=&FF` resolves to char-row 0 and
+     `Y=&7F` to char-row 16. That leaves a 12-char-row (96 px) gap
+     in the middle of the playfield, which is where the player ship,
+     enemies, force-fields and starfield all share space.
+
+`render_map.py` now has a `playfield=True` mode (the default) that
+emits a full 160-px-tall strip with the mirror, gap, and correct row
+positions. The legacy `playfield=False` compact mode is retained for
+inspecting raw tile sources.
+
+`render_level_summary.py` has been rewritten to stack two 160-px
+strips (LEVD2 over LEVD3) and to draw each spawned object at its
+*actual* Y row in the playfield gap (derived from attribute bits 5-6
+→ char rows 4/8/12/16). Force fields render as yellow-noise vertical
+strips at the correct Y. Mirror-flag spawns are horizontally flipped
+on display.
+
 ### 528-byte mystery block — solved
 
 The "528 bytes at LEVD2 offset `&880`-`&A8F`" turns out to be two

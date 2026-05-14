@@ -2,7 +2,7 @@
 """Render a Nevryon level map from LEVD1 (tile catalog) + LEVD2 or LEVD3
 (column tables).
 
-Decoded structure (from $.CODE disassembly at L13D1):
+Decoded structure (from $.CODE disassembly at L13D1 and L127B):
   - Tile catalog: starts at &4F00 in LEVD1 (offset &500 in the file).
     Each tile is 4 byte-columns × 32 scanlines column-major
     = 128 bytes = 16 px wide × 32 px tall.
@@ -11,10 +11,17 @@ Decoded structure (from $.CODE disassembly at L13D1):
       &7E10 (file offset &A90): LOWER tile-id per column
     Scroll column index `&80` ranges 0..&F0 (240 columns), wrapping at &F1.
 
-The drawing routine at L13D1 walks sprite_src forward by &80 bytes
-`(tile_id + 1)` times — i.e. tile_id 0 → tile at &4F00, tile_id 1 → &4F80,
-tile_id 2 → &5000, etc. Tile_id N picks tile at offset &500 + N * &80
-within LEVD1.
+The tile draw routine at L127B:
+  - UPPER tile: drawn at screen char rows 0-3 (Y=&FF → row 0), with
+    zp_sprite_dir_flag = 0 → sprite is rendered with the inner X
+    counter starting from height-1 and decrementing. This is a
+    *vertical flip* of the source bytes — the tile appears mirrored
+    upside-down, used as a ceiling.
+  - LOWER tile: drawn at screen char rows 16-19 (Y=&7F → row 16),
+    with zp_sprite_dir_flag = 1 → normal forward rendering.
+  - The 96-px gap between (rows 4-15) is the playable middle band
+    where enemies, force-fields, the player ship and any per-column
+    decoration sprites are drawn.
 """
 
 from __future__ import annotations
@@ -40,19 +47,37 @@ LOWER_TABLE_OFFSET = 0xA90       # &7E10 - &7380
 MAP_COLUMNS = 0xF0                # 240 columns; index wraps at &F1
 
 
+PLAYFIELD_HEIGHT_PX = 20 * 8        # 160 px (MODE 5 playfield rows 0-19)
+UPPER_TILE_Y = 0                     # screen row 0
+LOWER_TILE_Y = 16 * 8                # screen row 16
+
+
 def render_map(levd1: bytes, levd23: bytes, num_columns: int = MAP_COLUMNS,
                palette=NEVRYON_GAME_PALETTE,
-               draw_grid: bool = False) -> tuple[bytes, int, int]:
+               draw_grid: bool = False,
+               playfield: bool = True) -> tuple[bytes, int, int]:
     """Render the full scrolling map by indexing tiles from levd1 with the
-    upper/lower index tables from levd23."""
+    upper/lower index tables from levd23.
+
+    playfield=True (default): renders at full 160 px playfield height,
+        with upper tile vertically mirrored at rows 0-3, lower tile
+        normal at rows 16-19, and a 96 px gap between. This matches
+        what the game actually draws.
+    playfield=False: legacy compact mode — upper and lower tiles
+        stacked, 64 px total. Useful for inspecting the raw tile
+        sources without the gap.
+    """
     px_per_col = TILE_WIDTH_COLS * 4  # 16 px wide per column
     map_w = num_columns * px_per_col
-    map_h = 2 * TILE_HEIGHT            # upper + lower tile stacked = 64 px
+    map_h = PLAYFIELD_HEIGHT_PX if playfield else 2 * TILE_HEIGHT
 
     img = bytearray(map_w * map_h * 3)
 
     upper_table = levd23[UPPER_TABLE_OFFSET:UPPER_TABLE_OFFSET + num_columns]
     lower_table = levd23[LOWER_TABLE_OFFSET:LOWER_TABLE_OFFSET + num_columns]
+
+    upper_y = UPPER_TILE_Y if playfield else 0
+    lower_y = LOWER_TILE_Y if playfield else TILE_HEIGHT
 
     for col in range(num_columns):
         u_id = upper_table[col] if col < len(upper_table) else 0
@@ -64,22 +89,23 @@ def render_map(levd1: bytes, levd23: bytes, num_columns: int = MAP_COLUMNS,
                                           TILE_HEIGHT, palette, bg=(0, 0, 0))
         l_rgb, _, _ = render_column_major(levd1, l_off, TILE_WIDTH_COLS,
                                           TILE_HEIGHT, palette, bg=(0, 0, 0))
-        # Blit upper
+        # Blit upper — vertically flipped (the engine renders it as a ceiling)
         for y in range(TILE_HEIGHT):
+            src_y = TILE_HEIGHT - 1 - y
             for x in range(px_per_col):
-                src_i = (y * px_per_col + x) * 3
+                src_i = (src_y * px_per_col + x) * 3
                 dst_x = col * px_per_col + x
-                dst_y = y
+                dst_y = upper_y + y
                 dst_i = (dst_y * map_w + dst_x) * 3
                 img[dst_i] = u_rgb[src_i]
                 img[dst_i + 1] = u_rgb[src_i + 1]
                 img[dst_i + 2] = u_rgb[src_i + 2]
-        # Blit lower (stacked below upper)
+        # Blit lower — normal orientation, at row 16 in playfield mode
         for y in range(TILE_HEIGHT):
             for x in range(px_per_col):
                 src_i = (y * px_per_col + x) * 3
                 dst_x = col * px_per_col + x
-                dst_y = TILE_HEIGHT + y
+                dst_y = lower_y + y
                 dst_i = (dst_y * map_w + dst_x) * 3
                 img[dst_i] = l_rgb[src_i]
                 img[dst_i + 1] = l_rgb[src_i + 1]
@@ -87,7 +113,8 @@ def render_map(levd1: bytes, levd23: bytes, num_columns: int = MAP_COLUMNS,
 
     if draw_grid:
         sep = (255, 255, 0)
-        for y in (0, TILE_HEIGHT, map_h - 1):
+        grid_rows = (upper_y + TILE_HEIGHT, lower_y) if playfield else (TILE_HEIGHT,)
+        for y in (0, map_h - 1, *grid_rows):
             for x in range(map_w):
                 idx = (y * map_w + x) * 3
                 img[idx] = sep[0]

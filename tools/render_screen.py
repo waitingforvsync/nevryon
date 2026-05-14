@@ -68,10 +68,20 @@ def palette_from_mapping(logical_to_physical: dict[int, int]) -> list[tuple[int,
     return pal
 
 
-# Nevryon in-game palette from Loader2 line 990:
-#   VDU 19,3,7;0;  19,2,6;0;  19,1,1;0;
-# i.e. logical 0=black, 1=red, 2=cyan, 3=white.
-NEVRYON_GAME_PALETTE = palette_from_mapping({0: 0, 1: 1, 2: 6, 3: 7})
+# Nevryon in-game palette: black / red / yellow / white. This is the
+# BBC default 4-colour palette, verified from in-emulator screenshots
+# of the starting moment of level 1 (yellow ceiling and floor tiles
+# with red highlights, red+white enemy spheres).
+#
+# Loader2 line 990 sets logical 2 to physical 6 (cyan), but this is
+# overridden by in-game code (CODE2 has several LDA #&13 + OSWRCH
+# sequences that are likely VDU 19 calls resetting the palette to
+# default before gameplay starts).
+NEVRYON_GAME_PALETTE = palette_from_mapping({0: 0, 1: 1, 2: 3, 3: 7})
+
+# Legacy/loader palette (logical 2 = cyan) for any pre-game screen
+# rendering that follows the Loader2 setup.
+NEVRYON_LOADER_PALETTE = palette_from_mapping({0: 0, 1: 1, 2: 6, 3: 7})
 
 
 def decode_byte(b: int) -> list[int]:
