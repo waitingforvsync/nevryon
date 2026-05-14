@@ -31,6 +31,35 @@ from render_screen import (decode_byte, DEFAULT_PALETTE, NEVRYON_GAME_PALETTE,
                            write_png)
 
 
+def render_row_major(data: bytes, offset: int, width_cols: int,
+                     height: int, palette=DEFAULT_PALETTE,
+                     bg=(40, 40, 40)) -> tuple[bytes, int, int]:
+    """Render one row-major sprite. Bytes are scanline-by-scanline:
+    byte index = scanline * width_cols + col_idx. Common for MODE 5
+    font glyphs."""
+    px_w = width_cols * 4
+    px_h = height
+    img = bytearray(px_w * px_h * 3)
+    for i in range(px_w * px_h):
+        img[i * 3] = bg[0]
+        img[i * 3 + 1] = bg[1]
+        img[i * 3 + 2] = bg[2]
+    for y in range(height):
+        for c in range(width_cols):
+            byte_off = offset + y * width_cols + c
+            if byte_off >= len(data):
+                continue
+            pixels = decode_byte(data[byte_off])
+            for p in range(4):
+                col = palette[pixels[p]]
+                x = c * 4 + p
+                idx = (y * px_w + x) * 3
+                img[idx] = col[0]
+                img[idx + 1] = col[1]
+                img[idx + 2] = col[2]
+    return bytes(img), px_w, px_h
+
+
 def render_column_major(data: bytes, offset: int, width_cols: int,
                         height: int, palette=DEFAULT_PALETTE,
                         bg=(40, 40, 40)) -> tuple[bytes, int, int]:
