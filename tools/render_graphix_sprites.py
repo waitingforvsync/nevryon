@@ -29,7 +29,7 @@ from PIL import Image
 
 
 GRAPHIX_BASE = 0x3680
-SCALE = 6
+SCALE = 1
 OUT = "graphix"
 
 
