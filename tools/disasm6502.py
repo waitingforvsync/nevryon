@@ -623,6 +623,44 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
                 if t not in cfg.labels:
                     cfg.labels[t] = f"L{t:04X}"
 
+    # Promote any label whose address falls outside the ORG'd binary
+    # range to an extern (emitted as `name = &XXXX` constant up top).
+    # Also promote labels that point INSIDE a code instruction (between
+    # instr_start and the next instr_start) — those bytes never get a
+    # `.label` line of their own.
+    end_addr = cfg.base + len(data)
+
+    code_emit_points: set[int] = set()
+    data_byte_addrs: set[int] = set()
+    for r in cfg.regions:
+        if r.kind == "code":
+            pc = r.start
+            while pc < r.end:
+                off = pc - cfg.base
+                if off < 0 or off >= len(data):
+                    break
+                info = OPCODES.get(data[off])
+                length = info[2] if info else 1
+                if pc + length > r.end:
+                    length = 1
+                code_emit_points.add(pc)
+                pc += length
+        else:
+            for addr in range(r.start, r.end):
+                data_byte_addrs.add(addr)
+
+    for addr in list(cfg.labels):
+        if addr < cfg.base or addr >= end_addr:
+            cfg.extern_labels.setdefault(addr, cfg.labels.pop(addr))
+        elif addr in data_byte_addrs:
+            continue  # data byte — label will be emitted inline
+        elif addr in code_emit_points:
+            continue  # at an instruction start — label will be emitted
+        else:
+            # Address is mid-instruction (or in a forced-data gap that
+            # somehow isn't covered) — emit as extern constant.
+            cfg.extern_labels.setdefault(addr, cfg.labels.pop(addr))
+
     # Build output
     lines: list[str] = []
     lines.append("\\ ============================================================")

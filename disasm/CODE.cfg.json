@@ -49,6 +49,26 @@
     "0xFFF4": "OSBYTE",
     "0xFFF7": "OSCLI",
     "0xFFEE": "OSWRCH",
-    "0xFFE0": "OSRDCH"
+    "0xFFE0": "OSRDCH",
+    "0x2800": "code2_2800",
+    "0x2811": "code2_2811",
+    "0x2822": "code2_2822",
+    "0x284C": "code2_284C",
+    "0x28D7": "code2_28D7",
+    "0x2975": "code2_2975",
+    "0x29E7": "code2_29E7",
+    "0x2A20": "code2_2A20",
+    "0x2AA2": "code2_2AA2",
+    "0x2BA4": "code2_2BA4",
+    "0x2CCA": "code2_2CCA",
+    "0x2E94": "code2_2E94",
+    "0x2EED": "code2_2EED",
+    "0x30F8": "code2_30F8",
+    "0x3115": "code2_3115",
+    "0x3170": "code2_3170",
+    "0x3300": "code3_3300",
+    "0x3325": "code3_3325",
+    "0x3432": "code3_3432",
+    "0x3513": "code3_3513"
   }
 }
