@@ -26,7 +26,11 @@ work/                        # PNG previews, scratch
 disasm/                      # BeebAsm-format reconstruction in progress
   CODE.beebasm               # annotated disassembly of $.CODE
   CODE.cfg.json              # region/label/comment annotations for $.CODE
+  GRAPHIX.beebasm            # annotated disassembly of $.GRAPHIX
+  GRAPHIX.cfg.json
   CODE2.beebasm, CODE3.beebasm  # unannotated (annotate as we learn)
+docs/
+  file_layout.md             # per-file content reference (load addrs, byte maps)
 CLAUDE.md                    # this file — workflow & conventions
 JOURNAL.md                   # running log of discoveries & decisions
 ```
@@ -171,6 +175,10 @@ Remote: `git@github.com:waitingforvsync/nevryon.git` (origin, not yet pushed).
 
 See JOURNAL.md for the latest status. The top of JOURNAL.md always reflects
 the current state of the investigation.
+
+For a per-file content reference (load addresses, byte-map of LEVD1/
+LEVD2/LEVD3/GRAPHIX, boot chain summary, named routines in CODE),
+see `docs/file_layout.md`.
 
 ## How to update these docs
 

@@ -1,0 +1,283 @@
+# Nevryon disk file reference
+
+What each file on the disk image contains, where it loads, and what's
+inside. Source: `extracted/_manifest.tsv` plus reverse-engineering
+notes from `disasm/CODE.cfg.json`, `disasm/GRAPHIX.cfg.json`, and the
+Loader2 / Loader3 BASIC.
+
+Addresses use the BBC `&hex` convention. File offsets use `0x`.
+
+---
+
+## At a glance
+
+```
+$.!BOOT       → $.NEVRYON      (intro)
+              → $.Options      (option screen)
+              → $.Loader2      (title + scenario selection)
+              → $.Loader3      (loads game, drives stage cycle)
+                  ↻ stage 1 = LEVD2 → game → if not last stage:
+                  ↻ stage 2 = LEVD3 → game → end-of-scenario
+              → back to $.Loader2 (next scenario) or $.GmOv
+              → $.WELLDON      (victory)
+```
+
+| File              | Load   | Size   | Kind                | Purpose                                 |
+|-------------------|--------|--------|---------------------|------------------------------------------|
+| `$.!BOOT`         | &0000  |    48  | BASIC               | `*BASIC / PAGE=&1900 / CHAIN "NEVRYON"`  |
+| `$.NEVRYON`       | &1900  | 11519  | BASIC               | Intro / story / instructions             |
+| `$.Options`       | &1100  |  3588  | BASIC               | Option screen (skill, speed, start lvl…) |
+| `$.Loader2`       | &1100  |  5370  | BASIC               | Title, scenario menu, palette setup      |
+| `$.Loader3`       | &3200  |   245  | BASIC               | Loads CODE/2/3, drives stage cycle       |
+| `$.GmOv`          | &1100  |   714  | BASIC               | Game-over screen (overlays CODE)         |
+| `$.WELLDON`       | &3000  | 10240  | MODE 1 bitmap       | Victory screen — "VICTORY"               |
+| `$.SCR`           | &2E00  |  8192  | MODE 1 bitmap       | Title-screen "NEVRYON" logo image        |
+| `$.OPSC`          | &3000  | 17408  | MODE 2 bitmap       | Option screen background                 |
+| `$.SCOREBD`       | &7100  |   640  | MODE 5 bitmap       | Scoreboard band (char rows 20-21)        |
+| `$.GRAPHIX`       | &3680  |  4992  | sprite atlas + code | Shared sprites + palette IRQ handler     |
+| `$.CODE`          | &1100  |  5863  | 6502                | Main game logic                          |
+| `$.CODE2`         | &2800  |  2537  | 6502                | SFX queue + extras                       |
+| `$.CODE3`         | &3300  |   912  | 6502                | Inter-stage transitions / messages       |
+| `N.LEVD1`         | &4A00  |  3584  | sprite atlas + tiles | Per-scenario tile catalog + decorations |
+| `N.LEVD2`         | &7380  |  3200  | level data          | Stage-1 enemies + spawn + map tables     |
+| `N.LEVD3`         | &7380  |  2176/3200 | level data       | Stage-2 enemy overlay (and map for lev4) |
+
+Notes:
+
+- **The catalog load addresses for `3.LEVD1` and `4.LEVD1` are `&6000`,
+  but Loader2 line 1030 explicitly overrides them with
+  `LOAD N.LEVD1 4A00`** — so in practice all four `LEVD1` files load
+  at `&4A00`. Same story for `LEVD2` and `WELLDON` (forced &7380 and
+  &3000 respectively).
+- `$.GmOv` and `$.Options` both list exec address `&802B`, which is
+  the BBC BASIC `*RUN` entry — they're chained as BASIC programs, not
+  raw machine code.
+
+---
+
+## Boot / loader chain
+
+### `$.!BOOT`
+One-liner BASIC: `*BASIC` then `PAGE=&1900 / CHAIN "NEVRYON"`.
+
+### `$.NEVRYON`
+The story-text intro screen. Line 70 chains to `Options`.
+
+### `$.Options`
+The option screen — joystick/keys, sound on/off, start level (1-8),
+colour/mono, fast/slow, etc. Writes the user's selections into zero
+page (`?&9D`=level, `?&9E`=speed, `?&9F`=control). Chains to
+`LOADER2`.
+
+### `$.Loader2`
+The big one. It:
+
+1. Draws the title screen and the options-preview screen (the one
+   showing four labelled level icons with a marker bar).
+2. Loads `OPSC`, `ScoreBd` and `GRAPHIX` into their respective
+   addresses.
+3. Loads the current scenario's `LEVD1` (forced to `&4A00`) and
+   `LEVD2` (forced to `&7380`).
+4. Patches the per-scenario palette into `&493F` using one of four
+   PROCs (`PROCLV12` / `PROCL34` / `PROCL56` / `PROCL78`, chosen by
+   `IF L%=… PROC…` on lines 940-970). See **Palette mechanism**
+   below.
+5. Installs the split-screen palette IRQ handler with `CALL &497E`
+   (the install routine inside `GRAPHIX`).
+6. Pokes a tiny 8-byte pattern into the LEVD2 `&7E00-&7E07` erase
+   region (`119 119 - - - - 112 112`).
+7. Chains to `LOADER3`.
+
+### `$.Loader3`
+245 bytes of BASIC. Loads `CODE`, `CODE2`, then patches `?&283D` with
+`256-V%` (the sound volume), then loads `CODE3`. Calls the game at
+`&1100`. When the game returns:
+
+- If `?&9D < 2` (first half of a scenario): construct the filename
+  `N.LEVD3` (where `N = (?&9D+1)/2`), load it via OSCLI `*LOAD`, and
+  call the game again at `&1100`.
+- If `?&9D >= 2`: scenario complete — chain to `LOADER2` for the
+  next scenario, or `GmOv` if game over.
+
+### `$.GmOv` / `$.WELLDON`
+End-screen overlays. `GmOv` is a BASIC program loaded over `CODE`;
+`WELLDON` is a pre-rendered MODE 1 bitmap.
+
+---
+
+## Static screen bitmaps
+
+### `$.SCR` (8192 bytes at `&2E00`, MODE 1)
+The "NEVRYON" logo strip used on the title screen, plus credits text:
+"NEVRYON / BY GRAEME RICHARDSON 1990 / (C) 1990 THE 4TH DIMENSION".
+
+### `$.OPSC` (17408 bytes at `&3000`, MODE 2)
+The option screen — 16-colour image with the yellow Nevryon ship,
+red/blue alien previews, planet/galaxy art and the icon bar. Use
+`NEVRYON_LOADER_PALETTE` to render (since the loader sets cyan for
+logical 2 before this is shown).
+
+### `$.SCOREBD` (640 bytes at `&7100`, MODE 5)
+The scoreboard graphic. It lives at `&7100` in RAM but the engine
+copies it into the MODE 5 screen's char rows 20-21 (the bottom 16
+pixel rows). The split-screen palette IRQ ensures the scoreboard is
+always rendered in `palette_bottom` (black / blue / cyan / white)
+regardless of which scenario palette is active for the playfield.
+
+### `$.WELLDON` (10240 bytes at `&3000`, MODE 1)
+The victory bitmap. Drawn after completing scenario 4.
+
+---
+
+## `$.GRAPHIX` (4992 bytes at `&3680`)
+
+| File off       | CPU            | Size  | Contents                                                                                       |
+|----------------|----------------|-------|------------------------------------------------------------------------------------------------|
+| `0x0000-0x127F`| `&3680-&48FF`  | 4736  | **Shared sprite atlas.** Column-major 4×N sprites. Specific slots referenced from level enemy ptr tables: `&3700` (slot 15), `&3780` (slot 16), `&4360` (slot 19). Others are picked up as decoration sprites by the in-game code via various `LDA #&XX; STA sprite_src_lo` patterns. |
+| `0x1280-0x12BE`| `&4900-&493E`  |    63 | `irq_palette_split` — vsync IRQ handler. Saves A/X/Y, picks vsync vs T1 path, primes T1 latch for mid-frame, then writes 12 bytes from `palette_top` to `&FE21`. |
+| `0x12BF-0x12CE`| `&493F-&494E`  |    16 | `palette_top` — playfield palette table. **Only entries 0-11 are used by the IRQ**; the trailing 4 entries are unused padding. On disk these bytes hold the scenario-1 palette (`07 17 47 57 26 36 66 76 84 94 C4 D4 A0 B0 E0 F0` → red / yellow / white). |
+| `0x12CF-0x12DE`| `&494F-&495E`  |    16 | `palette_bottom` — scoreboard palette table. Same 12-effective-entries layout. Always `07 17 47 57 23 33 63 73 81 91 C1 D1 A0 B0 E0 F0` → blue / cyan / white. |
+| `0x12DF-0x12FD`| `&495F-&497D`  |    32 | `irq_palette_split_b` — T1-timer IRQ entry (mid-frame). Writes `palette_bottom` to `&FE21`, then optionally uninstalls if `zp_irq_enable != 0`. |
+| `0x12FE-0x1324`| `&497E-&49A4`  |    39 | `irq_install` — called by Loader2 line 1000 (`CALL &497E`). Saves the prior IRQ1V at zp `&64`/`&65`, installs `irq_palette_split` as the new vector, and primes the User VIA T1L-H + IER + ACR. |
+| `0x1325-0x137F`| `&49A5-&49FF`  |    91 | Trailing data — small lookup tables, purpose TBD. |
+
+The sprite atlas isn't yet carved into named sub-ranges; the slot
+addresses called out above are just the ones that the LEVD2 enemy
+pointer tables actually point at across all four scenarios.
+
+---
+
+## `$.CODE` (5863 bytes at `&1100`)
+
+The main game binary. Annotated in `disasm/CODE.beebasm` (driven by
+`disasm/CODE.cfg.json` — reachability-traced from a single entry at
+`&1100`, with two forced-data regions for the screen-line LUTs).
+
+### Notable named routines
+
+| Address  | Label                       | Notes                                                                                                             |
+|----------|-----------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `&1100`  | `main_init`                 | Entry. `JSR &3115` (init in CODE3), `JSR L1F8E` (level init), `JSR &2CCA` (in CODE2), fall through to `main_loop`. |
+| `&1109`  | `main_loop`                 | Per-frame top: calls `L13D1`, polls quit key, falls through.                                                       |
+| `&1141`  | `lfsr_random`               | 16-bit LFSR; results in `&116B..&116E`. Called by force-field renderer + a couple of spawn paths.                  |
+| `&116F`  | `sprite_plot_default`       | Plot with X=1, Y=32. Falls through to `sprite_plot_xy`.                                                            |
+| `&1173`  | `sprite_plot_xy`            | The main sprite blitter. Takes X=width-in-byte-cols, Y=height-in-scanlines, src in `&1194`/`&1195` (self-mod).     |
+| `&1184`  | `sprite_plot_inner`         | The inner loop. Reads `zp_sprite_dir_flag` (`&79`) to pick forward (=1, normal) or backward (=0, **vertical flip**) traversal of the column-major source. |
+| `&1193`  | `sprite_plot_lda_sm`        | The `LDA &FFFF,X` byte at `&1194`/`&1195` is *self-modified* — callers write the sprite source there before JSR.   |
+| `&1209`  | `screen_row_lo_lut`         | 22 bytes, low byte of char-row start address for MODE 5 (base &5800, stride &140).                                 |
+| `&121F`  | `screen_row_hi_lut`         | Paired high bytes.                                                                                                 |
+| `&1236`  | `calc_screen_addr`          | Compute screen address from X (char-col) and Y (scanline). Result in `&76`/`&77`.                                  |
+| `&127B`  | (tile draw, unnamed)        | Draws the new column on the right edge of the playfield: upper tile mirrored at char rows 0-3, lower tile normal at rows 16-19. |
+| `&13D1`  | (per-frame, unnamed)        | Reads upper/lower tile IDs from `&7F10,X` / `&7E10,X`, advances `sprite_src` pointers by `(tile_id+1)*&80`, scrolls. |
+| `&1F8E`  | (level init, unnamed)       | Zeros most state, sets player pos `&81=5, &82=&C8`, scroll counter `&80=0`, sprite pointers to `&7D80` (the erase brush). |
+| `&208A`  | `spawn_check_step`          | Matches `&80` (scroll col) against `&7B00,&7B`; on hit, fills an object slot from the attribute byte at `&7B80,X` (type → `&2065,X`, Y-row → `&205C,X`, v-flip → `&206E,X`). |
+| `&22B2`  | `enemy_type_dispatch`       | Switch on `&2065,X` (the type field): 4/&13 → multi-shot, 6 → CODE2 `&2A20`, 7 → `forcefield_render`, 8 → `L2464`, &10 → high-HP boss path, others → default sprite plot from `&7A80/&7AC0[type]`. |
+| `&232C`  | `forcefield_render`         | Procedural vertical strip. Calls `lfsr_random`, uses the result as the **low byte of `&80XX`** (i.e. reads from whatever sideways ROM is paged in at `&8000+`) as the sprite source, then plots 2 bytes × 32 lines. |
+| `&234D`  | `forcefield_draw_or_erase`  | The draw path within `forcefield_render`.                                                                          |
+| `&23A8`  | `forcefield_erase`          | The "blank out" path — plots 2 × 32 from `&7D80` (= zero-fill region = transparent erase).                          |
+
+### In-code data tables
+
+The tracer auto-labelled these as `tbl_XXXX` (referenced via absolute-
+indexed addressing from code):
+
+| Address       | Size | Description                                                                 |
+|---------------|------|------------------------------------------------------------------------------|
+| `tbl_1A55-95` | 64×5 | 5 parallel arrays × ≤11 entries: object slot X position, Y position, type/alive flag, ?, attribute carry. Used by the "secondary object" (= bullet / spark / pickup) subsystem. |
+| `tbl_2052-86` | 9×6+ | Active-enemy object slots. Fields per slot: spawn column (`&2052,X`), spawn Y (`&205C,X`), type (`&2065,X`), v-flip (`&206E,X`), HP / timer (`&2077,X`), state (`&2080,X`). |
+| `tbl_2065`    | 9    | Subset of the above — the type field, read by `enemy_type_dispatch`.        |
+| `tbl_268F`    | 4    | NOP-pad before routine at `&2693` (no semantic content).                    |
+
+(Several smaller `data_XXXX` blocks in the disasm are 2-4 byte state
+variables embedded inline; see the cfg comments for any that have
+been identified.)
+
+---
+
+## `$.CODE2` (2537 bytes at `&2800`)
+
+Currently unannotated. Known facts:
+
+- Starts with a sound-queue setup: `LDA #&07 / LDX #&09 / LDY #&28 /
+  JMP OSWORD`. So the top of CODE2 is the SFX driver.
+- Contains the routine at `&2A20` reached from `enemy_type_dispatch`
+  (type 6) — purpose not yet identified.
+- Contains some of the trampoline routines that JMP back into
+  `sprite_plot_xy` after configuring `sprite_src` for specific
+  decoration sprites.
+
+---
+
+## `$.CODE3` (912 bytes at `&3300`)
+
+Inter-stage transition + the "LEVEL X COMPLETED / BONUS XXXX" message
+display. Has the OSWRCH loops that print the inter-stage text strings
+at file offsets `0x320`+ ("LOADING…PLEASE WAIT", "WOW! LEVEL X
+COMPLETED", "BONUS", etc.).
+
+---
+
+## `N.LEVD1` (3584 bytes, loaded at `&4A00` for all scenarios)
+
+Per-scenario tile graphics. Same internal layout for all four
+scenarios; only the bytes differ:
+
+| File off       | CPU            | Size  | Contents                                                                                                                                                       |
+|----------------|----------------|-------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `0x0000-0x047F`| `&4A00-&4E7F`  | 1152  | **Decoration sprite bank.** Referenced by enemy-ptr-table slots 17 (`&5180`), 18 (`&5100`), 21 (`&4A00`), 22 (`&4A80`), 23 (`&4B00`), 24 (`&4B80`). Standard 4×32 column-major sprites. |
+| `0x0480-0x04FF`| `&4E80-&4EFF`  |   128 | **Player ship sprite.** Hardcoded into the engine at `&4E80` (see `JMP L1478` paths in CODE that plot it with `LDX #&06, LDY #&16`).                            |
+| `0x0500-0x0DFF`| `&4F00-&57FF`  | 2304  | **Tile catalog.** Each tile is 128 bytes = 4 byte-columns × 32 scanlines column-major (16 px wide × 32 px tall). Up to 18 tiles per scenario; the actual catalog usually only fills the first ~12-15. Tile *id N* lives at file offset `0x500 + N*0x80`. |
+
+The decoration sprites visible in the gameplay screenshots (gun
+turrets at the floor, pillars, etc.) come from this bank.
+
+---
+
+## `N.LEVD2` (3200 bytes, loaded at `&7380`)
+
+The stage-1 data for each scenario. The single most information-
+dense file on the disk.
+
+| File off       | CPU            | Size | Contents                                                                                                                          |
+|----------------|----------------|------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `0x0000-0x06FF`| `&7380-&7A7F`  | 1792 | **In-scenario enemy sprite graphics.** 14 sprites of 128 bytes each (4×32 col-major), filling slots 1-14 of the pointer table.    |
+| `0x0700-0x073F`| `&7A80-&7ABF`  |   64 | **Enemy sprite pointer LOW byte** (64 slots).                                                                                     |
+| `0x0740-0x077F`| `&7AC0-&7AFF`  |   64 | **Enemy sprite pointer HIGH byte** (paired with LOW). Slot N's sprite address = `(hi[N]<<8) \| lo[N]`. Resolves into one of GRAPHIX / LEVD1 / inside LEVD2 itself. |
+| `0x0780-0x07FF`| `&7B00-&7B7F`  |  128 | **Spawn-column schedule.** Sorted ascending list of scroll-column indices at which an enemy spawns. `&FF` terminator.             |
+| `0x0800-0x087F`| `&7B80-&7BFF`  |  128 | **Spawn attribute byte** per schedule entry. Bits 0-4 = type (→ `enemy_type_dispatch`); bits 5-6 = Y-row (0=&DF, 1=&BF, 2=&9F, 3=&7F → char rows 4/8/12/16); bit 7 = v-flip. |
+| `0x0880-0x08FF`| `&7C00-&7C7F`  |  128 | **Shootable item sprite — intact frame** (slot 25 in the ptr table). Per-scenario: arch / egg / figure-8 / organic blob.          |
+| `0x0900-0x097F`| `&7C80-&7CFF`  |  128 | **Shootable item sprite — damaged frame** (slot 26).                                                                              |
+| `0x0980-0x0A8F`| `&7D00-&7E0F`  |  272 | **All-zero region.** Doubles as the universal "erase brush" — `&7D80` (referenced by the default `zp_sprite_src` init in `L1F8E` and many small-effect erase calls) and `&7E02` (small 3×2 / 2×2 effect erases). |
+| `0x0A90-0x0B7F`| `&7E10-&7EFF`  |  240 | **Map LOWER tile-id table.** One byte per column, indexes a tile in the LEVD1 catalog. Rendered at char rows 16-19.                |
+| `0x0B80-0x0B8F`| `&7F00-&7F0F`  |   16 | 16 bytes of padding between the lower and upper tile tables. Same value per scenario (`0D`/`00`/`03`/varying) — likely a wrap-around-column safety byte. |
+| `0x0B90-0x0C7F`| `&7F10-&7FFF`  |  240 | **Map UPPER tile-id table.** Same indexing, rendered at char rows 0-3 with **vertical mirror** (the engine plots the upper tile with `zp_sprite_dir_flag = 0`). |
+
+---
+
+## `N.LEVD3` (2176 or 3200 bytes, loaded at `&7380`)
+
+The stage-2 data. The format is identical to `LEVD2` byte-for-byte
+within whatever range it covers — but the **size differs** by
+scenario:
+
+| File        | Size  | Covered range (file offset) | What it overwrites                                                                                  |
+|-------------|-------|-----------------------------|------------------------------------------------------------------------------------------------------|
+| `1.LEVD3`   | 2176  | `0x000-0x87F`               | Enemy sprites + ptr tables + spawn schedule + attributes. **Leaves the LEVD2 map tables intact.**    |
+| `2.LEVD3`   | 2176  | `0x000-0x87F`               | Same as above.                                                                                       |
+| `3.LEVD3`   | 2176  | `0x000-0x87F`               | Same as above.                                                                                       |
+| `4.LEVD3`   | 3200  | `0x000-0xC7F`               | Full overlay including the map tables — but the tile-id tables happen to be **byte-identical** to `4.LEVD2`'s, so the map geometry is still unchanged. |
+
+**Net effect:** stage 2 of every scenario uses the same ceiling /
+floor tile geometry as stage 1; only the enemy cast (sprite graphics,
+pointer table, spawn schedule, attributes) changes. The shootable-
+item sprites at `&7C00`/`&7C80` are not touched by `LEVD3` in
+scenarios 1-3, so the same "arch / egg / etc." is reused for both
+halves.
+
+In every `LEVD3` the enemy pointer table layout is **identical
+across all four scenarios**: slot 0 = `&7D80` (blank), slots 1-14 =
+the per-scenario sprite slots at `&7380..&7A00`, slots 15-16 = shared
+GRAPHIX, slots 17-18 = LEVD1, slot 19 = GRAPHIX, slots 21-24 = LEVD1
+decorations, slots 25-26 = the shootable items in LEVD2's upper area.
+What differs between scenarios' `LEVD3` files is just the *sprite
+data* the slots 1-14 point at and the *spawn schedule*.
