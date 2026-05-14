@@ -6,6 +6,39 @@ Newest entries at the top.
 
 ## 2026-05-15 — Session 4: unified build + gfx_ prefix + sprite-source overrides
 
+### Starfield engine identified
+
+The 183-byte data block at `&3041-&30F7` in CODE2 (which the legacy
+disasm was decoding as nonsense instructions) is the **starfield
+state** — three parallel 61-byte arrays:
+
+  - `starfield_pos_lo` (`&3041..&307D`) — per-star screen-address LO byte
+  - `starfield_pos_hi` (`&307E..&30BA`) — per-star screen-address HI byte
+    (range &5E..&6C maps to playfield char-rows 6..16)
+  - `starfield_type`   (`&30BB..&30F7`) — per-star type flag (&03 slow / &02 fast)
+
+Loop bound is `CPX #&3C` so 60 stars are active; the 61st slot in
+each array is unused padding. The on-disk bytes are the initial
+positions; the engine mutates them in place every frame.
+
+Two access sites in CODE:
+
+  - `starfield_update` (`&1309`) — per-frame: read pos → erase →
+    `SBC #&08` to move left → on underflow decrement hi, on hi == &5C
+    reset to &6B (wrap from left edge back to row 16 on the right).
+    Called from `&127B` (in-game), plus seven CODE2 sites where stars
+    keep moving even with game logic paused (get-ready, game-over,
+    inter-stage screens).
+  - `starfield_init` (`&2656`) — one-shot at level start: walks the
+    arrays and writes the per-type pixel byte (`&20` slow / `&02` fast)
+    to each starting position. Called from CODE `&126C` when the
+    scroll counter `&80` hits `&F0`.
+
+CODE2.6502 dropped from 1349 → 1229 lines once the data was carved.
+
+Also: `L284C` (the rotor-shutter fade routine in CODE2 that runs on
+inter-stage transitions) renamed to `shutter_fade` for clarity.
+
 ### Build system
 
 Renamed `disasm/*.beebasm` → `disasm/*.6502`. New master

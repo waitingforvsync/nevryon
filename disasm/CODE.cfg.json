@@ -33,6 +33,8 @@
     "0x1209": "screen_row_lo_lut",
     "0x121F": "screen_row_hi_lut",
     "0x1236": "calc_screen_addr",
+    "0x1309": "starfield_update",
+    "0x2656": "starfield_init",
     "0x208A": "spawn_check_step",
     "0x22B2": "enemy_type_dispatch",
     "0x232C": "forcefield_render",
@@ -68,7 +70,7 @@
     "0x2800": "L2800",
     "0x2811": "L2811",
     "0x2822": "L2822",
-    "0x284C": "L284C",
+    "0x284C": "shutter_fade",
     "0x28D7": "L28D7",
     "0x2975": "L2975",
     "0x29E7": "L29E7",
@@ -84,7 +86,10 @@
     "0x3300": "L3300",
     "0x3325": "L3325",
     "0x3432": "L3432",
-    "0x3513": "L3513"
+    "0x3513": "L3513",
+    "0x3041": "starfield_pos_lo",
+    "0x307E": "starfield_pos_hi",
+    "0x30BB": "starfield_type"
   },
   "immediate_overrides": {
     "0x1483": "LO(lev_player_sprite)",

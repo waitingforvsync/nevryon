@@ -4,15 +4,15 @@
 
 \ Mid-instruction labels (referenced by branches/jumps):
 L2975            = &2975
-L2FE2            = &2FE2
-L300E            = &300E
-L3018            = &3018
-L30AC            = &30AC
+
+\ Extern labels defined in master Nevryon.6502 wrapper:
+\   starfield_update = &1309
+\   starfield_init = &2656
 
 ORG &2800
 
 
-\ ----- code &2800..&31E9 -----
+\ ----- code &2800..&3041 -----
 .L2800
     LDA #&07
     LDX #&09
@@ -63,7 +63,7 @@ ORG &2800
     BRK
     ORA (&00,X)
     NOP
-.L284C
+.shutter_fade
     LDX #&09
 .L284E
     TXA
@@ -545,7 +545,7 @@ ORG &2800
     LDA &28D3
     CMP #&0F
     BNE L2BAC
-    JSR L284C
+    JSR shutter_fade
     LDX #&00
     STX &28D5
     JSR L2822
@@ -555,7 +555,7 @@ ORG &2800
     STX &28D5
     CPX #&4B
     BEQ L2C20
-    JSR &1309
+    JSR starfield_update
     LDX #&0C
     LDY #&C8
     JSR &1236
@@ -607,7 +607,7 @@ ORG &2800
     LDX &28D5
     CPX #&19
     BEQ L2C6A
-    JSR &1309
+    JSR starfield_update
     LDA #&13
     JSR &FFF4
     JMP L2C55
@@ -621,7 +621,7 @@ ORG &2800
     STX &28D5
     CPX #&64
     BEQ L2CB8
-    JSR &1309
+    JSR starfield_update
     LDX #&0E
     LDY #&C8
     JSR &1236
@@ -654,8 +654,8 @@ ORG &2800
     JSR L2EFF
     JMP L2822
 .L2CCA
-    JSR L284C
-    JSR &1309
+    JSR shutter_fade
+    JSR starfield_update
     LDA #&08
     STA &28D3
 .L2CD5
@@ -764,7 +764,7 @@ ORG &2800
     JSR L29E7
     JSR L2E3F
 .L2DC1
-    JSR &1309
+    JSR starfield_update
     LDX #&0F
     LDY #&D2
     JSR &1236
@@ -817,7 +817,7 @@ ORG &2800
     BEQ L2E39
     JMP L2DC1
 .L2E39
-    JSR L284C
+    JSR shutter_fade
     JMP L2BA4
 .L2E3F
     LDX #&11
@@ -880,7 +880,7 @@ ORG &2800
     NOP
     NOP
     NOP
-    JSR L284C
+    JSR shutter_fade
     JSR L2822
     LDX #&00
     STX &28D8
@@ -890,7 +890,7 @@ ORG &2800
     STX &28D8
     CPX #&C8
     BEQ L2EEA
-    JSR &1309
+    JSR starfield_update
     LDX #&0C
     LDY #&C8
     JSR &1236
@@ -915,7 +915,7 @@ ORG &2800
     JSR &FFF4
     JMP L2EA4
 .L2EEA
-    JMP L284C
+    JMP shutter_fade
 .L2EED
     LDA #&07
     LDX #&F6
@@ -937,7 +937,7 @@ ORG &2800
 .L2F09
     LDA #&00
     STA &2EFE
-    JSR L284C
+    JSR shutter_fade
     JSR L2F20
     JSR L2F2D
     JSR L2F3A
@@ -977,7 +977,7 @@ ORG &2800
     LDY #&16
     RTS
 .L2F66
-    JSR &1309
+    JSR starfield_update
     LDX #&3C
 .L2F6B
     LDY #&FF
@@ -1040,7 +1040,6 @@ ORG &2800
     LDA #LO(lev_erase_brush + &80)
     STA &1194
     LDA #HI(lev_erase_brush + &80)
-.L2FE5
     STA &1195
     JSR &1173
 .L2FEB
@@ -1067,7 +1066,6 @@ ORG &2800
     DEC &90
 .L301B
     JSR L2F66
-.L301E
     LDX &90
     LDY #&C8
     JSR &1236
@@ -1079,164 +1077,46 @@ ORG &2800
     STA &1195
     JSR &1173
     DEC &90
-.L3038
     LDA &90
     CMP #&04
     BNE L301B
     INC &90
     RTS
-    BRK
-    BNE L305C
-    BMI L308E
-    BEQ L3038
-    BPL L3052
-    SEC
-    BNE L2FE5
-    PLA
-    BVS L30B8
-    BCC L2FE2
-.L3052
-    BEQ L305C
-    BPL L301E
-    BPL L30A8
-    INX
-    PLP
-    BEQ L30AC
-.L305C
-    BCC L300E
-    BCS L3060
-.L3060
-    PLP
-.L3061
-    PHP
-    LDY #&B8
-    CLD
-    CLI
-    BEQ L3018
-    SED
-    INY
-    BRK
-    BCS L30D5
-    LDY #&90
-    EQUB &80  \ ?? opcode &80
-    SED
-    PLA
-    BEQ L30A4
-    SED
-    BPL L30C7
-    BCS L3061
-    PHA
-    CPX #&E0
-    BEQ L30BE
-    JMP (&636A)
-    LSR &6366,X
-    EQUB &63  \ ?? opcode &63
-    ROR &6A
-    EQUB &5F  \ ?? opcode &5F
-    RTS
-    LSR &6B5F,X
-    PLA
-    EQUB &62  \ ?? opcode &62
-.L308E
-    ROR &6B
-    EQUB &63  \ ?? opcode &63
-    ADC #&61
-    LSR &656B,X
-    ADC &69
-    EQUB &5F  \ ?? opcode &5F
-    PLA
-    ROR &61
-    ADC (&69,X)
-    ROR A
-    ADC &69
-    ADC &5F
-    ROR A
-.L30A4
-    EQUB &67  \ ?? opcode &67
-    EQUB &5F  \ ?? opcode &5F
-    EQUB &62  \ ?? opcode &62
-    EQUB &63  \ ?? opcode &63
-.L30A8
-    EQUB &63  \ ?? opcode &63
-    ADC (&5E,X)
-    ADC (&63,X)
-    EQUB &6B  \ ?? opcode &6B
-    EQUB &62  \ ?? opcode &62
-    EQUB &62  \ ?? opcode &62
-    EQUB &62  \ ?? opcode &62
-    LSR &6266,X
-    EQUB &62  \ ?? opcode &62
-    EQUB &6B  \ ?? opcode &6B
-    EQUB &5F  \ ?? opcode &5F
-    ROR A
-.L30B8
-    ROR A
-    EQUB &67  \ ?? opcode &67
-    EQUB &5F  \ ?? opcode &5F
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-.L30BE
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-.L30C7
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &03  \ ?? opcode &03
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-.L30D5
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
-    EQUB &02  \ ?? opcode &02
+
+\ ----- data &3041..&30F8 -----
+\ Starfield engine state — three parallel 61-byte arrays. Loop bound is X<60 (60 active stars; the 61st slot in each array is unused). Mutated in place every frame by `starfield_update` in CODE.
+.starfield_pos_lo
+    \ per-star screen-address LO byte (60 entries used)
+    EQUB &00, &D0, &18, &30, &48, &F0, &F0, &10
+    EQUB &08, &38, &D0, &98, &68, &70, &68, &90
+    EQUB &90, &F0, &08, &10, &C8, &10, &50, &E8
+    EQUB &28, &F0, &50, &90, &B0, &B0, &00, &28
+    EQUB &08, &A0, &B8, &D8, &58, &F0, &B0, &F8
+    EQUB &C8, &00, &B0, &68, &A0, &90, &80, &F8
+    EQUB &68, &F0, &30, &F8, &10, &50, &B0, &E8
+    EQUB &48, &E0, &E0, &F0, &40
+.starfield_pos_hi
+    \ per-star screen-address HI byte — &5E..&6C maps to playfield char-rows 6..16
+    EQUB &6C, &6A, &63, &5E, &66, &63, &63, &66
+    EQUB &6A, &5F, &60, &5E, &5F, &6B, &68, &62
+    EQUB &66, &6B, &63, &69, &61, &5E, &6B, &65
+    EQUB &65, &69, &5F, &68, &66, &61, &61, &69
+    EQUB &6A, &65, &69, &65, &5F, &6A, &67, &5F
+    EQUB &62, &63, &63, &61, &5E, &61, &63, &6B
+    EQUB &62, &62, &62, &5E, &66, &62, &62, &6B
+    EQUB &5F, &6A, &6A, &67, &5F
+.starfield_type
+    \ per-star type flag — &03 = slow (drawn as pixel byte &20), &02 = fast (drawn as pixel byte &02)
+    EQUB &03, &03, &03, &03, &03, &03, &03, &03
+    EQUB &03, &03, &03, &03, &03, &03, &03, &03
+    EQUB &03, &03, &03, &03, &03, &02, &02, &02
+    EQUB &02, &02, &02, &02, &02, &02, &02, &02
+    EQUB &02, &02, &02, &02, &02, &02, &02, &02
+    EQUB &02, &02, &02, &02, &02, &02, &02, &02
+    EQUB &02, &02, &02, &02, &02, &02, &02, &02
+    EQUB &02, &02, &02, &02, &02
+
+\ ----- code &30F8..&31E9 -----
 .L30F8
     JSR L2E60
     LDX #&00
@@ -1322,7 +1202,7 @@ ORG &2800
     LDY #&0E
     JMP &1173
 .L31B1
-    JSR L284C
+    JSR shutter_fade
     JSR L2F20
     JSR L2F2D
     JSR L2F3A

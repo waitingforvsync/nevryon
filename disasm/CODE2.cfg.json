@@ -2,17 +2,16 @@
   "base": "0x2800",
   "emit_externs": false,
   "regions": [
-    {
-      "start": "0x2800",
-      "end": "0x31E9",
-      "kind": "code"
-    }
+    {"start": "0x2800", "end": "0x3041", "kind": "code"},
+    {"start": "0x3041", "end": "0x30F8", "kind": "data", "width": 16,
+     "comment": "Starfield engine state — three parallel 61-byte arrays. Loop bound is X<60 (60 active stars; the 61st slot in each array is unused). Mutated in place every frame by `starfield_update` in CODE."},
+    {"start": "0x30F8", "end": "0x31E9", "kind": "code"}
   ],
   "labels": {
     "0x2800": "L2800",
     "0x2811": "L2811",
     "0x2822": "L2822",
-    "0x284C": "L284C",
+    "0x284C": "shutter_fade",
     "0x28D7": "L28D7",
     "0x2975": "L2975",
     "0x29E7": "L29E7",
@@ -22,9 +21,21 @@
     "0x2CCA": "L2CCA",
     "0x2E94": "L2E94",
     "0x2EED": "L2EED",
+    "0x3041": "starfield_pos_lo",
+    "0x307E": "starfield_pos_hi",
+    "0x30BB": "starfield_type",
     "0x30F8": "L30F8",
     "0x3115": "L3115",
     "0x3170": "L3170"
+  },
+  "comments": {
+    "0x3041": "per-star screen-address LO byte (60 entries used)",
+    "0x307E": "per-star screen-address HI byte — &5E..&6C maps to playfield char-rows 6..16",
+    "0x30BB": "per-star type flag — &03 = slow (drawn as pixel byte &20), &02 = fast (drawn as pixel byte &02)"
+  },
+  "extern_labels": {
+    "0x1309": "starfield_update",
+    "0x2656": "starfield_init"
   },
   "immediate_overrides": {
     "0x28E8": "LO(lev_erase_brush + &80)",

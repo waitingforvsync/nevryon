@@ -24,7 +24,7 @@ L1C21            = &1C21
 \   L2800 = &2800
 \   L2811 = &2811
 \   L2822 = &2822
-\   L284C = &284C
+\   shutter_fade = &284C
 \   L28D7 = &28D7
 \   L2975 = &2975
 \   L29E7 = &29E7
@@ -34,6 +34,9 @@ L1C21            = &1C21
 \   L2CCA = &2CCA
 \   L2E94 = &2E94
 \   L2EED = &2EED
+\   starfield_pos_lo = &3041
+\   starfield_pos_hi = &307E
+\   starfield_type = &30BB
 \   L30F8 = &30F8
 \   L3115 = &3115
 \   L3170 = &3170
@@ -76,7 +79,7 @@ ORG &1100
     LDA data_268F
     BEQ main_loop
     JSR L3325
-    JSR L284C
+    JSR shutter_fade
     JMP L3300
     JMP main_loop
 .lfsr_random
@@ -254,11 +257,11 @@ ORG &1100
     LDA &80
     CMP #&F0
     BNE L127B
-    JSR L2656
+    JSR starfield_init
     JMP L210A
     JMP L210A
 .L127B
-    JSR L1309
+    JSR starfield_update
     JSR L210A
     JSR L3513
     LDX #&27
@@ -322,7 +325,7 @@ ORG &1100
     EQUB &10, &01
 
 \ ----- code &1309..&14D8 -----
-.L1309
+.starfield_update
     SEC
     LDY #&00
     LDX #&00
@@ -331,12 +334,12 @@ ORG &1100
     STA data_1307
     ASL &1308
 .L1319
-    LDA &30BB,X
+    LDA starfield_type,X
     CMP #&02
     BNE L136C
-    LDA &3041,X
+    LDA starfield_pos_lo,X
     STA zp_screen_ptr_lo
-    LDA &307E,X
+    LDA starfield_pos_hi,X
     STA zp_screen_ptr_hi
     LDA data_1307
     CMP #&10
@@ -353,28 +356,28 @@ ORG &1100
     STA (zp_screen_ptr_lo),Y
     LDA zp_screen_ptr_lo
     SBC #&08
-    STA &3041,X
+    STA starfield_pos_lo,X
     CMP #&F8
     BNE L135B
-    LDA &307E,X
+    LDA starfield_pos_hi,X
     SBC #&01
-    STA &307E,X
+    STA starfield_pos_hi,X
     CMP #&5C
     BNE L135B
     LDA #&6B
-    STA &307E,X
+    STA starfield_pos_hi,X
 .L135B
-    LDA &3041,X
+    LDA starfield_pos_lo,X
     STA zp_screen_ptr_lo
-    LDA &307E,X
+    LDA starfield_pos_hi,X
     STA zp_screen_ptr_hi
     LDA #&10
     STA (zp_screen_ptr_lo),Y
     JMP L1335
 .L136C
-    LDA &3041,X
+    LDA starfield_pos_lo,X
     STA zp_screen_ptr_lo
-    LDA &307E,X
+    LDA starfield_pos_hi,X
     STA zp_screen_ptr_hi
     LDA &1308
     CMP #&10
@@ -388,20 +391,20 @@ ORG &1100
     STA (zp_screen_ptr_lo),Y
     LDA zp_screen_ptr_lo
     SBC #&08
-    STA &3041,X
+    STA starfield_pos_lo,X
     CMP #&F8
     BNE L13A6
-    LDA &307E,X
+    LDA starfield_pos_hi,X
     SBC #&01
-    STA &307E,X
+    STA starfield_pos_hi,X
     CMP #&5C
     BNE L13A6
     LDA #&6B
-    STA &307E,X
+    STA starfield_pos_hi,X
 .L13A6
-    LDA &3041,X
+    LDA starfield_pos_lo,X
     STA zp_screen_ptr_lo
-    LDA &307E,X
+    LDA starfield_pos_hi,X
     STA zp_screen_ptr_hi
     LDA #&01
     STA (zp_screen_ptr_lo),Y
@@ -2859,15 +2862,15 @@ ORG &1100
     STA &2A03
     INC &2A02
     RTS
-.L2656
+.starfield_init
     LDY #&00
     LDX #&00
 .L265A
-    LDA &3041,X
+    LDA starfield_pos_lo,X
     STA zp_screen_ptr_lo
-    LDA &307E,X
+    LDA starfield_pos_hi,X
     STA zp_screen_ptr_hi
-    LDA &30BB,X
+    LDA starfield_type,X
     CMP #&03
     BNE L2670
     LDA #&02
