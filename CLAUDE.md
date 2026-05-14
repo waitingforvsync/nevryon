@@ -85,16 +85,31 @@ as part of the LDA instruction.
 - Rows 22-31 (`&7380`-`&7FFF`): screen RAM, but CRTC trimmed off-display.
   Used as storage for LEVD2/LEVD3 data.
 
-### Game palette
-**In-game (verified from emulator screenshot):** BBC default 4-colour —
-logical 0=black, 1=red, 2=yellow, 3=white. Use `NEVRYON_GAME_PALETTE`.
+### Per-level palette
+Each scenario (1-4) uses a different MODE 5 palette. Loader2 PROCs
+`PROCL34`/`PROCL56`/`PROCL78` (lines 1140-1200) POKE 16 bytes per
+level into `&493F` — the palette table embedded in GRAPHIX. An IRQ
+handler at `&492C` (also in GRAPHIX, installed by `CALL&497E` at
+Loader2 line 1000) writes those bytes to the Video ULA palette latch
+at `&FE21` every vsync.
 
-**Loader screens (title/options/scoreboard):** Loader2 line 990 sets
-`VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` → 2=cyan instead of yellow. Use
-`NEVRYON_LOADER_PALETTE` for any pre-gameplay rendering.
+The MODE 5 pixel→palette mapping is `pixel V → palette latch entry
+[0, 3, 12, 15][V]` (the BBC's "interleaved" 4-colour scheme; other
+entries are spares used by the OS but unread in MODE 5). Decoded:
 
-The game CODE overrides the loader palette before gameplay starts
-(several `LDA #&13` candidates in `$.CODE2` are likely VDU 19 calls).
+| Scenario | Pixel 0 | Pixel 1 | Pixel 2 | Pixel 3 |
+|----------|---------|---------|---------|---------|
+| 1 (LV12) | black   | red     | yellow  | white   |
+| 2 (L34)  | black   | blue    | cyan    | white   |
+| 3 (L56)  | black   | red     | green   | white   |
+| 4 (L78)  | black   | red     | magenta | white   |
+
+Use `palette_for_level(scenario)` from `render_screen.py` to pick the
+right palette. `NEVRYON_GAME_PALETTE` defaults to scenario 1.
+
+**Loader screens** (title/options/scoreboard, before any PROCL call):
+Loader2 line 990 sets `VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` →
+0=black, 1=red, 2=cyan, 3=white. Use `NEVRYON_LOADER_PALETTE`.
 
 ### Map tile layout
 - Upper tile id table at `&7F10` (LEVD2 file offset `&B90`), 240 entries.

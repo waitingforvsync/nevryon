@@ -31,7 +31,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from render_screen import NEVRYON_GAME_PALETTE, write_png
+from render_screen import NEVRYON_GAME_PALETTE, palette_for_level, write_png
 from render_sprite import render_column_major
 from render_map import (render_map, MAP_COLUMNS, PLAYFIELD_HEIGHT_PX,
                         TILE_HEIGHT)
@@ -57,9 +57,11 @@ def render_summary(level: int, scale: int = 2, both_halves: bool = True):
     except FileNotFoundError:
         levd3 = None
 
+    palette = palette_for_level(level)
+
     # Map from LEVD1 + LEVD2 tables (playfield mode, 160 px tall)
     map_rgb, map_w, map_h = render_map(files["LEVD1"], levd2, MAP_COLUMNS,
-                                        NEVRYON_GAME_PALETTE,
+                                        palette,
                                         playfield=True)
 
     # LEVD3 may have its own map tables — for 4.LEVD3 it does
@@ -69,7 +71,7 @@ def render_summary(level: int, scale: int = 2, both_halves: bool = True):
     if levd3 is not None and len(levd3) >= 0xC80:
         # 3200-byte LEVD3 covers map tables too
         map_rgb_3, _, _ = render_map(files["LEVD1"], levd3, MAP_COLUMNS,
-                                      NEVRYON_GAME_PALETTE,
+                                      palette,
                                       playfield=True)
     elif levd3 is not None:
         # Reuse LEVD2 map for the bottom strip
@@ -88,7 +90,7 @@ def render_summary(level: int, scale: int = 2, both_halves: bool = True):
                 return None
             data, off = resolved
             rgb, w, h = render_column_major(data, off, ENEMY_W_COLS, ENEMY_H,
-                                            NEVRYON_GAME_PALETTE,
+                                            palette,
                                             bg=(20, 20, 30))
             return rgb, w, h
         return get

@@ -25,7 +25,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from render_screen import NEVRYON_GAME_PALETTE, write_png
+from render_screen import NEVRYON_GAME_PALETTE, palette_for_level, write_png
 from render_sprite import render_column_major
 
 
@@ -98,6 +98,7 @@ def main():
     args = ap.parse_args()
 
     enemies, files = extract_enemies(args.level, args.height, args.width)
+    palette = palette_for_level(args.level)
 
     # Print report
     print(f"Level {args.level} enemy pointer table:")
@@ -127,7 +128,7 @@ def main():
         if data is None:
             continue
         rgb, _, _ = render_column_major(data, off, args.width, args.height,
-                                        NEVRYON_GAME_PALETTE)
+                                        palette)
         sx = idx % args.cols
         sy = idx // args.cols
         x0 = 2 + sx * cell_w

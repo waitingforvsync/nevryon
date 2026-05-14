@@ -68,20 +68,36 @@ def palette_from_mapping(logical_to_physical: dict[int, int]) -> list[tuple[int,
     return pal
 
 
-# Nevryon in-game palette: black / red / yellow / white. This is the
-# BBC default 4-colour palette, verified from in-emulator screenshots
-# of the starting moment of level 1 (yellow ceiling and floor tiles
-# with red highlights, red+white enemy spheres).
+# Nevryon in-game palettes — one per scenario. Source: Loader2 sets the
+# palette table at &493F (in the loaded GRAPHIX file) via PROCL34/L56/L78,
+# which is then sent to &FE21 by an IRQ handler running off the User VIA
+# vsync interrupt (handler at &492C in GRAPHIX).
 #
-# Loader2 line 990 sets logical 2 to physical 6 (cyan), but this is
-# overridden by in-game code (CODE2 has several LDA #&13 + OSWRCH
-# sequences that are likely VDU 19 calls resetting the palette to
-# default before gameplay starts).
-NEVRYON_GAME_PALETTE = palette_from_mapping({0: 0, 1: 1, 2: 3, 3: 7})
+# MODE 5 effective mapping is: pixel V (0..3) selects palette latch entry
+# E where E = [0, 3, 12, 15][V] (the BBC's "interleaved" 4-color mapping).
+# So decoding each scenario's palette to (phys for pixel 0..3):
+#   Scenario 1 (default in GRAPHIX): 0, 1, 3, 7 → black/red/yellow/white
+#   Scenario 2 (Loader2 PROCL34):    0, 4, 6, 7 → black/blue/cyan/white
+#   Scenario 3 (Loader2 PROCL56):    0, 1, 2, 7 → black/red/green/white
+#   Scenario 4 (Loader2 PROCL78):    0, 1, 5, 7 → black/red/magenta/white
+NEVRYON_LEVEL_PALETTES = {
+    1: palette_from_mapping({0: 0, 1: 1, 2: 3, 3: 7}),   # red/yellow/white
+    2: palette_from_mapping({0: 0, 1: 4, 2: 6, 3: 7}),   # blue/cyan/white
+    3: palette_from_mapping({0: 0, 1: 1, 2: 2, 3: 7}),   # red/green/white
+    4: palette_from_mapping({0: 0, 1: 1, 2: 5, 3: 7}),   # red/magenta/white
+}
 
-# Legacy/loader palette (logical 2 = cyan) for any pre-game screen
-# rendering that follows the Loader2 setup.
+# Default to scenario 1 for tools that don't pick a level
+NEVRYON_GAME_PALETTE = NEVRYON_LEVEL_PALETTES[1]
+
+# Loader-screen palette (Loader2 line 990 sets logical 2 to physical 6
+# = cyan; used by OPSC, scoreboard, title etc. before gameplay).
 NEVRYON_LOADER_PALETTE = palette_from_mapping({0: 0, 1: 1, 2: 6, 3: 7})
+
+
+def palette_for_level(level: int) -> list[tuple[int, int, int]]:
+    """Return the in-game MODE 5 palette for the given scenario (1-4)."""
+    return NEVRYON_LEVEL_PALETTES[level]
 
 
 def decode_byte(b: int) -> list[int]:

@@ -32,7 +32,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 from render_screen import (decode_byte, NEVRYON_GAME_PALETTE, DEFAULT_PALETTE,
-                           write_png)
+                           palette_for_level, write_png)
 from render_sprite import render_column_major
 
 
@@ -143,6 +143,8 @@ def main():
     ap.add_argument("--columns", type=int, default=MAP_COLUMNS)
     ap.add_argument("--scale", type=int, default=2)
     ap.add_argument("--grid", action="store_true")
+    ap.add_argument("--level", type=int, default=1,
+                    help="scenario 1-4 for palette selection")
     args = ap.parse_args()
 
     with open(args.levd1, "rb") as f:
@@ -150,7 +152,9 @@ def main():
     with open(args.levd23, "rb") as f:
         levd23 = f.read()
 
-    rgb, w, h = render_map(levd1, levd23, args.columns, draw_grid=args.grid)
+    palette = palette_for_level(args.level)
+    rgb, w, h = render_map(levd1, levd23, args.columns, palette,
+                            draw_grid=args.grid)
     if args.scale > 1:
         from PIL import Image
         im = Image.frombytes("RGB", (w, h), rgb).resize(

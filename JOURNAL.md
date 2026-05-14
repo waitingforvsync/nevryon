@@ -6,6 +6,62 @@ Newest entries at the top.
 
 ## 2026-05-14 — Session 2: maps and LEVD format
 
+### Per-level palettes — solved
+
+User correctly observed that each scenario has its own colour scheme.
+The palette source turned out to be in **Loader2 BASIC**, not in any
+of the CODE binaries. Lines 1140-1200 define four PROCs:
+
+  - `PROCLV12` (scenarios 1/2): no POKE — uses the default palette
+    table embedded in GRAPHIX at `&493F`
+  - `PROCL34`, `PROCL56`, `PROCL78` (scenarios 2/3/4 — the names
+    refer to start-level numbers 3-8 across the two halves of each
+    scenario): each POKEs 16 fresh bytes into `&493F` from inline
+    `DATA` statements.
+
+An IRQ handler in `$.GRAPHIX` at `&492C` (installed by `CALL&497E`,
+also in GRAPHIX, called at Loader2 line 1000) is hooked into the
+User VIA vsync interrupt. Every frame it walks 12 entries of the
+table at `&493F` and writes them straight to the Video ULA palette
+latch at `&FE21`, then after a T1 timer it writes 12 more from
+`&494F` (split-screen secondary palette, used for OPSC-style screens
+that show two colour schemes at once — not used during gameplay).
+
+The MODE 5 pixel→latch-entry mapping is the BBC's "interleaved" form:
+`pixel V → entry [0, 3, 12, 15][V]`. With that, each scenario's
+palette decodes cleanly:
+
+| Scenario | Pixel 0 | Pixel 1 | Pixel 2 | Pixel 3 |
+|----------|---------|---------|---------|---------|
+| 1        | black   | red     | yellow  | white   |
+| 2        | black   | blue    | cyan    | white   |
+| 3        | black   | red     | green   | white   |
+| 4        | black   | red     | magenta | white   |
+
+All four match the user's stated colour schemes exactly.
+`render_screen.NEVRYON_LEVEL_PALETTES` now carries all four, and
+`palette_for_level(n)` is the public selector. `render_map.py`,
+`render_level_summary.py` and `extract_enemies.py` all accept a
+`--level` argument and pick the right palette.
+
+### Cleanup pass on `work/`
+
+Pruned `work/` from 84 stale iteration files to 20 canonical PNGs:
+
+  - `map_lev{1-4}.png` — full playfield map (160 px tall, mirrored
+    ceiling + gap + floor) using each scenario's palette
+  - `enemies_lev{1-4}.png` — enemy ptr-table grid per scenario
+  - `summary_lev{1-4}.png` (+ `_preview.png` 2x) — full LEVD2/LEVD3
+    overlay with sprites at decoded Y rows and v-flip
+  - `opsc_mode2.png`, `scr_mode1.png`, `scorebd_native.png`,
+    `welldone_mode1.png` — preserved loader-screen renders (these
+    use `NEVRYON_LOADER_PALETTE`).
+
+Removed: all `graphix_*`, `levd*_tiles`, `levd*_levd3_tiles`,
+`map_lev*_a/b`, `ship_lev*`, `sprite_test*`, `scorebd_w*` width-
+scan iterations, the wrong-mode `opsc_mode1*`/`opsc_mode5`/`scr_mode5`
+renders, and old debug crops.
+
 ### Map render: ceiling mirror, gap, palette fix
 
 User shared an in-emulator screenshot of the start of level 1 showing
