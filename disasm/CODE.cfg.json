@@ -1,0 +1,52 @@
+{
+  "base": "0x1100",
+  "regions": [
+    {"start": "0x1100", "end": "0x1141", "kind": "code", "comment": "entry: jsr init x3 -> main loop"},
+    {"start": "0x1141", "end": "0x116F", "kind": "code", "comment": "LFSR random number generator (jsr targets at 898/907/1318/2406)"},
+    {"start": "0x116F", "end": "0x1209", "kind": "code", "comment": "sprite plot: L116F = parameterless (X=1, Y=32); L1173 = X=width, Y=height; L1184 = inner loop using $74/$75/$76/$77/$78/$79 and self-mod source L1194/L1195"},
+    {"start": "0x1209", "end": "0x121F", "kind": "data", "width": 1, "comment": "screen line LUT - low byte for each of 22 char rows (MODE 5, base &5800, stride &140)"},
+    {"start": "0x121F", "end": "0x1235", "kind": "data", "width": 1, "comment": "screen line LUT - high byte (corresponds to L1209 entries)"},
+    {"start": "0x1235", "end": "0x2873", "kind": "code", "comment": "remainder of CODE (game logic, will be subdivided as we learn more)"}
+  ],
+  "labels": {
+    "0x1100": "main_init",
+    "0x1109": "main_loop",
+    "0x1141": "lfsr_random",
+    "0x116F": "sprite_plot_default",
+    "0x1173": "sprite_plot_xy",
+    "0x1184": "sprite_plot_inner",
+    "0x1193": "sprite_plot_lda_sm",
+    "0x1194": "sprite_src_lo",
+    "0x1195": "sprite_src_hi",
+    "0x1209": "screen_row_lo_lut",
+    "0x121F": "screen_row_hi_lut",
+    "0x1236": "calc_screen_addr",
+    "0x70": "zp_screen_ptr_lo",
+    "0x71": "zp_screen_ptr_hi",
+    "0x74": "zp_sprite_cols_remaining",
+    "0x75": "zp_sprite_height",
+    "0x76": "zp_dest_x_lo",
+    "0x77": "zp_dest_x_hi",
+    "0x78": "zp_sprite_end_index",
+    "0x79": "zp_sprite_dir_flag",
+    "0x8B": "zp_sprite_src2_hi",
+    "0x8C": "zp_sprite_src2_lo",
+    "0x8D": "zp_sprite_src_hi",
+    "0x8E": "zp_sprite_src_lo",
+    "0x9D": "zp_level_num"
+  },
+  "comments": {
+    "0x1100": "Entry: jsr to three init routines then drop into main loop",
+    "0x1141": "Sprite plot routine: $76/$77 = dest screen addr; L1194/L1195 = sprite src (self-mod); $74 = width-in-byte-cols; $75 = height-in-scanlines; $79 = direction flag (1 = forward)",
+    "0x1209": "Screen char-row low-byte LUT — MODE 5 with base &5800, stride &140 per char row",
+    "0x121F": "Screen char-row high-byte LUT — pairs with screen_row_lo_lut",
+    "0x1236": "Compute screen address from X (char-col) and Y (logical row); result in $76/$77"
+  },
+  "extern_labels": {
+    "0xFFF1": "OSWORD",
+    "0xFFF4": "OSBYTE",
+    "0xFFF7": "OSCLI",
+    "0xFFEE": "OSWRCH",
+    "0xFFE0": "OSRDCH"
+  }
+}

@@ -1,0 +1,443 @@
+\ ============================================================
+\ Auto-disassembly — base &3300
+\ ============================================================
+
+ORG &3300
+
+
+\ ----- code &3300..&3690 -----
+.L3300
+    LDA #&20
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&03
+    LDX #&07
+    LDY #&06
+    JSR L3560
+    LDA #&28
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&02
+    LDX #&05
+    LDY #&0B
+    JSR L3560
+    JMP &30F8
+    LDA #&34
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&03
+    LDX #&08
+    LDY #&04
+    JSR L3560
+    LDA &9D
+    CLC
+    ADC #&30
+    STA &363F
+    STA &3651
+    LDA #&39
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&02
+    LDX #&01
+    LDY #&07
+    JSR L3560
+    LDA #&4B
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&01
+    LDX #&05
+    LDY #&0A
+    JSR L3560
+    LDX #&32
+.L3365
+    STX &95
+    LDA #&13
+    JSR &FFF4
+    LDX &95
+    DEX
+    BNE L3365
+    LDX &9D
+.L3373
+    DEC &3651
+    LDA #&3A
+    STA &3652
+    LDY #&FF
+.L337D
+    DEC &3652
+    INY
+    STY &97
+    STX &98
+    JSR &2E83
+    JSR &29E7
+    INC &2A05
+    LDA #&4B
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&01
+    LDX #&05
+    LDY #&0A
+    JSR L3560
+    LDY &97
+    LDX &98
+    LDA &2A05
+    CMP #&0A
+    BNE L33D0
+    LDA #&00
+    STA &2A05
+    INC &2A04
+    LDA &2A04
+    CMP #&0A
+    BNE L33D0
+    LDA #&00
+    STA &2A04
+    INC &2A03
+    LDA &2A03
+    CMP #&0A
+    BNE L33D0
+    LDA #&00
+    STA &2A03
+    INC &2A02
+.L33D0
+    CPY #&09
+    BNE L337D
+    DEX
+    BNE L3373
+    JSR &29E7
+    LDX #&32
+.L33DC
+    STX &95
+    LDX &95
+    DEX
+    BNE L33DC
+    LDA &2051
+    CMP #&06
+    BEQ L341A
+    LDA #&56
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&02
+    LDX #&04
+    LDY #&0E
+    JSR L3560
+    INC &2051
+    JSR &2800
+    LDX #&20
+    LDY #&57
+    JSR &1236
+    LDA #&08
+    STA &1194
+    LDA #&48
+    STA &1195
+    LDX &2051
+    LDY #&08
+    JSR &1173
+.L341A
+    LDX #&02
+.L341C
+    LDY #&32
+.L341E
+    STX &95
+    STY &96
+    LDA #&13
+    JSR &FFF4
+    LDX &95
+    LDY &96
+    DEY
+    BNE L341E
+    DEX
+    BNE L341C
+    RTS
+    LDA &91
+    CMP #&00
+    BNE L343B
+    JMP L34CD
+.L343B
+    DEC &91
+    LDA #&64
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&03
+    LDX #&03
+    LDY #&05
+    JSR L3560
+    LDA #&30
+    STA &3683
+    LDA #&31
+    STA &3682
+    LDA #&82
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&02
+    LDX #&09
+    LDY #&08
+    JSR L3560
+    LDA #&73
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&01
+    LDX #&03
+    LDY #&0B
+    JSR L3560
+    LDA &91
+    ADC #&30
+    STA &368E
+    LDA #&85
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&02
+    LDX #&05
+    LDY #&0E
+    JSR L3560
+    LDA #&30
+    STA &3682
+    LDA #&39
+    STA &3683
+    JSR L34D7
+.L349F
+    LDA #&82
+    STA &95
+    LDA #&36
+    STA &96
+    LDA #&02
+    LDX #&09
+    LDY #&08
+    JSR L3560
+    JSR L34D7
+    LDX #&9D
+    LDY #&FF
+    LDA #&81
+    JSR &FFF4
+    CPY #&FF
+    BEQ L34EC
+    DEC &3683
+    LDA &3683
+    CMP #&2F
+    BEQ L34CD
+    JMP L349F
+.L34CD
+    LDA #&00
+    STA &9D
+    JSR &2E94
+    JMP L3300
+.L34D7
+    JSR &2E83
+    LDX #&32
+.L34DC
+    STX &95
+    LDA #&13
+    JSR &FFF4
+    DEC &95
+    LDX &95
+    CPX #&00
+    BNE L34DC
+    RTS
+.L34EC
+    JSR &30F8
+    LDA #&00
+    LDX #&05
+.L34F3
+    STA &0CF4,X
+    DEX
+    BNE L34F3
+    LDA #&06
+    STA &0CF3
+    JMP &1100
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+.L350A
+    LDA #&0A
+    LDX #&01
+    LDY #&35
+    JMP &FFF1
+    LDA #&01
+    STA &79
+    LDA &80
+    CMP #&E2
+    BCS L351E
+    RTS
+.L351E
+    CMP #&EC
+    BCC L3523
+    RTS
+.L3523
+    AND #&01
+    CMP #&01
+    BEQ L3541
+    LDX #&0D
+    LDY #&C0
+    JSR &1236
+    LDX #&0F
+    LDY #&10
+    LDA #&00
+    STA &1194
+    LDA #&41
+    STA &1195
+    JMP &1173
+.L3541
+    LDA &8F
+    CMP #&01
+    BNE L355F
+    LDX #&0D
+    LDY #&C0
+    JSR &1236
+    LDX #&0F
+    LDY #&10
+    LDA #&00
+    STA &1194
+    LDA #&7D
+    STA &1195
+    JMP &1173
+.L355F
+    RTS
+.L3560
+    PHA
+    LDA #&11
+    JSR &FFEE
+    PLA
+    JSR &FFEE
+    LDA &95
+    STA &3588
+    LDA &96
+    STA &3589
+    LDA #&1F
+    JSR &FFEE
+    TXA
+    JSR &FFEE
+    TYA
+    JSR &FFEE
+    LDX #&00
+    STX &90
+.L3585
+    LDX &90
+    LDA &FFFF,X
+    CMP #&0D
+    BEQ L355F
+    STA &3501
+    JSR L350A
+    LDA #&17
+    JSR &FFEE
+    LDA #&E1
+    JSR &FFEE
+    LDA #&00
+    JSR &FFEE
+    LDA &3502
+    JSR &FFEE
+    LDA &3503
+    ORA &3502
+    JSR &FFEE
+    LDA #&00
+    JSR &FFEE
+    LDA &3504
+    JSR &FFEE
+    LDA #&00
+    JSR &FFEE
+    LDA &3505
+    JSR &FFEE
+    LDA #&00
+    JSR &FFEE
+    LDA #&17
+    JSR &FFEE
+    LDA #&E2
+    JSR &FFEE
+    LDA &3506
+    JSR &FFEE
+    JSR &FFEE
+    LDA #&00
+    JSR &FFEE
+    LDA &3507
+    JSR &FFEE
+    LDA &3507
+    ORA &3508
+    JSR &FFEE
+    LDA &3508
+    JSR &FFEE
+    LDA #&00
+    JSR &FFEE
+    JSR &FFEE
+    LDA #&E1
+    JSR &FFEE
+    LDA #&08
+    JSR &FFEE
+    LDA #&0A
+    JSR &FFEE
+    LDA #&E2
+    JSR &FFEE
+    LDA #&0B
+    JSR &FFEE
+    INC &90
+    JMP L3585
+    JMP &414F
+    EQUB &44  \ ?? opcode &44
+    EOR #&4E
+    EQUB &47  \ ?? opcode &47
+    ORA &4C50
+    EOR &41
+    EQUB &53  \ ?? opcode &53
+    EOR &20
+    EQUB &57  \ ?? opcode &57
+    EOR (&49,X)
+    EQUB &54  \ ?? opcode &54
+    ORA &4F57
+    EQUB &57  \ ?? opcode &57
+    AND (&0D,X)
+    JMP &5645
+    EOR &4C
+    JSR &2058
+    EQUB &43  \ ?? opcode &43
+    EQUB &4F  \ ?? opcode &4F
+    EOR &4C50
+    EOR &54
+    EOR &44
+    ORA &4F42
+    LSR &5355
+    JSR &3058
+    BMI L3685
+    ORA &202B
+    EOR &58
+    EQUB &54  \ ?? opcode &54
+    EQUB &52  \ ?? opcode &52
+    EOR (&20,X)
+    EQUB &53  \ ?? opcode &53
+    PHA
+    EOR #&50
+    AND (&0D,X)
+    BVC &36B8
+    EOR &53
+    EQUB &53  \ ?? opcode &53
+    JSR &5053
+    EOR (&43,X)
+    EOR &20
+    EQUB &54  \ ?? opcode &54
+    EQUB &4F  \ ?? opcode &4F
+    ORA &4F43
+    LSR &4954
+    LSR &4555
+    JSR &4C50
+    EOR (&59,X)
+    AND (&0D,X)
+    AND (&30),Y
+    ORA &5243
+    EOR &44
+    EOR #&54
+    EQUB &53  \ ?? opcode &53
+    EQUB &3A  \ ?? opcode &3A
+    BMI &36BF
+    EQUB &0D  \ ORA truncated

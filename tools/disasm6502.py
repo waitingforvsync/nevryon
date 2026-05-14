@@ -1,0 +1,430 @@
+#!/usr/bin/env python3
+"""6502 disassembler emitting BeebAsm-compatible source.
+
+BeebAsm syntax conventions used here:
+  - Hex literals use & (e.g. LDA #&FF, LDA &1234)
+  - Labels are introduced with '.' (e.g. .my_routine)
+  - Data: EQUB / EQUW / EQUD / EQUS
+  - ORG <addr> sets origin
+  - Branch targets emit as labels when known
+
+Features:
+  - Reads a control "info" file (TOML or JSON) describing:
+      base address, code/data regions, named labels, comments
+  - Walks the input bytes, decoding instructions from the start of every
+    declared code region, jumping conservatively (we don't trace branches
+    yet — full reachability tracing would require knowing all entry points)
+  - For data regions, emits EQUB / EQUW with optional comment
+  - Auto-generates labels for branch and JSR/JMP targets that fall inside
+    declared code regions
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from dataclasses import dataclass, field
+
+
+# 6502 opcode table. (mnemonic, mode, length).
+# Modes:
+#   imp  - implied / accumulator
+#   imm  - immediate
+#   zp   - zero page
+#   zpx  - zero page,X
+#   zpy  - zero page,Y
+#   abs  - absolute
+#   absx - absolute,X
+#   absy - absolute,Y
+#   ind  - indirect ((abs))
+#   inx  - (zp,X)
+#   iny  - (zp),Y
+#   rel  - relative (branch)
+#   acc  - accumulator (e.g. ASL A)
+#
+# Unknown opcodes emit as EQUB with a comment.
+OPCODES: dict[int, tuple[str, str, int]] = {
+    # ADC
+    0x69: ("ADC", "imm", 2),  0x65: ("ADC", "zp", 2),  0x75: ("ADC", "zpx", 2),
+    0x6D: ("ADC", "abs", 3),  0x7D: ("ADC", "absx", 3), 0x79: ("ADC", "absy", 3),
+    0x61: ("ADC", "inx", 2),  0x71: ("ADC", "iny", 2),
+    # AND
+    0x29: ("AND", "imm", 2),  0x25: ("AND", "zp", 2),  0x35: ("AND", "zpx", 2),
+    0x2D: ("AND", "abs", 3),  0x3D: ("AND", "absx", 3), 0x39: ("AND", "absy", 3),
+    0x21: ("AND", "inx", 2),  0x31: ("AND", "iny", 2),
+    # ASL
+    0x0A: ("ASL", "acc", 1),  0x06: ("ASL", "zp", 2),  0x16: ("ASL", "zpx", 2),
+    0x0E: ("ASL", "abs", 3),  0x1E: ("ASL", "absx", 3),
+    # Branches
+    0x10: ("BPL", "rel", 2),  0x30: ("BMI", "rel", 2),  0x50: ("BVC", "rel", 2),
+    0x70: ("BVS", "rel", 2),  0x90: ("BCC", "rel", 2),  0xB0: ("BCS", "rel", 2),
+    0xD0: ("BNE", "rel", 2),  0xF0: ("BEQ", "rel", 2),
+    # BIT
+    0x24: ("BIT", "zp", 2),  0x2C: ("BIT", "abs", 3),
+    # BRK
+    0x00: ("BRK", "imp", 1),
+    # Flags
+    0x18: ("CLC", "imp", 1),  0xD8: ("CLD", "imp", 1),  0x58: ("CLI", "imp", 1),
+    0xB8: ("CLV", "imp", 1),  0x38: ("SEC", "imp", 1),  0xF8: ("SED", "imp", 1),
+    0x78: ("SEI", "imp", 1),
+    # CMP
+    0xC9: ("CMP", "imm", 2),  0xC5: ("CMP", "zp", 2),  0xD5: ("CMP", "zpx", 2),
+    0xCD: ("CMP", "abs", 3),  0xDD: ("CMP", "absx", 3), 0xD9: ("CMP", "absy", 3),
+    0xC1: ("CMP", "inx", 2),  0xD1: ("CMP", "iny", 2),
+    # CPX, CPY
+    0xE0: ("CPX", "imm", 2),  0xE4: ("CPX", "zp", 2),  0xEC: ("CPX", "abs", 3),
+    0xC0: ("CPY", "imm", 2),  0xC4: ("CPY", "zp", 2),  0xCC: ("CPY", "abs", 3),
+    # DEC, DEX, DEY
+    0xC6: ("DEC", "zp", 2),  0xD6: ("DEC", "zpx", 2),  0xCE: ("DEC", "abs", 3),
+    0xDE: ("DEC", "absx", 3),
+    0xCA: ("DEX", "imp", 1),  0x88: ("DEY", "imp", 1),
+    # EOR
+    0x49: ("EOR", "imm", 2),  0x45: ("EOR", "zp", 2),  0x55: ("EOR", "zpx", 2),
+    0x4D: ("EOR", "abs", 3),  0x5D: ("EOR", "absx", 3), 0x59: ("EOR", "absy", 3),
+    0x41: ("EOR", "inx", 2),  0x51: ("EOR", "iny", 2),
+    # INC, INX, INY
+    0xE6: ("INC", "zp", 2),  0xF6: ("INC", "zpx", 2),  0xEE: ("INC", "abs", 3),
+    0xFE: ("INC", "absx", 3),
+    0xE8: ("INX", "imp", 1),  0xC8: ("INY", "imp", 1),
+    # JMP, JSR, RTS, RTI
+    0x4C: ("JMP", "abs", 3),  0x6C: ("JMP", "ind", 3),  0x20: ("JSR", "abs", 3),
+    0x60: ("RTS", "imp", 1),  0x40: ("RTI", "imp", 1),
+    # LDA
+    0xA9: ("LDA", "imm", 2),  0xA5: ("LDA", "zp", 2),  0xB5: ("LDA", "zpx", 2),
+    0xAD: ("LDA", "abs", 3),  0xBD: ("LDA", "absx", 3), 0xB9: ("LDA", "absy", 3),
+    0xA1: ("LDA", "inx", 2),  0xB1: ("LDA", "iny", 2),
+    # LDX
+    0xA2: ("LDX", "imm", 2),  0xA6: ("LDX", "zp", 2),  0xB6: ("LDX", "zpy", 2),
+    0xAE: ("LDX", "abs", 3),  0xBE: ("LDX", "absy", 3),
+    # LDY
+    0xA0: ("LDY", "imm", 2),  0xA4: ("LDY", "zp", 2),  0xB4: ("LDY", "zpx", 2),
+    0xAC: ("LDY", "abs", 3),  0xBC: ("LDY", "absx", 3),
+    # LSR
+    0x4A: ("LSR", "acc", 1),  0x46: ("LSR", "zp", 2),  0x56: ("LSR", "zpx", 2),
+    0x4E: ("LSR", "abs", 3),  0x5E: ("LSR", "absx", 3),
+    # NOP
+    0xEA: ("NOP", "imp", 1),
+    # ORA
+    0x09: ("ORA", "imm", 2),  0x05: ("ORA", "zp", 2),  0x15: ("ORA", "zpx", 2),
+    0x0D: ("ORA", "abs", 3),  0x1D: ("ORA", "absx", 3), 0x19: ("ORA", "absy", 3),
+    0x01: ("ORA", "inx", 2),  0x11: ("ORA", "iny", 2),
+    # Stack
+    0x48: ("PHA", "imp", 1),  0x68: ("PLA", "imp", 1),  0x08: ("PHP", "imp", 1),
+    0x28: ("PLP", "imp", 1),
+    # ROL, ROR
+    0x2A: ("ROL", "acc", 1),  0x26: ("ROL", "zp", 2),  0x36: ("ROL", "zpx", 2),
+    0x2E: ("ROL", "abs", 3),  0x3E: ("ROL", "absx", 3),
+    0x6A: ("ROR", "acc", 1),  0x66: ("ROR", "zp", 2),  0x76: ("ROR", "zpx", 2),
+    0x6E: ("ROR", "abs", 3),  0x7E: ("ROR", "absx", 3),
+    # SBC
+    0xE9: ("SBC", "imm", 2),  0xE5: ("SBC", "zp", 2),  0xF5: ("SBC", "zpx", 2),
+    0xED: ("SBC", "abs", 3),  0xFD: ("SBC", "absx", 3), 0xF9: ("SBC", "absy", 3),
+    0xE1: ("SBC", "inx", 2),  0xF1: ("SBC", "iny", 2),
+    # STA
+    0x85: ("STA", "zp", 2),  0x95: ("STA", "zpx", 2),  0x8D: ("STA", "abs", 3),
+    0x9D: ("STA", "absx", 3), 0x99: ("STA", "absy", 3),
+    0x81: ("STA", "inx", 2),  0x91: ("STA", "iny", 2),
+    # STX, STY
+    0x86: ("STX", "zp", 2),  0x96: ("STX", "zpy", 2),  0x8E: ("STX", "abs", 3),
+    0x84: ("STY", "zp", 2),  0x94: ("STY", "zpx", 2),  0x8C: ("STY", "abs", 3),
+    # Transfers
+    0xAA: ("TAX", "imp", 1),  0xA8: ("TAY", "imp", 1),  0xBA: ("TSX", "imp", 1),
+    0x8A: ("TXA", "imp", 1),  0x9A: ("TXS", "imp", 1),  0x98: ("TYA", "imp", 1),
+}
+
+
+@dataclass
+class Region:
+    start: int          # absolute CPU address
+    end: int            # exclusive
+    kind: str           # "code" or "data"
+    width: int = 1       # for data: bytes per EQU (1=EQUB, 2=EQUW)
+    comment: str = ""
+
+
+@dataclass
+class DisasmConfig:
+    base: int                                 # ORG address
+    regions: list[Region] = field(default_factory=list)
+    labels: dict[int, str] = field(default_factory=dict)
+    comments: dict[int, str] = field(default_factory=dict)
+    # OS / external addresses to give friendly names
+    extern_labels: dict[int, str] = field(default_factory=dict)
+
+    @classmethod
+    def from_json(cls, path: str) -> "DisasmConfig":
+        with open(path) as f:
+            j = json.load(f)
+        c = cls(base=int(j["base"], 0) if isinstance(j["base"], str) else j["base"])
+        for r in j.get("regions", []):
+            c.regions.append(Region(
+                start=int(r["start"], 0) if isinstance(r["start"], str) else r["start"],
+                end=int(r["end"], 0) if isinstance(r["end"], str) else r["end"],
+                kind=r.get("kind", "code"),
+                width=r.get("width", 1),
+                comment=r.get("comment", ""),
+            ))
+        for k, v in j.get("labels", {}).items():
+            c.labels[int(k, 0)] = v
+        for k, v in j.get("comments", {}).items():
+            c.comments[int(k, 0)] = v
+        for k, v in j.get("extern_labels", {}).items():
+            c.extern_labels[int(k, 0)] = v
+        return c
+
+
+def fmt_hex(value: int, width: int) -> str:
+    return f"&{value:0{width}X}"
+
+
+def fmt_operand(mode: str, value: int, target_label: str | None) -> str:
+    if mode == "imm":
+        return f"#{fmt_hex(value, 2)}"
+    if mode == "zp":
+        return target_label or fmt_hex(value, 2)
+    if mode == "zpx":
+        return f"{target_label or fmt_hex(value, 2)},X"
+    if mode == "zpy":
+        return f"{target_label or fmt_hex(value, 2)},Y"
+    if mode == "abs":
+        return target_label or fmt_hex(value, 4)
+    if mode == "absx":
+        return f"{target_label or fmt_hex(value, 4)},X"
+    if mode == "absy":
+        return f"{target_label or fmt_hex(value, 4)},Y"
+    if mode == "ind":
+        return f"({target_label or fmt_hex(value, 4)})"
+    if mode == "inx":
+        return f"({target_label or fmt_hex(value, 2)},X)"
+    if mode == "iny":
+        return f"({target_label or fmt_hex(value, 2)}),Y"
+    if mode == "rel":
+        return target_label or fmt_hex(value, 4)
+    if mode == "acc":
+        return "A"
+    return ""
+
+
+def collect_branch_targets(data: bytes, base: int, region: Region,
+                           targets: set[int]):
+    """First pass: scan code in this region and add all branch / JMP / JSR
+    targets to the `targets` set (for label generation)."""
+    pc = region.start
+    while pc < region.end:
+        off = pc - base
+        if off < 0 or off >= len(data):
+            break
+        opcode = data[off]
+        info = OPCODES.get(opcode)
+        if info is None:
+            pc += 1
+            continue
+        mnem, mode, length = info
+        if pc + length > region.end:
+            break
+        operand_lo = data[off + 1] if length >= 2 and off + 1 < len(data) else 0
+        operand_hi = data[off + 2] if length >= 3 and off + 2 < len(data) else 0
+
+        if mode == "rel":
+            target = pc + 2 + ((operand_lo - 256) if operand_lo & 0x80 else operand_lo)
+            targets.add(target & 0xFFFF)
+        elif mnem in ("JMP", "JSR") and mode in ("abs", "ind"):
+            target = (operand_hi << 8) | operand_lo
+            targets.add(target)
+        pc += length
+
+
+def disasm_code_region(data: bytes, base: int, region: Region,
+                       labels: dict[int, str], extern_labels: dict[int, str],
+                       comments: dict[int, str], lines: list[str]):
+    pc = region.start
+    while pc < region.end:
+        # Emit pending label if this PC has one
+        if pc in labels:
+            lines.append(f".{labels[pc]}")
+        off = pc - base
+        if off < 0 or off >= len(data):
+            break
+        opcode = data[off]
+        info = OPCODES.get(opcode)
+        if info is None:
+            # Unknown opcode → emit as EQUB
+            cmt = comments.get(pc, "")
+            cmt_str = f"  \\ {cmt}" if cmt else ""
+            lines.append(f"    EQUB {fmt_hex(opcode, 2)}{cmt_str}  \\ ?? opcode &{opcode:02X}")
+            pc += 1
+            continue
+        mnem, mode, length = info
+        if pc + length > region.end:
+            lines.append(f"    EQUB {fmt_hex(opcode, 2)}  \\ {mnem} truncated")
+            pc += 1
+            continue
+
+        operand_lo = data[off + 1] if length >= 2 else 0
+        operand_hi = data[off + 2] if length >= 3 else 0
+
+        if mode == "imm":
+            value = operand_lo
+            operand_str = fmt_operand(mode, value, None)
+        elif mode in ("zp", "zpx", "zpy", "inx", "iny"):
+            value = operand_lo
+            tgt_lbl = (labels.get(value) or extern_labels.get(value))
+            operand_str = fmt_operand(mode, value, tgt_lbl)
+        elif mode == "rel":
+            offset = (operand_lo - 256) if operand_lo & 0x80 else operand_lo
+            value = (pc + 2 + offset) & 0xFFFF
+            tgt_lbl = labels.get(value) or extern_labels.get(value)
+            operand_str = fmt_operand(mode, value, tgt_lbl)
+        elif mode in ("abs", "absx", "absy", "ind"):
+            value = (operand_hi << 8) | operand_lo
+            tgt_lbl = labels.get(value) or extern_labels.get(value)
+            operand_str = fmt_operand(mode, value, tgt_lbl)
+        elif mode == "acc":
+            value = 0
+            operand_str = fmt_operand(mode, 0, None)
+        else:  # imp
+            value = 0
+            operand_str = ""
+
+        cmt = comments.get(pc, "")
+        cmt_str = f"  \\ {cmt}" if cmt else ""
+        if operand_str:
+            lines.append(f"    {mnem} {operand_str}{cmt_str}")
+        else:
+            lines.append(f"    {mnem}{cmt_str}")
+        pc += length
+
+
+def disasm_data_region(data: bytes, base: int, region: Region,
+                       labels: dict[int, str], comments: dict[int, str],
+                       lines: list[str]):
+    pc = region.start
+    while pc < region.end:
+        if pc in labels:
+            lines.append(f".{labels[pc]}")
+        off = pc - base
+        if off < 0 or off >= len(data):
+            break
+        if pc in comments:
+            lines.append(f"    \\ {comments[pc]}")
+
+        if region.width == 2:
+            if pc + 2 > region.end or off + 2 > len(data):
+                lines.append(f"    EQUB {fmt_hex(data[off], 2)}  \\ trailing")
+                pc += 1
+                continue
+            val = data[off] | (data[off + 1] << 8)
+            lines.append(f"    EQUW {fmt_hex(val, 4)}")
+            pc += 2
+        else:
+            # Group up to 8 bytes per line for compactness
+            row = []
+            row_start = pc
+            row_end = min(pc + 8, region.end)
+            while pc < row_end and off < len(data):
+                # Check if next byte has a label; if so, break the line
+                if pc != row_start and pc in labels:
+                    break
+                row.append(fmt_hex(data[off], 2))
+                pc += 1
+                off = pc - base
+                if pc in comments and pc != row_start:
+                    break
+            lines.append(f"    EQUB {', '.join(row)}")
+
+
+def disassemble(data: bytes, cfg: DisasmConfig) -> str:
+    # Auto-collect branch/JSR/JMP targets into the labels map (if not
+    # already named)
+    targets: set[int] = set()
+    for r in cfg.regions:
+        if r.kind == "code":
+            collect_branch_targets(data, cfg.base, r, targets)
+    # Generate L<hex> labels for targets that lie within any code region
+    code_ranges = [(r.start, r.end) for r in cfg.regions if r.kind == "code"]
+    for t in sorted(targets):
+        if any(s <= t < e for s, e in code_ranges):
+            if t not in cfg.labels:
+                cfg.labels[t] = f"L{t:04X}"
+
+    # Build output
+    lines: list[str] = []
+    lines.append("\\ ============================================================")
+    lines.append(f"\\ Auto-disassembly — base {fmt_hex(cfg.base, 4)}")
+    lines.append("\\ ============================================================")
+    lines.append("")
+    if cfg.extern_labels:
+        lines.append("\\ External / OS addresses:")
+        for addr, name in sorted(cfg.extern_labels.items()):
+            lines.append(f"{name:16} = {fmt_hex(addr, 4)}")
+        lines.append("")
+    lines.append(f"ORG {fmt_hex(cfg.base, 4)}")
+    lines.append("")
+
+    # Sort regions and emit
+    sorted_regions = sorted(cfg.regions, key=lambda r: r.start)
+    cursor = cfg.base
+    for r in sorted_regions:
+        # Skip gap before region (or emit as default-data EQUB)
+        if r.start > cursor:
+            gap_region = Region(start=cursor, end=r.start, kind="data", width=1,
+                                comment="(unannotated gap, treated as data)")
+            lines.append("")
+            lines.append(f"\\ --- gap {fmt_hex(cursor, 4)}..{fmt_hex(r.start, 4)} ---")
+            disasm_data_region(data, cfg.base, gap_region, cfg.labels, cfg.comments, lines)
+        lines.append("")
+        lines.append(f"\\ ----- {r.kind} {fmt_hex(r.start, 4)}..{fmt_hex(r.end, 4)} -----")
+        if r.comment:
+            lines.append(f"\\ {r.comment}")
+        if r.kind == "code":
+            disasm_code_region(data, cfg.base, r, cfg.labels, cfg.extern_labels,
+                               cfg.comments, lines)
+        else:
+            disasm_data_region(data, cfg.base, r, cfg.labels, cfg.comments, lines)
+        cursor = r.end
+
+    # Trailing data
+    end_of_file = cfg.base + len(data)
+    if cursor < end_of_file:
+        lines.append("")
+        lines.append(f"\\ --- trailing data {fmt_hex(cursor, 4)}..{fmt_hex(end_of_file, 4)} ---")
+        trailing = Region(start=cursor, end=end_of_file, kind="data", width=1)
+        disasm_data_region(data, cfg.base, trailing, cfg.labels, cfg.comments, lines)
+
+    return "\n".join(lines) + "\n"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("input", help="binary file to disassemble")
+    ap.add_argument("--base", type=lambda s: int(s, 0), required=True,
+                    help="load address (CPU base)")
+    ap.add_argument("--config", help="JSON config file (regions, labels, comments)")
+    ap.add_argument("--end", type=lambda s: int(s, 0),
+                    help="if no config, treat from base..end as one big code region")
+    ap.add_argument("--output", "-o", required=True)
+    args = ap.parse_args()
+
+    with open(args.input, "rb") as f:
+        data = f.read()
+
+    if args.config:
+        cfg = DisasmConfig.from_json(args.config)
+        if cfg.base != args.base:
+            print(f"warning: --base {args.base:#x} != config base {cfg.base:#x}",
+                  file=sys.stderr)
+    else:
+        end = args.end or args.base + len(data)
+        cfg = DisasmConfig(base=args.base,
+                           regions=[Region(start=args.base, end=end, kind="code")])
+
+    out = disassemble(data, cfg)
+    with open(args.output, "w") as f:
+        f.write(out)
+    print(f"wrote {args.output} ({out.count(chr(10))} lines)")
+
+
+if __name__ == "__main__":
+    main()

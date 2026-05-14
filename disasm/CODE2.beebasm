@@ -1,0 +1,1332 @@
+\ ============================================================
+\ Auto-disassembly — base &2800
+\ ============================================================
+
+ORG &2800
+
+
+\ ----- code &2800..&31E9 -----
+.L2800
+    LDA #&07
+    LDX #&09
+    LDY #&28
+    JMP &FFF1
+    EQUB &13  \ ?? opcode &13
+    BRK
+    EQUB &02  \ ?? opcode &02
+    BRK
+    EQUB &4B  \ ?? opcode &4B
+    BRK
+    ORA (&00,X)
+    LDA #&07
+    LDX #&1A
+    LDY #&28
+    JMP &FFF1
+    EQUB &12  \ ?? opcode &12
+    BRK
+    EQUB &02  \ ?? opcode &02
+    BRK
+    PLP
+    BRK
+    ORA (&00,X)
+.L2822
+    STY &28D3
+    LDA #&07
+    LDX #&3B
+    LDY #&28
+    JSR &FFF1
+    LDA #&07
+    LDX #&43
+    LDY #&28
+    JSR &FFF1
+    LDY &28D3
+    RTS
+    BPL L283D
+.L283D
+    SBC (&00),Y
+    EQUB &07  \ ?? opcode &07
+    BRK
+    PLP
+    BRK
+    ORA (&00),Y
+    EQUB &03  \ ?? opcode &03
+    BRK
+    EQUB &FF  \ ?? opcode &FF
+    BRK
+    ORA (&00,X)
+    NOP
+.L284C
+    LDX #&09
+.L284E
+    TXA
+    PHA
+    LDA #&13
+    JSR &FFF4
+    PLA
+    TAX
+    LDA #&57
+    STA &72
+    LDA #&00
+    STA &71
+    DEX
+.L2860
+    INC &72
+    LDA &72
+    CMP #&71
+    BEQ L284E
+    LDY #&00
+.L286A
+    LDA (&71),Y
+    LSR A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    ASL A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    LSR A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    ASL A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    LSR A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    ASL A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    LSR A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    ASL A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    LSR A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    ASL A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    LSR A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    ASL A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    LSR A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    ASL A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    LSR A
+    STA (&71),Y
+    INY
+    LDA (&71),Y
+    ASL A
+    STA (&71),Y
+    INY
+    CPY #&00
+    BEQ L2860
+    CPX #&00
+    BNE L286A
+    RTS
+    NOP
+    NOP
+    NOP
+    NOP
+    LDA &25A5
+    CMP #&01
+    BEQ L28DF
+    RTS
+.L28DF
+    LDX &2972
+    LDY &2973
+    JSR &1236
+    LDA #&80
+    STA &1194
+    LDA #&7D
+    STA &1195
+    LDX #&02
+    LDY #&0C
+    JSR &1173
+    LDX #&9D
+    LDA #&81
+    LDY #&FF
+    JSR &FFF4
+    CPY #&FF
+    BNE L2909
+    JMP L299F
+.L2909
+    LDA &81
+    SEC
+    SBC #&06
+    CMP #&1E
+    BCS L291A
+    CMP &2972
+    BCC L291A
+    JMP L299F
+.L291A
+    CLC
+    ADC #&10
+    CMP &2972
+    BCS L2925
+    JMP L299F
+.L2925
+    LDA &82
+    SEC
+    SBC #&28
+    CMP &2973
+    BCC L2932
+    JMP L299F
+.L2932
+    LDA &82
+    CLC
+    ADC #&1E
+    CMP &2973
+    BCS L293F
+    JMP L299F
+.L293F
+    LDX &2972
+    LDY &2973
+    JSR &1236
+    LDA #&48
+    CLC
+    LDX &2974
+.L294E
+    ADC #&18
+    DEX
+    BNE L294E
+    STA &1194
+    LDA #&38
+    STA &1195
+    LDX #&02
+    LDY #&0C
+    JSR &1173
+    INC &2974
+    LDA &2974
+    CMP #&07
+    BNE L2971
+    LDA #&01
+    STA &2974
+.L2971
+    RTS
+    BRK
+    INY
+    ORA (&AD,X)
+    LDA &25
+    CMP #&01
+    BEQ L297D
+    RTS
+.L297D
+    LDX #&06
+.L297F
+    LDA &16E6,X
+    CMP #&00
+    BEQ L298C
+    DEX
+    CPX #&02
+    BNE L297F
+    RTS
+.L298C
+    LDA &2972
+    STA &16E6,X
+    LDA &2973
+    SEC
+    SBC #&05
+    STA &16ED,X
+    JSR L2800
+    RTS
+.L299F
+    LDX &81
+    INX
+    INX
+    TXA
+    CMP &2972
+    BEQ L29B4
+    BCC L29B1
+    INC &2972
+    JMP L29B4
+.L29B1
+    DEC &2972
+.L29B4
+    LDA &82
+    SEC
+    SBC #&04
+    CMP &2973
+    BEQ L293F
+    BCC L29CC
+    LDA &2973
+    CLC
+    ADC #&04
+    STA &2973
+    JMP L293F
+.L29CC
+    LDA &2973
+    SEC
+    SBC #&04
+    STA &2973
+    JMP L293F
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+.L29E7
+    LDX #&09
+    LDY #&5F
+    JSR &1236
+    LDX #&00
+.L29F0
+    LDA &2A02,X
+    STX &28D3
+    JSR L2A08
+    LDX &28D3
+    INX
+    CPX #&06
+    BNE L29F0
+    RTS
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+.L2A08
+    STX &28D3
+    ASL A
+    ASL A
+    ASL A
+    CLC
+    ADC #&60
+    STA &1194
+    LDA #&3A
+    STA &1195
+    LDX #&01
+    LDY #&08
+    JMP &1173
+    LDA &8F
+    CMP #&02
+    BNE L2A3E
+    STX &28D4
+    LDX #&00
+    LDA &2B9A,X
+    CMP #&FF
+    BEQ L2A3F
+    LDX #&01
+    LDA &2B9A,X
+    CMP #&FF
+    BEQ L2A3F
+    LDX &28D4
+.L2A3E
+    RTS
+.L2A3F
+    STX &28D3
+    LDX &28D4
+    LDA &2052,X
+    CMP #&08
+    BCC L2A9E
+    CMP #&25
+    BCS L2A9E
+    CLC
+    ADC #&02
+    LDX &28D3
+    STA &2B9A,X
+    LDX &28D4
+    LDA &206E,X
+    CMP #&01
+    BEQ L2A6F
+    STA &2B9E
+    LDA &205C,X
+    SEC
+    SBC #&18
+    JMP L2A7B
+.L2A6F
+    LDX &28D3
+    STA &2B9E,X
+    LDX &28D4
+    LDA &205C,X
+.L2A7B
+    LDX &28D3
+    STA &2B9C,X
+    LDA #&00
+    STA &2BA0,X
+    STA &2BA2,X
+    LDA &81
+    CLC
+    ADC #&03
+    CMP &2B9A,X
+    BCS L2A96
+    JMP L2A9B
+.L2A96
+    LDA #&01
+    STA &2BA2,X
+.L2A9B
+    JSR L2E83
+.L2A9E
+    LDX &28D4
+    RTS
+    LDX #&00
+    LDA &2B9A,X
+    CMP #&FF
+    BEQ L2AAE
+    JSR L2AC4
+.L2AAE
+    LDX #&01
+    LDA &2B9A,X
+    CMP #&FF
+    BEQ L2ABA
+    JSR L2AC4
+.L2ABA
+    LDX #&00
+    JSR L2B48
+    LDX #&01
+    JMP L2B48
+.L2AC4
+    STX &28D3
+    LDA &2B9A,X
+    LDY &2B9C,X
+    TAX
+    JSR &1236
+    LDA #&80
+    STA &1194
+    LDA #&7D
+    STA &1195
+    LDX #&01
+    LDY #&06
+    JSR &1173
+    LDX &28D3
+    LDA &2BA2,X
+    CMP #&01
+    BEQ L2AF5
+    DEC &2B9A,X
+    DEC &2B9A,X
+    JMP L2AF8
+.L2AF5
+    INC &2B9A,X
+.L2AF8
+    LDA &2B9A,X
+    CMP #&03
+    BCC L2B42
+    CMP #&25
+    BCS L2B42
+    LDA &2B9E,X
+    CMP #&01
+    BEQ L2B1A
+    SEC
+    LDA &2B9C,X
+    SBC #&02
+    STA &2B9C,X
+    CMP #&82
+    BCC L2B42
+    JMP L2B27
+.L2B1A
+    CLC
+    LDA &2B9C,X
+    ADC #&02
+    STA &2B9C,X
+    CMP #&C8
+    BCS L2B42
+.L2B27
+    LDA &2B9A,X
+    LDY &2B9C,X
+    TAX
+    JSR &1236
+    LDA #&B0
+    STA &1194
+    LDA #&3A
+    STA &1195
+    LDX #&01
+    LDY #&06
+    JMP &1173
+.L2B42
+    LDA #&FF
+    STA &2B9A,X
+    RTS
+.L2B48
+    STX &28D3
+    LDA &2B9A,X
+    STA &83
+    LDA &2B9C,X
+    SEC
+    SBC #&04
+    STA &84
+    LDA &81
+    CMP &83
+    BCS L2B99
+    ADC #&06
+    CMP &83
+    BCC L2B99
+    LDA &82
+    CMP &84
+    BCC L2B99
+    SBC #&18
+    CMP &84
+    BCS L2B99
+    LDY &2B9C,X
+    LDA &2B9A,X
+    TAX
+    JSR &1236
+    LDA #&80
+    STA &1194
+    LDA #&7D
+    STA &1195
+    LDX #&01
+    LDY #&06
+    JSR &1173
+    LDX &28D3
+    LDA #&FF
+    STA &2B9A,X
+    JSR &1DEE
+    JSR L2822
+.L2B99
+    RTS
+    EQUB &FF  \ ?? opcode &FF
+    EQUB &FF  \ ?? opcode &FF
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+.L2BA4
+    JSR L29E7
+    LDA #&08
+    STA &28D3
+.L2BAC
+    LDX &28D3
+    LDY #&57
+    JSR &1236
+    LDA #&00
+    STA &1194
+    LDA #&48
+    STA &1195
+    LDX #&01
+    LDY #&08
+    JSR &1173
+    INC &28D3
+    LDA &28D3
+    CMP #&0F
+    BNE L2BAC
+    JSR L284C
+    LDX #&00
+    STX &28D5
+    JSR L2822
+.L2BDA
+    LDX &28D5
+    INX
+    STX &28D5
+    CPX #&4B
+    BEQ L2C20
+    JSR &1309
+    LDX #&0C
+    LDY #&C8
+    JSR &1236
+    LDX #&08
+    LDY #&10
+    LDA #&00
+    STA &1194
+    LDA #&41
+    STA &1195
+    JSR &1173
+    LDX #&14
+    LDY #&C8
+    JSR &1236
+    LDX #&08
+    LDY #&10
+    LDA #&80
+    STA &1194
+    LDA #&41
+    STA &1195
+    JSR &1173
+    LDA #&13
+    JSR &FFF4
+    JMP L2BDA
+.L2C20
+    LDX #&0C
+    LDY #&C8
+    JSR &1236
+    LDX #&08
+    LDY #&10
+    LDA #&80
+    STA &1194
+    LDA #&7D
+    STA &1195
+    JSR &1173
+    LDX #&14
+    LDY #&C8
+    JSR &1236
+    LDX #&08
+    LDY #&10
+    LDA #&80
+    STA &1194
+    LDA #&7D
+    STA &1195
+    JSR &1173
+    LDX #&00
+    STX &28D5
+.L2C55
+    INC &28D5
+    LDX &28D5
+    CPX #&19
+    BEQ L2C6A
+    JSR &1309
+    LDA #&13
+    JSR &FFF4
+    JMP L2C55
+.L2C6A
+    JSR L2822
+    LDX #&00
+    STX &28D5
+.L2C72
+    LDX &28D5
+    INX
+    STX &28D5
+    CPX #&64
+    BEQ L2CB8
+    JSR &1309
+    LDX #&0E
+    LDY #&C8
+    JSR &1236
+    LDX #&08
+    LDY #&10
+    LDA #&00
+    STA &1194
+    LDA #&42
+    STA &1195
+    JSR &1173
+    LDX #&16
+    LDY #&C8
+    JSR &1236
+    LDX #&05
+    LDY #&10
+    LDA #&00
+    STA &1194
+    LDA #&43
+    STA &1195
+    JSR &1173
+    LDA #&13
+    JSR &FFF4
+    JMP L2C72
+.L2CB8
+    LDA #&FF
+    STA &2B9A
+    STA &2B9B
+    LDA #&03
+    STA &8F
+    JSR L2EFF
+    JMP L2822
+    JSR L284C
+    JSR &1309
+    LDA #&08
+    STA &28D3
+.L2CD5
+    LDX &28D3
+    LDY #&57
+    JSR &1236
+    LDA #&00
+    STA &1194
+    LDA #&48
+    STA &1195
+    LDX #&01
+    LDY #&08
+    JSR &1173
+    INC &28D3
+    LDA &28D3
+    CMP #&0F
+    BNE L2CD5
+    LDX #&20
+    LDY #&5F
+    JSR &1236
+    LDA #&08
+    STA &1194
+    LDA #&48
+    STA &1195
+    LDX &9A
+    LDY #&08
+    JSR &1173
+    LDX #&20
+    LDY #&57
+    JSR &1236
+    LDA #&08
+    STA &1194
+    LDA #&48
+    STA &1195
+    LDX #&06
+    LDY #&08
+    NOP
+    NOP
+    NOP
+    LDX #&07
+    LDY #&FD
+    JSR &1236
+    LDA #&00
+    STA &1194
+    LDA #&3D
+    STA &1195
+    LDX #&07
+    LDY #&20
+    JSR &1173
+    LDX #&11
+    LDY #&F7
+    JSR &1236
+    LDA #&60
+    STA &1194
+    LDA #&3F
+    STA &1195
+    LDX #&08
+    LDY #&10
+    JSR &1173
+    LDX #&19
+    LDY #&F7
+    JSR &1236
+    LDA #&E0
+    STA &1194
+    LDA #&3F
+    STA &1195
+    LDX #&08
+    LDY #&10
+    JSR &1173
+    LDX #&0A
+    LDY #&82
+    JSR &1236
+    LDA #&C0
+    STA &1194
+    LDA #&3B
+    STA &1195
+    LDX #&0A
+    LDY #&10
+    JSR &1173
+    LDX #&14
+    LDY #&82
+    JSR &1236
+    LDA #&60
+    STA &1194
+    LDA #&3C
+    STA &1195
+    LDX #&0A
+    LDY #&10
+    JSR &1173
+    JSR L2E60
+    LDX #&11
+    LDY #&BE
+    JSR &1236
+    LDX #&00
+    JSR L29F0
+    LDA #&00
+    LDX #&00
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    JSR L29E7
+    JSR L2E3F
+.L2DC1
+    JSR &1309
+    LDX #&0F
+    LDY #&D2
+    JSR &1236
+    LDA #&E0
+    STA &1194
+    LDA #&3D
+    STA &1195
+    LDX #&09
+    LDY #&10
+    JSR &1173
+    LDX #&0B
+    LDY #&D2
+    JSR &1236
+    LDA #&80
+    STA &1194
+    LDA #&3E
+    STA &1195
+    LDX #&07
+    LDY #&10
+    NOP
+    NOP
+    NOP
+    LDX #&14
+    LDY #&AA
+    JSR &1236
+    LDA #&E0
+    STA &1194
+    LDA #&3D
+    STA &1195
+    LDX #&09
+    LDY #&10
+    JSR &1173
+    LDX #&0B
+    LDY #&AA
+    JSR &1236
+    LDA #&F0
+    STA &1194
+    LDA #&3E
+    STA &1195
+    LDX #&07
+    LDY #&10
+    JSR &1173
+    LDA #&13
+    JSR &FFF4
+    LDX #&9D
+    LDY #&FF
+    LDA #&81
+    JSR &FFF4
+    CPY #&FF
+    BEQ L2E39
+    JMP L2DC1
+.L2E39
+    JSR L284C
+    JMP L2BA4
+.L2E3F
+    LDX #&11
+    LDY #&96
+    JSR &1236
+    LDX #&00
+.L2E48
+    LDA &2E5A,X
+    STX &28D3
+    JSR L2A08
+    LDX &28D3
+    INX
+    CPX #&06
+    BNE L2E48
+    RTS
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+.L2E60
+    LDX #&00
+.L2E62
+    LDA &2E5A,X
+    CMP &2A02,X
+    BEQ L2E6F
+    BCS L2E74
+    JMP L2E75
+.L2E6F
+    INX
+    CPX #&06
+    BNE L2E62
+.L2E74
+    RTS
+.L2E75
+    LDX #&00
+.L2E77
+    LDA &2A02,X
+    STA &2E5A,X
+    INX
+    CPX #&06
+    BNE L2E77
+    RTS
+.L2E83
+    LDA #&07
+    LDX #&8C
+    LDY #&2E
+    JMP &FFF1
+    EQUB &12  \ ?? opcode &12
+    BRK
+    EQUB &04  \ ?? opcode &04
+    BRK
+    EQUB &64  \ ?? opcode &64
+    BRK
+    EQUB &03  \ ?? opcode &03
+    BRK
+    LDA #&06
+    NOP
+    NOP
+    NOP
+    JSR L284C
+    JSR L2822
+    LDX #&00
+    STX &28D8
+.L2EA4
+    LDX &28D8
+    INX
+    STX &28D8
+    CPX #&C8
+    BEQ L2EEA
+    JSR &1309
+    LDX #&0C
+    LDY #&C8
+    JSR &1236
+    LDX #&08
+    LDY #&10
+    LDA #&00
+    STA &1194
+    LDA #&42
+    STA &1195
+    JSR &1173
+    LDX #&15
+    LDY #&C8
+    JSR &1236
+    LDX #&08
+    LDY #&10
+    LDA #&80
+    STA &1194
+    LDA #&42
+    STA &1195
+    JSR &1173
+    LDA #&13
+    JSR &FFF4
+    JMP L2EA4
+.L2EEA
+    JMP L284C
+    LDA #&07
+    LDX #&F6
+    LDY #&2E
+    JMP &FFF1
+    ORA (&00),Y
+    EQUB &04  \ ?? opcode &04
+    BRK
+    EQUB &FF  \ ?? opcode &FF
+    BRK
+    EQUB &0F  \ ?? opcode &0F
+    BRK
+    NOP
+.L2EFF
+    LDA &2051
+    CMP #&06
+    BEQ L2F09
+    JMP L31B1
+.L2F09
+    LDA #&00
+    STA &2EFE
+    JSR L284C
+    JSR L2F20
+    JSR L2F2D
+    JSR L2F3A
+    JSR L2F47
+    JMP L2F78
+.L2F20
+    JSR L2F54
+    LDA #&D8
+    STA &1194
+    LDX #&01
+    JMP &1173
+.L2F2D
+    JSR L2F54
+    LDA #&C2
+    STA &1194
+    LDX #&02
+    JMP &1173
+.L2F3A
+    JSR L2F54
+    LDA #&AC
+    STA &1194
+    LDX #&03
+    JMP &1173
+.L2F47
+    JSR L2F54
+    LDA #&96
+    STA &1194
+    LDX #&04
+    JMP &1173
+.L2F54
+    JSR L2F66
+    LDX #&00
+    LDY #&C8
+    JSR &1236
+    LDA #&4E
+    STA &1195
+    LDY #&16
+    RTS
+.L2F66
+    JSR &1309
+    LDX #&3C
+.L2F6B
+    LDY #&FF
+.L2F6D
+    DEY
+    BNE L2F6D
+    DEX
+    BNE L2F6B
+    LDA #&13
+    JMP &FFF4
+.L2F78
+    LDA #&00
+    STA &90
+.L2F7C
+    JSR L2F66
+    LDX &90
+    LDY #&C8
+    JSR &1236
+    LDX #&05
+    LDY #&16
+    LDA #&80
+    STA &1194
+    LDA #&4E
+    STA &1195
+    JSR &1173
+    INC &90
+    LDA &90
+    CMP #&04
+    BCC L2FEB
+    LDA &90
+    SEC
+    SBC #&04
+    TAX
+    LDY #&C4
+    JSR &1236
+    LDX #&04
+    LDY #&10
+    LDA #&90
+    STA &1194
+    LDA #&36
+    STA &1195
+    LDA &2EFE
+    CMP #&01
+    BNE L2FC4
+    LDA #&C0
+    STA &1194
+.L2FC4
+    LDA &2EFE
+    EOR #&01
+    STA &2EFE
+    JSR &1173
+    LDA &90
+    SEC
+    SBC #&05
+    TAX
+    LDY #&C4
+    JSR &1236
+    LDX #&01
+    LDY #&10
+    LDA #&80
+    STA &1194
+    LDA #&7D
+.L2FE5
+    STA &1195
+    JSR &1173
+.L2FEB
+    LDA &90
+    CMP #&19
+    BNE L2F7C
+    LDA &90
+    SEC
+    SBC #&04
+    TAX
+    LDY #&C4
+    JSR &1236
+    LDA #&80
+    STA &1194
+    LDA #&7D
+    STA &1195
+    LDX #&04
+    LDY #&10
+    JSR &1173
+    JSR L2F66
+    JSR L2F66
+    JSR L2F66
+    JSR L2F66
+    DEC &90
+.L301B
+    JSR L2F66
+.L301E
+    LDX &90
+    LDY #&C8
+    JSR &1236
+    LDX #&06
+    LDY #&16
+    LDA #&80
+    STA &1194
+    LDA #&4E
+    STA &1195
+    JSR &1173
+    DEC &90
+.L3038
+    LDA &90
+    CMP #&04
+    BNE L301B
+    INC &90
+    RTS
+    BRK
+    BNE L305C
+    BMI L308E
+    BEQ L3038
+    BPL L3052
+    SEC
+    BNE L2FE5
+    PLA
+    BVS L30B8
+    BCC L2FE2
+.L3052
+    BEQ L305C
+    BPL L301E
+    BPL L30A8
+    INX
+    PLP
+    BEQ L30AC
+.L305C
+    BCC L300E
+    BCS L3060
+.L3060
+    PLP
+.L3061
+    PHP
+    LDY #&B8
+    CLD
+    CLI
+    BEQ L3018
+    SED
+    INY
+    BRK
+    BCS L30D5
+    LDY #&90
+    EQUB &80  \ ?? opcode &80
+    SED
+    PLA
+    BEQ L30A4
+    SED
+    BPL L30C7
+    BCS L3061
+    PHA
+    CPX #&E0
+    BEQ L30BE
+    JMP (&636A)
+    LSR &6366,X
+    EQUB &63  \ ?? opcode &63
+    ROR &6A
+    EQUB &5F  \ ?? opcode &5F
+    RTS
+    LSR &6B5F,X
+    PLA
+    EQUB &62  \ ?? opcode &62
+.L308E
+    ROR &6B
+    EQUB &63  \ ?? opcode &63
+    ADC #&61
+    LSR &656B,X
+    ADC &69
+    EQUB &5F  \ ?? opcode &5F
+    PLA
+    ROR &61
+    ADC (&69,X)
+    ROR A
+    ADC &69
+    ADC &5F
+    ROR A
+.L30A4
+    EQUB &67  \ ?? opcode &67
+    EQUB &5F  \ ?? opcode &5F
+    EQUB &62  \ ?? opcode &62
+    EQUB &63  \ ?? opcode &63
+.L30A8
+    EQUB &63  \ ?? opcode &63
+    ADC (&5E,X)
+    ADC (&63,X)
+    EQUB &6B  \ ?? opcode &6B
+    EQUB &62  \ ?? opcode &62
+    EQUB &62  \ ?? opcode &62
+    EQUB &62  \ ?? opcode &62
+    LSR &6266,X
+    EQUB &62  \ ?? opcode &62
+    EQUB &6B  \ ?? opcode &6B
+    EQUB &5F  \ ?? opcode &5F
+    ROR A
+.L30B8
+    ROR A
+    EQUB &67  \ ?? opcode &67
+    EQUB &5F  \ ?? opcode &5F
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+.L30BE
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+.L30C7
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &03  \ ?? opcode &03
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+.L30D5
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    EQUB &02  \ ?? opcode &02
+    JSR L2E60
+    LDX #&00
+.L30FD
+    LDA &2A02,X
+    STA &0CF4,X
+    LDA &2E5A,X
+    STA &0CFA,X
+    INX
+    CPX #&06
+    BNE L30FD
+    LDA &2051
+    STA &0CF3
+    RTS
+    LDX #&00
+.L3117
+    LDA &0CF4,X
+    STA &2A02,X
+    LDA &0CFA,X
+    STA &2E5A,X
+    INX
+    CPX #&06
+    BNE L3117
+    LDA &0CF3
+    STA &2051
+    LDA #&20
+    STA &28D3
+.L3133
+    LDX &28D3
+    LDY #&57
+    JSR &1236
+    LDA #&00
+    STA &1194
+    LDA #&48
+    STA &1195
+    LDX #&01
+    LDY #&08
+    JSR &1173
+    INC &28D3
+    LDA &28D3
+    CMP #&26
+    BNE L3133
+    LDX #&20
+    LDY #&57
+    JSR &1236
+    LDX &2051
+    LDY #&08
+    LDA #&08
+    STA &1194
+    LDA #&48
+    STA &1195
+    JMP &1173
+    RTS
+    LDX #&10
+    LDY #&D0
+    JSR &1236
+    LDA #&80
+    STA &1194
+    LDA #&47
+    STA &1195
+    LDX #&09
+    LDY #&0E
+    LDA #&01
+    STA &79
+    JSR &1173
+.L318C
+    LDX #&C9
+    LDA #&81
+    LDY #&FF
+    JSR &FFF4
+    CPY #&FF
+    BNE L318C
+    LDX #&10
+    LDY #&D0
+    JSR &1236
+    LDA #&80
+    STA &1194
+    LDA #&7D
+    STA &1195
+    LDX #&09
+    LDY #&0E
+    JMP &1173
+.L31B1
+    JSR L284C
+    JSR L2F20
+    JSR L2F2D
+    JSR L2F3A
+    JSR L2F47
+    LDA #&00
+    STA &90
+.L31C4
+    JSR L2F66
+    LDX &90
+    LDY #&C8
+    JSR &1236
+    LDX #&05
+    LDY #&16
+    LDA #&80
+    STA &1194
+    LDA #&4E
+    STA &1195
+    JSR &1173
+    INC &90
+    LDA &90
+    CMP #&06
+    BNE L31C4
+    RTS
+    RTS

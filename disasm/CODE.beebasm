@@ -1,0 +1,3042 @@
+\ ============================================================
+\ Auto-disassembly — base &1100
+\ ============================================================
+
+\ External / OS addresses:
+OSRDCH           = &FFE0
+OSWRCH           = &FFEE
+OSWORD           = &FFF1
+OSBYTE           = &FFF4
+OSCLI            = &FFF7
+
+ORG &1100
+
+
+\ ----- code &1100..&1141 -----
+\ entry: jsr init x3 -> main loop
+.main_init
+    JSR &3115  \ Entry: jsr to three init routines then drop into main loop
+    JSR L1F8E
+    JSR &2CCA
+.main_loop
+    JSR L13D1
+    LDA &2051
+    BNE L1114
+    JMP &3432
+.L1114
+    LDX #&8F
+    JSR L155B
+    BNE L1130
+    LDA #&01
+    STA &2051
+    JSR L1E47
+    LDA #&00
+    STA zp_level_num
+    JSR &30F8
+    JSR &2E94
+    JMP &3300
+.L1130
+    LDA &268F
+    BEQ main_loop
+    JSR &3325
+    JSR L284C
+    JMP &3300
+    JMP main_loop
+
+\ ----- code &1141..&116F -----
+\ LFSR random number generator (jsr targets at 898/907/1318/2406)
+.lfsr_random
+    LDY #&20  \ Sprite plot routine: $76/$77 = dest screen addr; L1194/L1195 = sprite src (self-mod); $74 = width-in-byte-cols; $75 = height-in-scanlines; $79 = direction flag (1 = forward)
+.L1143
+    LDA &0F
+    LSR A
+    LSR A
+    LSR A
+    EOR &11
+    ROR A
+    ROL &0D
+    ROL &0E
+    ROL &0F
+    ROL &10
+    ROL &11
+    DEY
+    BNE L1143
+    LDA &0D
+    STA &116B
+    LSR A
+    LSR A
+    STA &116C
+    LSR A
+    STA &116D
+    LSR A
+    STA &116E
+    RTS
+    NOP
+    NOP
+    NOP
+    NOP
+
+\ ----- code &116F..&1209 -----
+\ sprite plot: L116F = parameterless (X=1, Y=32); L1173 = X=width, Y=height; L1184 = inner loop using $74/$75/$76/$77/$78/$79 and self-mod source L1194/L1195
+.sprite_plot_default
+    LDX #&01
+    LDY #&20
+.sprite_plot_xy
+    STX zp_sprite_cols_remaining
+    STY zp_sprite_height
+    STY zp_sprite_end_index
+    LDX #&00
+    LDA zp_sprite_dir_flag
+    CMP #&01
+    BEQ sprite_plot_inner
+    LDX zp_sprite_height
+    DEX
+.sprite_plot_inner
+    LDA zp_dest_x_lo
+    AND #&F8
+    STA zp_screen_ptr_lo
+    LDA zp_dest_x_hi
+    STA zp_screen_ptr_hi
+    LDA zp_dest_x_lo
+    AND #&07
+    TAY
+.sprite_plot_lda_sm
+    LDA &FFFF,X
+    STA (zp_screen_ptr_lo),Y
+    LDA zp_sprite_dir_flag
+    BEQ L11D5
+    INX
+    BEQ L1203
+.L119F
+    INY
+    CPX zp_sprite_end_index
+    BEQ L11BE
+    CPY #&08
+    BNE sprite_plot_lda_sm
+    LDA zp_screen_ptr_lo
+    ADC #&3F
+    STA zp_screen_ptr_lo
+    LDA zp_screen_ptr_hi
+    ADC #&01
+    STA zp_screen_ptr_hi
+    LDY #&00
+    BEQ sprite_plot_lda_sm
+    INC sprite_src_hi
+    JMP L119F
+.L11BE
+    CLC
+    LDA zp_dest_x_lo
+    ADC #&08
+    STA zp_dest_x_lo
+    BCC L11C9
+    INC zp_dest_x_hi
+.L11C9
+    CLC
+    LDA zp_sprite_end_index
+    ADC zp_sprite_height
+    STA zp_sprite_end_index
+    DEC zp_sprite_cols_remaining
+    BNE sprite_plot_inner
+    RTS
+.L11D5
+    DEX
+.L11D6
+    INY
+    CPX #&FF
+    BNE L11EF
+    LDX zp_sprite_height
+    DEX
+    LDA sprite_src_lo
+    CLC
+    ADC #&20
+    STA sprite_src_lo
+    BNE L11BE
+    INC sprite_src_hi
+    JMP L11BE
+.L11EF
+    CPY #&08
+    BNE sprite_plot_lda_sm
+    LDA zp_screen_ptr_lo
+    ADC #&3F
+    STA zp_screen_ptr_lo
+    LDA zp_screen_ptr_hi
+    ADC #&01
+    STA zp_screen_ptr_hi
+    LDY #&00
+    BEQ sprite_plot_lda_sm
+.L1203
+    INC sprite_src_hi
+    JMP L11D6
+
+\ ----- data &1209..&121F -----
+\ screen line LUT - low byte for each of 22 char rows (MODE 5, base &5800, stride &140)
+.screen_row_lo_lut
+    \ Screen char-row low-byte LUT — MODE 5 with base &5800, stride &140 per char row
+    EQUB &00, &40, &80, &C0, &00, &40, &80, &C0
+    EQUB &00, &40, &80, &C0, &00, &40, &80, &C0
+    EQUB &00, &40, &80, &C0, &00, &40
+
+\ ----- data &121F..&1235 -----
+\ screen line LUT - high byte (corresponds to L1209 entries)
+.screen_row_hi_lut
+    \ Screen char-row high-byte LUT — pairs with screen_row_lo_lut
+    EQUB &58, &59, &5A, &5B, &5D, &5E, &5F, &60
+    EQUB &62, &63, &64, &65, &67, &68, &69, &6A
+    EQUB &6C, &6D, &6E, &6F, &71, &72
+
+\ ----- code &1235..&2873 -----
+\ remainder of CODE (game logic, will be subdivided as we learn more)
+    NOP
+.calc_screen_addr
+    TYA  \ Compute screen address from X (char-col) and Y (logical row); result in $76/$77
+    EOR #&FF
+    TAY
+    AND #&07
+    STA zp_dest_x_hi
+    TYA
+    LSR A
+    LSR A
+    LSR A
+    TAY
+    LDA screen_row_lo_lut,Y
+    STA zp_dest_x_lo
+    LDA zp_dest_x_hi
+    CMP #&08
+    BEQ L1252
+    ADC zp_dest_x_lo
+    STA zp_dest_x_lo
+.L1252
+    LDA screen_row_hi_lut,Y
+    STA zp_dest_x_hi
+    TXA
+    BEQ L126B
+    TAY
+    CLC
+.L125C
+    LDA zp_dest_x_lo
+    ADC #&08
+    STA zp_dest_x_lo
+    LDA zp_dest_x_hi
+    ADC #&00
+    STA zp_dest_x_hi
+    DEY
+    BNE L125C
+.L126B
+    RTS
+.L126C
+    LDA &80
+    CMP #&F0
+    BNE L127B
+    JSR L2656
+    JMP L210A
+    JMP L210A
+.L127B
+    JSR L1309
+    JSR L210A
+    JSR &3513
+    LDX #&27
+    LDY #&FF
+    JSR calc_screen_addr
+    LDA #&00
+    STA &12C8
+    STA &12C2
+    STA zp_sprite_dir_flag
+    LDA zp_sprite_src_lo
+    STA sprite_src_lo
+    CLC
+    ADC #&20
+    STA zp_sprite_src_lo
+    LDA zp_sprite_src_hi
+    STA sprite_src_hi
+    LDA #&58
+    STA &12C6
+    STA &12C9
+    LDA #&6C
+    STA &12C0
+    STA &12C3
+    LDX #&05
+    LDA #&08
+    STA &12BF
+    STA &12C5
+.L12BE
+    LDA &FFFF
+    STA &FFFF
+    LDA &FFFF
+    STA &FFFF
+    INC &12BF
+    INC &12C5
+    BNE L12D8
+    INC &12C0
+    INC &12C6
+.L12D8
+    INC &12C2
+    INC &12C8
+    BNE L12BE
+    INC &12C3
+    INC &12C9
+    DEX
+    BNE L12BE
+    JSR sprite_plot_default
+    LDX #&27
+    LDY #&7F
+    JSR calc_screen_addr
+    INC zp_sprite_dir_flag
+    LDA zp_sprite_src2_lo
+    STA sprite_src_lo
+    CLC
+    ADC #&20
+    STA zp_sprite_src2_lo
+    LDA zp_sprite_src2_hi
+    STA sprite_src_hi
+    JMP sprite_plot_default
+    BPL L130A
+.L1309
+    SEC
+.L130A
+    LDY #&00
+    LDX #&00
+    LDA &1307
+    EOR #&50
+    STA &1307
+    ASL &1308
+.L1319
+    LDA &30BB,X
+    CMP #&02
+    BNE L136C
+    LDA &3041,X
+    STA zp_screen_ptr_lo
+    LDA &307E,X
+    STA zp_screen_ptr_hi
+    LDA &1307
+    CMP #&10
+    BNE L133B
+    LDA #&40
+    STA (zp_screen_ptr_lo),Y
+.L1335
+    INX
+    CPX #&3C
+    BNE L1319
+    RTS
+.L133B
+    LDA #&00
+    STA (zp_screen_ptr_lo),Y
+    LDA zp_screen_ptr_lo
+    SBC #&08
+    STA &3041,X
+    CMP #&F8
+    BNE L135B
+    LDA &307E,X
+    SBC #&01
+    STA &307E,X
+    CMP #&5C
+    BNE L135B
+    LDA #&6B
+    STA &307E,X
+.L135B
+    LDA &3041,X
+    STA zp_screen_ptr_lo
+    LDA &307E,X
+    STA zp_screen_ptr_hi
+    LDA #&10
+    STA (zp_screen_ptr_lo),Y
+    JMP L1335
+.L136C
+    LDA &3041,X
+    STA zp_screen_ptr_lo
+    LDA &307E,X
+    STA zp_screen_ptr_hi
+    LDA &1308
+    CMP #&10
+    BNE L1382
+    LDA #&01
+    STA &1308
+.L1382
+    CMP #&01
+    BNE L13B7
+    LDA #&00
+    STA (zp_screen_ptr_lo),Y
+    LDA zp_screen_ptr_lo
+    SBC #&08
+    STA &3041,X
+    CMP #&F8
+    BNE L13A6
+    LDA &307E,X
+    SBC #&01
+    STA &307E,X
+    CMP #&5C
+    BNE L13A6
+    LDA #&6B
+    STA &307E,X
+.L13A6
+    LDA &3041,X
+    STA zp_screen_ptr_lo
+    LDA &307E,X
+    STA zp_screen_ptr_hi
+    LDA #&01
+    STA (zp_screen_ptr_lo),Y
+    JMP L1335
+.L13B7
+    STA (zp_screen_ptr_lo),Y
+    JMP L1335
+.L13BC
+    LDX &7A
+    CPX #&64
+    BCS L13C4
+    LDX #&FE
+.L13C4
+    LDY #&00
+.L13C6
+    INY
+    BNE L13C6
+    INX
+    BNE L13C4
+    LDA &92
+    STA &7A
+    RTS
+.L13D1
+    JSR L25AA
+    JSR L1712
+    JSR L208A
+    LDX &80
+    LDA &7F10,X
+    TAX
+    INX
+    LDA #&4E
+    STA zp_sprite_src2_hi
+    LDA #&80
+    STA zp_sprite_src2_lo
+    LDA #&00
+    STA zp_dest_x_lo
+.L13ED
+    INC zp_dest_x_lo
+    LDA zp_sprite_src2_lo
+    CLC
+    ADC #&80
+    STA zp_sprite_src2_lo
+    BNE L13FA
+    INC zp_sprite_src2_hi
+.L13FA
+    CPX zp_dest_x_lo
+    BNE L13ED
+    LDX &80
+    LDA &7E10,X
+    TAX
+    INX
+    LDA #&4E
+    STA zp_sprite_src_hi
+    LDA #&80
+    STA zp_sprite_src_lo
+    LDA #&00
+    STA zp_dest_x_lo
+.L1411
+    INC zp_dest_x_lo
+    LDA zp_sprite_src_lo
+    CLC
+    ADC #&80
+    STA zp_sprite_src_lo
+    BNE L141E
+    INC zp_sprite_src_hi
+.L141E
+    CPX zp_dest_x_lo
+    BNE L1411
+    INC &80
+    LDA &80
+    CMP #&F1
+    BNE L142E
+    LDA #&F0
+    STA &80
+.L142E
+    LDX #&C8
+    JSR L155B
+    BNE L1438
+    JSR &3170
+.L1438
+    LDA #&00
+    STA &8F
+.L143C
+    LDA &2051
+    BEQ L1477
+    JSR &2AA2
+    JSR &29E7
+    JSR &28D7
+    INC &8F
+    JSR L13BC
+    JSR L1AEB
+    JSR L126C
+    LDX #&00
+    STX &70FF
+    INX
+    STX zp_sprite_dir_flag
+    JSR L2693
+    JSR L15C4
+    JSR L14D9
+    LDA &80
+    AND #&01
+    BNE L1471
+    INC &7A
+    JSR &3513
+.L1471
+    LDA &8F
+    CMP #&04
+    BCC L143C
+.L1477
+    RTS
+.L1478
+    LDX &81
+    LDY &82
+    JSR calc_screen_addr
+    LDX #&06
+    LDY #&16
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&4E
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDA &25A3
+    CMP #&01
+    BNE L14AF
+    LDA &81
+    CLC
+    ADC #&05
+    TAX
+    LDY &82
+    INY
+    JSR calc_screen_addr
+    LDA #&39
+    STA sprite_src_hi
+    LDX #&04
+    LDY #&18
+    JSR L14B5
+.L14AF
+    JSR L198B
+    JMP L17E7
+.L14B5
+    LDA &14D8
+    CMP #&01
+    BEQ L14C8
+    CMP #&02
+    BEQ L14D0
+    LDA #&C0
+    STA sprite_src_lo
+    JMP sprite_plot_xy
+.L14C8
+    LDA #&00
+    STA sprite_src_lo
+    JMP sprite_plot_xy
+.L14D0
+    LDA #&60
+    STA sprite_src_lo
+    JMP sprite_plot_xy
+    ORA (&A5,X)
+    EQUB &9F  \ ?? opcode &9F
+    CMP #&01
+    BEQ L1517
+    LDX #&BD
+    JSR L155B
+    BNE L14EC
+    JSR L16A6
+    JMP L14F6
+.L14EC
+    LDX #&9E
+    JSR L155B
+    BNE L14F6
+    JSR L1565
+.L14F6
+    LDX #&B7
+    JSR L155B
+    BNE L1500
+    JSR L16B0
+.L1500
+    LDX #&97
+    JSR L155B
+    BNE L150A
+    JSR L16CC
+.L150A
+    LDX #&B6
+    JSR L155B
+    BNE L1514
+    JSR L17B9
+.L1514
+    JMP L1478
+.L1517
+    LDA #&80
+    LDX #&01
+    JSR OSBYTE
+    CPY #&C8
+    BCC L1528
+    JSR L1565
+    JMP L152F
+.L1528
+    CPY #&40
+    BCS L152F
+    JSR L16A6
+.L152F
+    LDA #&80
+    LDX #&02
+    JSR OSBYTE
+    CPY #&C8
+    BCC L1540
+    JSR L16B0
+    JMP L1547
+.L1540
+    CPY #&40
+    BCS L1547
+    JSR L16CC
+.L1547
+    LDA #&80
+    LDX #&00
+    JSR OSBYTE
+    TXA
+    AND #&01
+    CMP #&01
+    BNE L1558
+    JSR L17B9
+.L1558
+    JMP L1478
+.L155B
+    LDA #&81
+    LDY #&FF
+    JSR OSBYTE
+    CPY #&FF
+    RTS
+.L1565
+    LDA &81
+    CMP #&02
+    BNE L156C
+    RTS
+.L156C
+    DEC &81
+    RTS
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    NOP
+    NOP
+.L1577
+    LDA &25A7
+    CMP #&01
+    BEQ L157F
+    RTS
+.L157F
+    LDA &1574
+    BEQ L1585
+    RTS
+.L1585
+    LDX &81
+    STX &156F
+    STX &1570
+    LDA &82
+    CLC
+    ADC #&02
+    STA &1571
+    SEC
+    SBC #&14
+    STA &1572
+    LDA #&01
+    STA &1575
+    STA &1576
+    LDA #&01
+    STA &1573
+    LDA #&01
+    STA &1574
+    LDA &82
+    CMP #&D8
+    BCS L15B8
+    CMP #&A0
+    BCC L15BE
+    RTS
+.L15B8
+    LDA #&00
+    STA &1575
+    RTS
+.L15BE
+    LDA #&00
+    STA &1576
+    RTS
+.L15C4
+    LDA &1574
+    BNE L15CA
+    RTS
+.L15CA
+    LDA &1574
+    CMP #&05
+    BCS L15DD
+    INC &1571
+    DEC &1572
+    INC &1574
+    JMP L160E
+.L15DD
+    INC &1573
+    LDA &1573
+    CMP #&06
+    BNE L15EC
+    LDA #&02
+    STA &1573
+.L15EC
+    LDA &1574
+    CMP #&08
+    BCS L15FF
+    INC &156F
+    INC &1570
+    INC &1574
+    JMP L160E
+.L15FF
+    INC &156F
+    INC &156F
+    INC &1570
+    INC &1570
+    INC &1574
+.L160E
+    LDA #&01
+    STA zp_sprite_dir_flag
+    LDA &1575
+    CMP #&01
+    BNE L1625
+    LDX &156F
+    LDY &1571
+    JSR calc_screen_addr
+    JSR L1689
+.L1625
+    LDA &1576
+    CMP #&01
+    BNE L1638
+    LDX &1570
+    LDY &1572
+    JSR calc_screen_addr
+    JSR L1689
+.L1638
+    LDA &156F
+    CMP #&24
+    BCC L1688
+    LDA &1575
+    BEQ L165E
+    LDX &156F
+    LDY &1571
+    JSR calc_screen_addr
+    LDX #&05
+    LDY #&08
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+.L165E
+    LDA &1576
+    BEQ L167D
+    LDX &156F
+    LDY &1572
+    JSR calc_screen_addr
+    LDX #&05
+    LDY #&08
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+.L167D
+    LDA #&00
+    STA &1570
+    STA &156F
+    STA &1574
+.L1688
+    RTS
+.L1689
+    LDA #&00
+    LDX &1573
+    CLC
+.L168F
+    ADC #&28
+    DEX
+    BNE L168F
+    SEC
+    SBC #&28
+    STA sprite_src_lo
+    LDA #&44
+    STA sprite_src_hi
+    LDX #&05
+    LDY #&08
+    JMP sprite_plot_xy
+.L16A6
+    LDA &81
+    CMP #&14
+    BNE L16AD
+    RTS
+.L16AD
+    INC &81
+    RTS
+.L16B0
+    LDA &82
+    CMP #&DC
+    BNE L16B7
+    RTS
+.L16B7
+    CLC
+    ADC #&04
+    STA &82
+    INC &14D8
+    LDA &14D8
+    CMP #&04
+    BNE L16CB
+    LDA #&01
+    STA &14D8
+.L16CB
+    RTS
+.L16CC
+    LDA &82
+    CMP #&98
+    BNE L16D3
+    RTS
+.L16D3
+    SEC
+    SBC #&04
+    STA &82
+    DEC &14D8
+    LDA &14D8
+    BNE L16E5
+    LDA #&03
+    STA &14D8
+.L16E5
+    RTS
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    BRK
+    EQUB &74  \ ?? opcode &74
+    EQUB &14  \ ?? opcode &14
+    EQUB &80  \ ?? opcode &80
+    NOP
+    NOP
+    NOP
+    EOR &45
+    LSR &46
+    NOP
+    NOP
+    NOP
+    SEI
+    EQUB &9C  \ ?? opcode &9C
+    RTS
+    DEC &EA,X
+    NOP
+    NOP
+    NOP
+.L1712
+    LDA &80
+    CMP #&F0
+    BNE L1719
+    RTS
+.L1719
+    LDA &87
+    CMP #&0A
+    BNE L1753
+    LDX #&08
+.L1721
+    LDA &1A6B,X
+    BNE L1752
+    DEX
+    BNE L1721
+    INC &86
+    LDA &86
+    CMP #&05
+    BEQ L17A5
+    CMP #&06
+    BEQ L17AF
+    CMP #&07
+    BNE L173D
+    LDA #&01
+    STA &86
+.L173D
+    TAX
+    LDA &1709,X
+    STA &1710
+    LDA &16FB,X
+    STA &88
+    LDA &1702,X
+    STA &89
+    LDA #&00
+    STA &87
+.L1752
+    RTS
+.L1753
+    INC &87
+    LDX #&08
+.L1757
+    LDA &1A6B,X
+    BEQ L175F
+    DEX
+    BNE L1757
+.L175F
+    LDA #&25
+    STA &1A55,X
+    LDA #&00
+    STA &1A76,X
+    LDA &86
+    STA &1A81,X
+    CMP #&05
+    BEQ L1781
+    CMP #&06
+    BEQ L1793
+    LDA #&01
+    STA &1A6B,X
+    LDA #&9A
+    STA &1A60,X
+    RTS
+.L1781
+    LDA #&03
+    STA &1A6B,X
+    JSR lfsr_random
+    SEC
+    LDA #&D7
+    SBC &116C
+    STA &1A60,X
+    RTS
+.L1793
+    LDA #&05
+    STA &1A6B,X
+    JSR lfsr_random
+    SEC
+    LDA #&D7
+    SBC &116C
+    STA &1A60,X
+    RTS
+.L17A5
+    LDA #&26
+    STA &1710
+    LDA #&00
+    STA &87
+    RTS
+.L17AF
+    LDA #&26
+    STA &1710
+    LDA #&00
+    STA &87
+    RTS
+.L17B9
+    JSR L1577
+    LDA &8A
+    BEQ L17C1
+    RTS
+.L17C1
+    LDX #&04
+.L17C3
+    LDA &16E6,X
+    BEQ L17CC
+    DEX
+    BNE L17C3
+    RTS
+.L17CC
+    LDA &81
+    CLC
+    ADC #&02
+    STA &16E6,X
+    LDA &82
+    SEC
+    SBC #&0C
+    STA &16ED,X
+    LDA &2554
+    STA &8A
+    JSR L2800
+    JMP &2975
+.L17E7
+    LDX #&06
+.L17E9
+    LDA &16E6,X
+    BEQ L183D
+    LDY &16ED,X
+    INC &16E6,X
+    INC &16E6,X
+    LDA &16E6,X
+    STX &16F5
+    TAX
+    CPX #&25
+    BCC L1824
+    JSR calc_screen_addr
+    LDX &16F5
+    LDA #&00
+    STA &16E6,X
+    LDX #&02
+    LDY #&02
+    LDA #&02
+    STA sprite_src_lo
+    LDA #&7E
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+    JMP L183D
+.L1824
+    JSR calc_screen_addr
+    LDX #&03
+    LDY #&02
+    TYA
+    STA sprite_src_lo
+    LDA #&7E
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    JSR L1847
+    LDX &16F5
+.L183D
+    DEX
+    BNE L17E9
+    LDA &8A
+    BEQ L1846
+    DEC &8A
+.L1846
+    RTS
+.L1847
+    LDX &16F5
+    LDY &16E6,X
+    INY
+    INY
+    STY &83
+    LDA &16ED,X
+    STA &84
+    LDX #&09
+.L1858
+    DEX
+    BNE L1861
+    LDX &16F5
+    JMP L18F7
+.L1861
+    LDA &1A6B,X
+    BEQ L1858
+    STX &16F7
+    LDY &1A55,X
+    CPY &83
+    BEQ L1889
+    BCC L1878
+    LDX &16F7
+    JMP L1858
+.L1878
+    INY
+    INY
+    INY
+    INY
+    CPY &83
+    BCC L1883
+    JMP L1889
+.L1883
+    LDX &16F7
+    JMP L1858
+.L1889
+    LDA &1A60,X
+    CMP &84
+    BEQ L18A1
+    BCC L189B
+    SEC
+    SBC #&14
+    CMP &84
+    BEQ L18A1
+    BCC L18A1
+.L189B
+    LDX &16F7
+    JMP L1858
+.L18A1
+    LDY &1A6B,X
+    CPY #&09
+    BCC L18A9
+    RTS
+.L18A9
+    INY
+    TYA
+    STA &1A6B,X
+    CPY #&03
+    BEQ L18BD
+    CPY #&05
+    BEQ L18BD
+    CPY #&07
+    BEQ L18BD
+    JMP L18D1
+.L18BD
+    LDA #&07
+    JSR OSWRCH
+    LDA #&0A
+    STA &1A6B,X
+    JSR L25D7
+    INC &25A0
+    LDX &16F5
+    RTS
+.L18D1
+    LDX &16F5
+    LDY &16ED,X
+    LDA &16E6,X
+    TAX
+    JSR calc_screen_addr
+    LDX #&03
+    LDY #&02
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+    LDA #&00
+    STA &16E6,X
+.L18F7
+    LDX #&FF
+.L18F9
+    INX
+    CPX #&08
+    BNE L1902
+    LDX &16F5
+    RTS
+.L1902
+    LDA &2065,X
+    BEQ L18F9
+    STX &16F7
+    LDY &2052,X
+    CPY &83
+    BEQ L192B
+    BCC L1919
+    LDX &16F7
+    JMP L18F9
+.L1919
+    INY
+    INY
+    INY
+    INY
+    INY
+    CPY &83
+    BCC L1925
+    JMP L192B
+.L1925
+    LDX &16F7
+    JMP L18F9
+.L192B
+    LDA &205C,X
+    CMP &84
+    BEQ L1943
+    BCC L193D
+    SEC
+    SBC #&20
+    CMP &84
+    BEQ L1943
+    BCC L1943
+.L193D
+    LDX &16F7
+    JMP L18F9
+.L1943
+    LDX &16F5
+    LDY &16ED,X
+    LDA &16E6,X
+    TAX
+    JSR calc_screen_addr
+    LDX #&03
+    LDY #&02
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+    LDA #&00
+    STA &16E6,X
+    LDX &16F7
+    DEC &2077,X
+    LDA &2077,X
+    BNE L1983
+    LDA #&14
+    STA &2065,X
+    JSR L25E5
+    JSR L2822
+    LDX &16F5
+    RTS
+.L1983
+    LDX &16F5
+    LDA #&07
+    JMP OSWRCH
+.L198B
+    LDX #&09
+.L198D
+    DEX
+    BNE L1993
+    JMP L19F6
+.L1993
+    LDA &1A6B,X
+    BEQ L198D
+    CMP #&0A
+    BCS L198D
+    STX &16F5
+    LDA &1A60,X
+    SEC
+    SBC #&0C
+    STA &84
+    LDA &1A55,X
+    ADC #&01
+    STA &83
+    LDA &81
+    CMP &83
+    BCC L19BA
+    LDX &16F5
+    JMP L198D
+.L19BA
+    LDA &83
+    SEC
+    SBC #&06
+    STA &83
+    LDA &81
+    LDX &16F5
+    CMP &83
+    BCC L198D
+    LDA &82
+    CMP &84
+    BEQ L19E0
+    BCC L19DA
+    SBC #&18
+    CMP &84
+    BEQ L19E0
+    BCC L19E0
+.L19DA
+    LDX &16F5
+    JMP L198D
+.L19E0
+    LDA #&07
+    JSR OSWRCH
+    LDX &16F5
+    LDA #&0A
+    STA &1A6B,X
+    JSR L25D7
+    INC &25A0
+    JSR L1DEE
+.L19F6
+    LDX #&FF
+.L19F8
+    INX
+    CPX #&08
+    BNE L19FE
+    RTS
+.L19FE
+    LDA &2065,X
+    BEQ L19F8
+    CMP #&14
+    BCS L19F8
+    STX &16F5
+    LDA &205C,X
+    SEC
+    SBC #&10
+    STA &84
+    LDA &2052,X
+    CLC
+    ADC #&01
+    STA &83
+    LDA &81
+    CMP &83
+    BCC L1A26
+    LDX &16F5
+    JMP L19F8
+.L1A26
+    LDA &83
+    SEC
+    SBC #&06
+    STA &83
+    LDA &81
+    LDX &16F5
+    CMP &83
+    BCC L19F8
+    LDA &82
+    CMP &84
+    BEQ L1A4C
+    BCC L1A46
+    SBC #&20
+    CMP &84
+    BEQ L1A4C
+    BCC L1A4C
+.L1A46
+    LDX &16F5
+    JMP L19F8
+.L1A4C
+    LDA #&07
+    JSR OSWRCH
+    JMP L1DEE
+    RTS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    EQUB &FF  \ ?? opcode &FF
+    EQUB &FF  \ ?? opcode &FF
+    EQUB &FF  \ ?? opcode &FF
+    EQUB &FF  \ ?? opcode &FF
+    EQUB &FF  \ ?? opcode &FF
+    EQUB &FF  \ ?? opcode &FF
+    EQUB &FF  \ ?? opcode &FF
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+.L1A99
+    JSR lfsr_random
+    LDA &116D
+    CMP #&02
+    BEQ L1AA4
+    RTS
+.L1AA4
+    LDA &1A55,X
+    CMP #&10
+    BCC L1AAE
+    JMP L1AAF
+.L1AAE
+    RTS
+.L1AAF
+    LDA &7E
+    CMP #&00
+    BEQ L1AB6
+    RTS
+.L1AB6
+    LDX #&04
+.L1AB8
+    LDA &1A8B,X
+    CMP #&FF
+    BEQ L1AC3
+    DEX
+    BNE L1AB8
+    RTS
+.L1AC3
+    STX &16F6
+    LDX &16F5
+    LDA &1A55,X
+    CLC
+    ADC #&02
+    LDX &16F6
+    STA &1A8B,X
+    LDX &16F5
+    LDA &1A60,X
+    SEC
+    SBC #&08
+    LDX &16F6
+    STA &1A92,X
+    LDA #&08
+    STA &7E
+    JMP L2811
+.L1AEB
+    LDX #&08
+.L1AED
+    LDA &1A6B,X
+    BNE L1AF8
+    DEX
+    BNE L1AED
+    JMP L1D35
+.L1AF8
+    INC &7A
+    INC &7A
+    JSR L2555
+    JSR L1C5D
+    JSR L1B87
+    BNE L1B2D
+.L1B07
+    LDA #&00
+    STA &1A6B,X
+    LDY &1A60,X
+    LDA &1A55,X
+    TAX
+    JSR calc_screen_addr
+    LDA #&7D
+    STA sprite_src_hi
+    LDA #&80
+    STA sprite_src_lo
+    LDX #&04
+    LDY #&18
+    JSR sprite_plot_xy
+    LDX &16F5
+    JMP L1AED
+.L1B2D
+    TYA
+    STA &1A76,X
+    LDA &16F6
+    BEQ L1B4F
+    CMP #&01
+    BEQ L1B46
+    LDA &1A60,X
+    SEC
+    SBC #&04
+    STA &1A60,X
+    JMP L1B4F
+.L1B46
+    LDA &1A60,X
+    CLC
+    ADC #&04
+    STA &1A60,X
+.L1B4F
+    LDA &16F7
+    BEQ L1B61
+    CMP #&01
+    BNE L1B5E
+    INC &1A55,X
+    JMP L1B61
+.L1B5E
+    DEC &1A55,X
+.L1B61
+    LDA &1A60,X
+    TAY
+    LDA &1A55,X
+    BEQ L1B07
+    TAX
+    JSR calc_screen_addr
+    JSR L1BE3
+    LDX #&04
+    LDY #&18
+    JSR sprite_plot_xy
+    JSR L1A99
+    LDX &16F5
+    DEX
+    BEQ L1B84
+    JMP L1AED
+.L1B84
+    JMP L1D35
+.L1B87
+    LDA &1A81,X
+    CMP #&05
+    BEQ L1BA5
+    CMP #&06
+    BEQ L1BD1
+    LDY &1A76,X
+    LDA (&88),Y
+    STA &16F6
+    INY
+    LDA (&88),Y
+    STA &16F7
+    INY
+    CPY &1710
+    RTS
+.L1BA5
+    LDA &7F
+    CMP #&04
+    BNE L1BD1
+    LDA #&03
+    STA &16F7
+    LDA &82
+    CMP &1A60,X
+    BCC L1BC4
+    LDA #&01
+    STA &16F6
+    LDY &1A76,X
+    INY
+    CPY &1710
+    RTS
+.L1BC4
+    LDA #&03
+    STA &16F6
+    LDY &1A76,X
+    INY
+    CPY &1710
+    RTS
+.L1BD1
+    LDA #&03
+    STA &16F7
+    LDA #&00
+    STA &16F6
+    LDY &1A76,X
+    INY
+    CPY &1710
+    RTS
+.L1BE3
+    LDX &16F5
+    LDA &1A6B,X
+    CMP #&0A
+    BCC L1BFB
+    BEQ L1C1A
+    CMP #&0B
+    BEQ L1C2B
+    CMP #&0C
+    BEQ L1C3C
+    CMP #&0D
+    BEQ L1C4D
+.L1BFB
+    TAX
+    LDA &1C0C,X
+    STA sprite_src_lo
+    LDA &1C13,X
+    STA sprite_src_hi
+    LDX &16F5
+    RTS
+    NOP
+    BRK
+    PHA
+    BCS L1C21
+    RTI
+    LDY #&EA
+    EOR &4D4D
+    LSR &4848
+.L1C1A
+    TAY
+    INY
+    TYA
+    STA &1A6B,X
+    LDA #&4C
+    STA sprite_src_hi
+    LDA #&20
+    STA sprite_src_lo
+    RTS
+.L1C2B
+    TAY
+    INY
+    TYA
+    STA &1A6B,X
+    LDA #&4C
+    STA sprite_src_hi
+    LDA #&68
+    STA sprite_src_lo
+    RTS
+.L1C3C
+    TAY
+    INY
+    TYA
+    STA &1A6B,X
+    LDA #&4C
+    STA sprite_src_hi
+    LDA #&B0
+    STA sprite_src_lo
+    RTS
+.L1C4D
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    LDA #&00
+    STA &1A6B,X
+    RTS
+.L1C5D
+    STX &16F5
+    LDA &1A6B,X
+    CMP #&0A
+    BCC L1C68
+    RTS
+.L1C68
+    LDY &1A55,X
+    INY
+    STY &83
+    LDA &1A60,X
+    SEC
+    SBC #&0C
+    STA &84
+    LDX #&FF
+.L1C78
+    INX
+    CPX #&08
+    BNE L1C83
+    LDX &16F5
+    JMP L1CB1
+.L1C83
+    LDA &2065,X
+    BEQ L1C78
+    LDA &83
+    CMP &2052,X
+    BCC L1C78
+    SBC #&06
+    CMP &2052,X
+    BCS L1C78
+    LDA &84
+    CMP &205C,X
+    BCS L1C78
+    ADC #&20
+    CMP &205C,X
+    BCC L1C78
+    LDX &16F5
+    LDA #&0A
+    STA &1A6B,X
+    LDA #&07
+    JMP OSWRCH
+.L1CB1
+    LDY &156F
+    INY
+    INY
+    STY &83
+    LDA &1571
+    SEC
+    SBC #&04
+    STA &84
+    LDA &1575
+    CMP #&01
+    BNE L1CCC
+    LDY #&00
+    JSR L1CE1
+.L1CCC
+    LDA &1572
+    SEC
+    SBC #&04
+    STA &84
+    LDA &1576
+    CMP #&01
+    BNE L1CE0
+    LDY #&01
+    JSR L1CE1
+.L1CE0
+    RTS
+.L1CE1
+    LDX &16F5
+    LDA &1A55,X
+    CMP &83
+    BCC L1CEC
+    RTS
+.L1CEC
+    ADC #&05
+    CMP &83
+    BCS L1CF3
+    RTS
+.L1CF3
+    LDA &1A60,X
+    CMP &84
+    BCS L1CFB
+    RTS
+.L1CFB
+    SBC #&20
+    CMP &84
+    BCC L1D02
+    RTS
+.L1D02
+    JSR L2822
+    TYA
+    TAX
+    LDA #&00
+    STA &1575,X
+    LDY &1571,X
+    LDX &156F
+    JSR calc_screen_addr
+    LDX #&05
+    LDY #&08
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+    LDA #&0A
+    STA &1A6B,X
+    JSR L25D7
+    INC &25A0
+    RTS
+.L1D35
+    LDX #&06
+.L1D37
+    LDA &1A8B,X
+    CMP #&FF
+    BEQ L1D94
+    LDY &1A92,X
+    DEC &1A8B,X
+    DEC &1A8B,X
+    LDA &1A8B,X
+    STX &16F5
+    TAX
+    CMP #&27
+    BCC L1D75
+.L1D52
+    INX
+    JSR calc_screen_addr
+    LDX &16F5
+    LDA #&FF
+    STA &1A8B,X
+    LDX #&02
+    LDY #&02
+    LDA #&02
+    STA sprite_src_lo
+    LDA #&7E
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+    JMP L1D94
+.L1D75
+    CMP #&00
+    BEQ L1D52
+    CMP #&01
+    BEQ L1D52
+    JSR calc_screen_addr
+    LDX #&03
+    LDY #&02
+    LDA #&00
+    STA sprite_src_lo
+    LDA #&7E
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+.L1D94
+    JSR L1DA1
+    DEX
+    BNE L1D37
+    LDA &7E
+    BEQ L1DA0
+    DEC &7E
+.L1DA0
+    RTS
+.L1DA1
+    LDA &1A8B,X
+    STA &83
+    LDA &1A92,X
+    STA &84
+    LDA &81
+    CMP &83
+    BCC L1DB2
+    RTS
+.L1DB2
+    LDA &81
+    ADC #&05
+    CMP &83
+    BCC L1DBD
+    JMP L1DBE
+.L1DBD
+    RTS
+.L1DBE
+    LDA &82
+    CMP &84
+    BCC L1DBD
+    SBC #&10
+    CMP &84
+    BCC L1DCB
+    RTS
+.L1DCB
+    LDY &1A92,X
+    LDA &1A8B,X
+    TAX
+    JSR calc_screen_addr
+    LDX #&02
+    LDY #&02
+    LDA #&02
+    STA sprite_src_lo
+    LDA #&7E
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+    LDA #&FF
+    STA &1A8B,X
+.L1DEE
+    STX &16F5
+    LDA #&07
+    JSR OSWRCH
+    LDA &1E46
+    EOR #&01
+    STA &1E46
+    CMP #&00
+    BNE L1E05
+    DEC &2050
+.L1E05
+    LDA &2050
+    ADC #&1F
+    LDY #&5F
+    TAX
+    JSR calc_screen_addr
+    LDA #&48
+    STA sprite_src_hi
+    LDA #&38
+    STA sprite_src_lo
+    LDY &1E46
+    CPY #&00
+    BNE L1E2B
+    LDA #&3A
+    STA sprite_src_hi
+    LDA #&B8
+    STA sprite_src_lo
+.L1E2B
+    LDX #&01
+    LDY #&08
+    JSR sprite_plot_xy
+    LDA &2050
+    BEQ L1E3B
+    LDX &16F5
+    RTS
+.L1E3B
+    LDA &1E46
+    CMP #&01
+    BEQ L1E47
+    LDX &16F5
+    RTS
+    NOP
+.L1E47
+    LDA #&01
+    STA zp_sprite_dir_flag
+    LDX &81
+    LDA &82
+    CLC
+    ADC #&04
+    STA &82
+    TAY
+    JSR calc_screen_addr
+    JSR L2822
+    LDX #&04
+    LDY #&20
+    LDA &7A95
+    STA sprite_src_lo
+    LDA &7AD5
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    JSR L13BC
+    JSR L13BC
+    LDX &81
+    LDY &82
+    JSR calc_screen_addr
+    LDX #&04
+    LDY #&20
+    LDA &7A96
+    STA sprite_src_lo
+    LDA &7AD6
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    JSR L13BC
+    JSR L13BC
+    LDX &81
+    LDY &82
+    JSR calc_screen_addr
+    LDX #&04
+    LDY #&20
+    LDA &7A97
+    STA sprite_src_lo
+    LDA &7AD7
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    JSR L13BC
+    JSR L13BC
+    LDX &81
+    LDY &82
+    JSR calc_screen_addr
+    LDX #&04
+    LDY #&20
+    LDA &7A98
+    STA sprite_src_lo
+    LDA &7AD8
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    JSR L13BC
+    JSR L13BC
+    JSR L13BC
+    JSR L13BC
+    LDX &81
+    LDY &82
+    JSR calc_screen_addr
+    LDX #&04
+    LDY #&20
+    LDA &7A99
+    STA sprite_src_lo
+    LDA &7AD9
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    JSR L13BC
+    JSR L13BC
+    JSR L13BC
+    LDX &81
+    LDY &82
+    JSR calc_screen_addr
+    LDX #&04
+    LDY #&20
+    LDA &7A9A
+    STA sprite_src_lo
+    LDA &7ADA
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    JSR L13BC
+    JSR L13BC
+    JSR L13BC
+    JSR L13BC
+    JSR L13BC
+    JSR L13BC
+    DEC &2051
+    LDA &2051
+    ADC #&1F
+    LDY #&57
+    TAX
+    JSR calc_screen_addr
+    LDX #&01
+    LDY #&08
+    LDA #&48
+    STA sprite_src_hi
+    LDA #&00
+    STA sprite_src_lo
+    JSR sprite_plot_xy
+    LDA &2051
+    BEQ L1F50
+    JSR &2BA4
+.L1F50
+    LDX #&20
+    LDY #&5F
+    JSR calc_screen_addr
+    LDX &9A
+    LDY #&08
+    STY sprite_src_lo
+    LDA #&48
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    JSR L1F8E
+    LDA &2051
+    BEQ L1F72
+    LDX &16F5
+    RTS
+.L1F72
+    LDX #&20
+    LDY #&57
+    JSR calc_screen_addr
+    LDX #&06
+    LDY #&08
+    STY sprite_src_lo
+    LDA #&48
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+    LDY #&00
+    RTS
+.L1F8E
+    LDA #&01
+    STA &1E46
+    LDA #&05
+    STA &81
+    LDA #&C8
+    STA &82
+    LDA #&00
+    STA &80
+    STA &7B
+    STA &7C
+    LDA #&80
+    STA zp_sprite_src_lo
+    STA zp_sprite_src2_lo
+    LDA #&7D
+    STA zp_sprite_src2_hi
+    STA zp_sprite_src_hi
+    LDA #&00
+    STA &268F
+    LDX #&00
+.L1FB6
+    LDA #&00
+    STA &205C,X
+    STA &2052,X
+    STA &2065,X
+    STA &2077,X
+    STA &2080,X
+    STA &1A6B,X
+    INX
+    CPX #&09
+    BNE L1FB6
+    STA &1575
+    STA &1576
+    STA &2692
+    STA &156F
+    STA &16E6
+    STA &16E7
+    STA &16E8
+    STA &16E9
+    STA &1710
+    STA &16EA
+    STA &16EB
+    STA &16EC
+    STA &7E
+    STA &88
+    STA &8F
+    LDA #&77
+    STA &89
+    LDA #&0A
+    STA &87
+    LDA #&01
+    STA &86
+    LDA #&06
+    STA &2554
+    LDA #&00
+    STA &25A0
+    STA &25A1
+    STA &25A3
+    STA &25A5
+    STA &25A7
+    STA &25A9
+    STA &259F
+    LDX &16F5
+    LDY #&00
+    LDA #&FF
+    STA &1A8B
+    STA &1A8C
+    STA &1A8D
+    STA &1A8E
+    STA &1A90
+    STA &1A91
+    STA &1A8F
+    LDA &9A
+    STA &2050
+    LDA #&00
+    STA &249C
+    STA &2972
+    LDA #&C8
+    STA &2973
+    RTS
+    ASL &06
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    BRK
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+.L208A
+    LDX &7B
+    LDA &7B00,X
+    CMP &80
+    BEQ L2094
+    RTS
+.L2094
+    LDA &7B80
+    BNE L209A
+    RTS
+.L209A
+    INC &7C
+    LDA &7C
+    CMP #&08
+    BCC L20A6
+    LDA #&00
+    STA &7C
+.L20A6
+    INC &7B
+    LDA &7B80,X
+    TAY
+    LDX &7C
+    AND #&1F
+    STA &2065,X
+    TYA
+    AND #&80
+    LSR A
+    LSR A
+    LSR A
+    LSR A
+    LSR A
+    LSR A
+    LSR A
+    EOR #&01
+    STA &206E,X
+    TYA
+    AND #&60
+    LSR A
+    LSR A
+    LSR A
+    LSR A
+    LSR A
+    TAX
+    INX
+    LDA #&FF
+    SEC
+.L20CF
+    SBC #&20
+    DEX
+    BNE L20CF
+    LDX &7C
+    STA &205C,X
+    LDA #&28
+    STA &2052,X
+    LDA #&08
+    STA &2077,X
+    LDA #&04
+    STA &2080,X
+    LDA &2065,X
+    CMP #&10
+    BEQ L20FA
+    CMP #&07
+    BEQ L2102
+    CMP #&03
+    BCC L2102
+    JMP L208A
+.L20FA
+    LDA #&14
+    STA &2077,X
+    JMP L208A
+.L2102
+    LDA #&06
+    STA &2077,X
+    JMP L208A
+.L210A
+    LDA &23C7
+    CMP #&01
+    BNE L2130
+    LDX &23C5
+    LDY &23C6
+    JSR calc_screen_addr
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    LDX #&02
+    LDY #&20
+    JSR sprite_plot_xy
+    LDA #&00
+    STA &23C7
+.L2130
+    LDA &249C
+    BEQ L2138
+    JSR L249D
+.L2138
+    LDX #&FF
+.L213A
+    INX
+    LDA &2065,X
+    BNE L2151
+.L2140
+    CPX #&08
+    BNE L213A
+    INC &7F
+    LDA &7F
+    CMP #&05
+    BNE L2150
+    LDA #&03
+    STA &7F
+.L2150
+    RTS
+.L2151
+    INC &7A
+    INC &7A
+    STX &16F5
+    JSR L2253
+    LDA &80
+    CMP #&F0
+    BEQ L2164
+    DEC &2052,X
+.L2164
+    LDA &2052,X
+    CMP #&FF
+    BNE L216E
+    JMP L21F1
+.L216E
+    LDY &205C,X
+    TAX
+    JSR calc_screen_addr
+    LDX &16F5
+    LDA &206E,X
+    STA zp_sprite_dir_flag
+    LDA &2065,X
+    TAX
+    LDA &7A80,X
+    CLC
+    STA sprite_src_lo
+    LDA &7AC0,X
+    STA sprite_src_hi
+    LDX &16F5
+    LDA &2052,X
+    CMP #&25
+    BCC L21BA
+    CMP #&27
+    BNE L21A1
+    LDX #&01
+    JMP L21AC
+.L21A1
+    CMP #&26
+    BNE L21AA
+    LDX #&02
+    JMP L21AC
+.L21AA
+    LDX #&03
+.L21AC
+    LDY #&20
+    JSR sprite_plot_xy
+    LDX &16F5
+    JSR L23C8
+    JMP L2140
+.L21BA
+    LDX #&04
+.L21BC
+    LDY #&20
+    JSR sprite_plot_xy
+    LDX &16F5
+    LDA &80
+    CMP #&F0
+    BEQ L21EB
+    LDA &2052,X
+    ADC &2080,X
+    LDY &205C,X
+    TAX
+    JSR calc_screen_addr
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    LDX #&01
+    LDY #&20
+    JSR sprite_plot_xy
+    LDX &16F5
+.L21EB
+    JSR L23C8
+    JMP L2140
+.L21F1
+    LDA #&00
+    STA &2052,X
+    LDY &205C,X
+    TAX
+    JSR calc_screen_addr
+    LDX &16F5
+    DEC &2080,X
+    LDY &2080,X
+    BEQ L2237
+    LDA #&FF
+    CLC
+.L220B
+    INY
+    ADC #&20
+    CPY #&04
+    BNE L220B
+    STA sprite_src_lo
+    LDA &2065,X
+    TAX
+    LDA &7AC0,X
+    STA sprite_src_hi
+    LDA &7A80,X
+    ADC sprite_src_lo
+    STA sprite_src_lo
+    LDX &16F5
+    LDA &206E,X
+    STA zp_sprite_dir_flag
+    LDA &2080,X
+    TAX
+    JMP L21BC
+.L2237
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    LDX #&01
+    LDY #&20
+    JSR sprite_plot_xy
+    LDX &16F5
+    LDA #&00
+    STA &2065,X
+    JMP L2140
+.L2253
+    JSR L22B2
+    LDA &2065,X
+    CMP #&14
+    BCC L2260
+    JMP L229C
+.L2260
+    LDA &7F
+    CMP #&04
+    BEQ L2267
+    RTS
+.L2267
+    LDA &2065,X
+    CMP #&04
+    BCC L2285
+    CMP #&08
+    BEQ L2295
+    CMP #&09
+    BEQ L2295
+    CMP #&0F
+    BEQ L22C3
+    CMP #&10
+    BEQ L22C9
+    CMP #&14
+    BCC L229B
+    JMP L229C
+.L2285
+    INC &2065,X
+    LDA &2065,X
+    CMP #&04
+    BNE L229B
+    LDA #&01
+    STA &2065,X
+    RTS
+.L2295
+    EOR #&01
+    STA &2065,X
+    RTS
+.L229B
+    RTS
+.L229C
+    INC &2065,X
+    LDA &2065,X
+    CMP #&1C
+    BNE L229B
+    LDA #&00
+    STA &2065,X
+    STA &2052,X
+    STA &205C,X
+    RTS
+.L22B2
+    LDA &2065,X
+    CMP #&04
+    BNE L22BC
+    JMP L22E5
+.L22BC
+    CMP #&13
+    BNE L22CF
+    JMP L22E5
+.L22C3
+    LDA #&10
+    STA &2065,X
+    RTS
+.L22C9
+    LDA #&0F
+    STA &2065,X
+    RTS
+.L22CF
+    CMP #&06
+    BNE L22D6
+    JMP &2A20
+.L22D6
+    CMP #&07
+    BNE L22DD
+    JMP L232C
+.L22DD
+    CMP #&08
+    BNE L22E4
+    JMP L2464
+.L22E4
+    RTS
+.L22E5
+    LDA &8F
+    CMP #&02
+    BEQ L22EC
+    RTS
+.L22EC
+    LDX #&06
+.L22EE
+    LDA &1A8B,X
+    CMP #&FF
+    BEQ L22FC
+    DEX
+    BNE L22EE
+    LDX &16F5
+    RTS
+.L22FC
+    STX &16F6
+    LDX &16F5
+    LDA &2052,X
+    CMP #&08
+    BCS L230D
+    LDX &16F5
+    RTS
+.L230D
+    LDX &16F6
+    STA &1A8B,X
+    DEC &1A8B,X
+    LDX &16F5
+    LDA &205C,X
+    LDX &16F6
+    SEC
+    SBC #&10
+    STA &1A92,X
+    JSR L2800
+    LDX &16F5
+    RTS
+.L232C
+    LDA &23C7
+    CMP #&01
+    BNE L2334
+    RTS
+.L2334
+    LDA #&01
+    STA &23C7
+    LDX &16F5
+    LDA &205C,X
+    LDY &206E,X
+    BNE L234A
+    SEC
+    SBC #&20
+    JMP L234D
+.L234A
+    CLC
+    ADC #&20
+.L234D
+    STA &23C6
+    LDA &2052,X
+    STX &16F8
+    STA &23C5
+    LDY &23C6
+    TAX
+    CPX #&02
+    BCC L23A8
+    CPX #&25
+    BCS L23A8
+    JSR calc_screen_addr
+    JSR lfsr_random
+    LDA &116B
+    STA sprite_src_lo
+    LDA #&80
+    STA sprite_src_hi
+    LDX #&02
+    LDY #&20
+    JSR sprite_plot_xy
+    LDA &81
+    CMP &23C5
+    BCS L23A1
+    ADC #&04
+    CMP &23C5
+    BCC L23A1
+    LDA &82
+    SBC #&0C
+    STA &83
+    LDA &23C6
+    CMP &83
+    BCC L23A1
+    SBC #&20
+    CMP &83
+    BCS L23A1
+    JSR L1DEE
+.L23A1
+    LDX &16F8
+    STX &16F5
+    RTS
+.L23A8
+    JSR calc_screen_addr
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    LDX #&02
+    LDY #&20
+    JSR sprite_plot_xy
+    LDA #&00
+    STA &23C7
+    LDX &16F5
+    RTS
+    EQUB &FF  \ ?? opcode &FF
+    EQUB &FF  \ ?? opcode &FF
+    BRK
+.L23C8
+    LDY &156F
+    INY
+    INY
+    INY
+    STY &83
+    LDA &1571
+    SEC
+    SBC #&04
+    STA &84
+    LDA &1575
+    CMP #&01
+    BNE L23E4
+    LDY #&00
+    JSR L23F9
+.L23E4
+    LDA &1572
+    SEC
+    SBC #&04
+    STA &84
+    LDA &1576
+    CMP #&01
+    BNE L23F8
+    LDY #&01
+    JSR L23F9
+.L23F8
+    RTS
+.L23F9
+    LDX &16F5
+    LDA &2052,X
+    CMP &83
+    BCC L2404
+    RTS
+.L2404
+    ADC #&05
+    CMP &83
+    BCS L240B
+    RTS
+.L240B
+    LDA &205C,X
+    CMP &84
+    BCS L2413
+    RTS
+.L2413
+    SBC #&20
+    CMP &84
+    BCC L241A
+    RTS
+.L241A
+    JSR L2822
+    TYA
+    TAX
+    LDA #&00
+    STA &1575,X
+    LDY &1571,X
+    LDX &156F
+    JSR calc_screen_addr
+    LDA #&01
+    STA zp_sprite_dir_flag
+    LDX #&05
+    LDY #&08
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    LDX &16F5
+    LDA &2077,X
+    SEC
+    SBC #&04
+    STA &2077,X
+    BEQ L2458
+    CMP #&08
+    BCS L2458
+    LDX &16F5
+    RTS
+.L2458
+    LDA #&14
+    LDX &16F5
+    STA &2065,X
+    LDX &16F5
+    RTS
+.L2464
+    LDA &249C
+    BEQ L246A
+    RTS
+.L246A
+    LDA &2052,X
+    CMP #&0C
+    BCS L2472
+    RTS
+.L2472
+    LDA #&09
+    STA &2065,X
+    LDA &205C,X
+    LDY &206E,X
+    SEC
+    CPY #&01
+    BNE L2487
+    SBC #&08
+    JMP L2489
+.L2487
+    SBC #&10
+.L2489
+    STA &249B
+    LDA &2052,X
+    SBC #&09
+    STA &249A
+    LDA #&01
+    STA &249C
+    RTS
+    NOP
+    NOP
+    BRK
+.L249D
+    LDX &249A
+    LDY &249B
+    JSR calc_screen_addr
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    LDX #&08
+    LDY #&08
+    JSR sprite_plot_xy
+    DEC &249A
+    LDA &249A
+    CMP #&02
+    BCS L24C4
+    JMP L2517
+.L24C4
+    TAX
+    LDY &249B
+    JSR calc_screen_addr
+    LDX #&08
+    LDY #&08
+    LDA #&3B
+    STA sprite_src_hi
+    LDA &249C
+    CMP #&01
+    BEQ L24F6
+    CMP #&02
+    BEQ L2501
+    CMP #&03
+    BEQ L250C
+    CMP #&04
+    BEQ L250C
+    CMP #&05
+    BEQ L2501
+    CMP #&06
+    BEQ L24F6
+    CMP #&07
+    BEQ L2517
+    BNE L24F6
+    RTS
+.L24F6
+    LDA #&00
+    STA sprite_src_lo
+    JSR sprite_plot_xy
+    JMP L2520
+.L2501
+    LDA #&40
+    STA sprite_src_lo
+    JSR sprite_plot_xy
+    JMP L2520
+.L250C
+    LDA #&80
+    STA sprite_src_lo
+    JSR sprite_plot_xy
+    JMP L2520
+.L2517
+    LDA #&00
+    STA &249C
+    LDX &16F5
+    RTS
+.L2520
+    LDA &249A
+    CLC
+    ADC #&04
+    STA &83
+    LDA &249B
+    SEC
+    SBC #&04
+    STA &84
+    LDA &81
+    CMP &83
+    BCS L2550
+    ADC #&06
+    CMP &83
+    BCC L2550
+    LDA &82
+    CMP &84
+    BCC L2550
+    SBC #&18
+    CMP &84
+    BCS L2550
+    LDA #&07
+    STA &249C
+    JMP L1DEE
+.L2550
+    INC &249C
+    RTS
+    ASL &AD
+    EQUB &A3  \ ?? opcode &A3
+    AND &C9
+    ORA (&F0,X)
+    ORA (&60,X)
+    LDA &1A6B,X
+    CMP #&09
+    BCC L2565
+    RTS
+.L2565
+    LDA &81
+    CLC
+    ADC #&08
+    STA &83
+    LDA &82
+    SEC
+    SBC #&0B
+    STA &84
+    LDA &1A55,X
+    CMP &83
+    BCS L259E
+    ADC #&03
+    CMP &83
+    BCC L259E
+    LDA &1A60,X
+    CMP &84
+    BCC L259E
+    SEC
+    SBC #&14
+    CMP &84
+    BCS L259E
+    LDA #&0A
+    STA &1A6B,X
+    LDA #&07
+    JSR OSWRCH
+    JSR L25D7
+    INC &25A0
+.L259E
+    RTS
+    BRK
+    BRK
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+.L25AA
+    LDA &25A0
+    CMP #&0A
+    BCS L25B2
+    RTS
+.L25B2
+    LDA #&00
+    STA &25A0
+    LDA &2692
+    BEQ L25BD
+    RTS
+.L25BD
+    LDA &25A7
+    CMP #&01
+    BNE L25C5
+    RTS
+.L25C5
+    LDA &82
+    STA &2691
+    LDA #&27
+    STA &2690
+    LDA #&01
+    STA &2692
+    JMP &2EED
+.L25D7
+    CLC
+    LDA &2A06
+    ADC &9B
+    STA &2A06
+    CMP #&0A
+    BCS L2619
+    RTS
+.L25E5
+    CLC
+    LDA &2A05
+    ADC &9B
+    STA &2A05
+    CMP #&0A
+    BCS L262A
+    RTS
+    CLC
+    LDA &2A04
+    ADC &9B
+    STA &2A04
+    CMP #&0A
+    BCS L263B
+    RTS
+    CLC
+    LDA &2A03
+    ADC &9B
+    STA &2A03
+    CMP #&0A
+    BCS L264C
+    RTS
+    CLC
+    LDA &2A02
+    ADC &9B
+    STA &2A02
+    RTS
+.L2619
+    SEC
+    SBC #&0A
+    STA &2A06
+    INC &2A05
+    LDA &2A05
+    CMP #&0A
+    BEQ L262A
+    RTS
+.L262A
+    SEC
+    SBC #&0A
+    STA &2A05
+    INC &2A04
+    LDA &2A04
+    CMP #&0A
+    BEQ L263B
+    RTS
+.L263B
+    SEC
+    SBC #&0A
+    STA &2A04
+    INC &2A03
+    LDA &2A03
+    CMP #&0A
+    BEQ L264C
+    RTS
+.L264C
+    SEC
+    SBC #&0A
+    STA &2A03
+    INC &2A02
+    RTS
+.L2656
+    LDY #&00
+    LDX #&00
+.L265A
+    LDA &3041,X
+    STA zp_screen_ptr_lo
+    LDA &307E,X
+    STA zp_screen_ptr_hi
+    LDA &30BB,X
+    CMP #&03
+    BNE L2670
+    LDA #&02
+    JMP L2672
+.L2670
+    LDA #&20
+.L2672
+    STA (zp_screen_ptr_lo),Y
+    INX
+    CPX #&3C
+    BNE L265A
+    LDX #&00
+.L267B
+    LDA &2065,X
+    BNE L268A
+    INX
+    CPX #&08
+    BNE L267B
+    LDA #&01
+    STA &268F
+.L268A
+    LDA #&01
+    STA zp_sprite_dir_flag
+    RTS
+    NOP
+    NOP
+    NOP
+    NOP
+.L2693
+    LDA &2692
+    BNE L2699
+    RTS
+.L2699
+    JSR L275F
+    LDA &2692
+    BNE L26A2
+    RTS
+.L26A2
+    LDA &7F
+    CMP #&04
+    BNE L26AB
+    INC &2692
+.L26AB
+    DEC &2690
+    LDA &2690
+    BNE L26CF
+    STA &2692
+    LDX #&00
+    LDY &2691
+    JSR calc_screen_addr
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    LDX #&03
+    LDY #&10
+    JMP sprite_plot_xy
+.L26CF
+    LDX &2690
+    LDY &2691
+    JSR calc_screen_addr
+    LDX #&03
+    LDY #&10
+    LDA &2692
+    CMP #&01
+    BEQ L2737
+    CMP #&02
+    BEQ L2703
+    CMP #&03
+    BEQ L2744
+    CMP #&04
+    BEQ L2751
+    CMP #&05
+    BEQ L2744
+    CMP #&06
+    BEQ L2703
+    CMP #&0A
+    BCC L2737
+    LDA #&01
+    STA &2692
+    JMP L2737
+.L2703
+    LDA #&90
+    STA sprite_src_lo
+    LDA #&40
+    STA sprite_src_hi
+    JMP sprite_plot_xy
+    LDA #&60
+    STA sprite_src_lo
+    LDA #&40
+    STA sprite_src_hi
+    JMP sprite_plot_xy
+    LDA #&C0
+    STA sprite_src_lo
+    LDA #&40
+    STA sprite_src_hi
+    JMP sprite_plot_xy
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&47
+    STA sprite_src_hi
+    JMP sprite_plot_xy
+.L2737
+    LDA #&60
+    STA sprite_src_lo
+    LDA #&40
+    STA sprite_src_hi
+    JMP sprite_plot_xy
+.L2744
+    LDA #&C0
+    STA sprite_src_lo
+    LDA #&40
+    STA sprite_src_hi
+    JMP sprite_plot_xy
+.L2751
+    LDA #&50
+    STA sprite_src_lo
+    LDA #&47
+    STA sprite_src_hi
+    JMP sprite_plot_xy
+.L275E
+    RTS
+.L275F
+    LDX &81
+    DEX
+    TXA
+    CMP &2690
+    BCS L275E
+    ADC #&06
+    CMP &2690
+    BCC L275E
+    LDA &82
+    CLC
+    ADC #&04
+    CMP &2691
+    BCC L275E
+    SBC #&1C
+    CMP &2691
+    BCS L275E
+    LDA #&00
+    STA &2692
+    LDX &2690
+    LDY &2691
+    JSR calc_screen_addr
+    LDA #&80
+    STA sprite_src_lo
+    LDA #&7D
+    STA sprite_src_hi
+    LDX #&03
+    LDY #&10
+    JSR sprite_plot_xy
+    JSR &2EED
+    JSR L25E5
+    LDX #&08
+    LDY #&57
+    JSR calc_screen_addr
+    LDA #&28
+    STA sprite_src_lo
+    LDA #&3A
+    STA sprite_src_hi
+    INC &259F
+    LDX &259F
+    CPX #&08
+    BCS L27C5
+    LDY #&08
+    JSR sprite_plot_xy
+.L27C5
+    LDA &259F
+    CMP #&01
+    BNE L27D2
+    LDA #&03
+    STA &2554
+    RTS
+.L27D2
+    TAX
+    DEX
+    CPX #&07
+    BCC L27D9
+    RTS
+.L27D9
+    LDA #&01
+    STA &25A1,X
+    CPX #&04
+    BNE L27E6
+    LDA #&08
+    STA &8A
+.L27E6
+    RTS
