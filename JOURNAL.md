@@ -6,6 +6,35 @@ Newest entries at the top.
 
 ## 2026-05-14 — Session 2: maps and LEVD format
 
+### Level summary visualization
+
+`tools/render_level_summary.py` combines everything we've decoded into a
+single annotated strip per scenario: 240-column map (16 px × 64 px per
+column) with two enemy lanes above (LEVD2 spawn schedule) and below
+(LEVD3 spawn schedule) at their actual `&7B00[i]` spawn columns. Yellow
+vertical bars mark slots whose `&7B80[i]` attribute resolves to a
+force-field (currently keyed on `sprite_idx & 0x1F == 0x07` as a
+heuristic — the disasm dispatch at `L22D6` uses a "type" byte we
+haven't fully resolved yet).
+
+Output: `work/summary_lev1..4.png` at 3840 × 164 native, and matching
+`_preview.png` crops at 2400 × 164. All four read as plausible level
+layouts:
+
+  - **Lev 1**: gun-towers and arches above; sphere drones, eggs, and
+    tanks below; force fields straddle key choke points.
+  - **Lev 2**: pillars and dinosaur-aliens flanking the red rock map.
+  - **Lev 3**: rocket emplacements and cannons on cyan/white snowscape;
+    sparse spawns matching the open-terrain feel.
+  - **Lev 4**: dense biomechanical map with scattered organic enemies.
+
+Next: 528-byte block at `&7C00`-`&7E0F` (LEVD2 offset `&880`-`&A8F`)
+— probably the actual force-field position table, since the spawn
+attribute byte alone doesn't have enough room to encode FF height/Y
+position. Also: properly identify the force-field discriminator (the
+`sprite_idx == 7` rule is a guess that happens to fire on plausible
+columns; want to verify by tracing `L22D6` properly).
+
 ### OPSC corrected to MODE 2
 
 User noted `$.OPSC` is MODE 2 (16-colour, 4 bpp), not MODE 1. Added MODE 2
