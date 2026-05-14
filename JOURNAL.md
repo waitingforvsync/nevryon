@@ -4,6 +4,59 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-15 — Session 3: GRAPHIX sprite catalog
+
+Carved the entire shared sprite atlas at `&3680-&48FF` into named
+sub-ranges. Method: progressive probes — render the whole region at
+multiple candidate column heights with column / address tickmarks,
+then iterate with the user on what each block actually is.
+
+New sprites identified this session:
+
+  - **Ball-chomp animation** at `&3860-&38EF` — 6 frames of 8×12 px
+    (24 B each). Was previously mis-labelled `sprite_helix` 6×16 at
+    `&3860`. The Pac-Man-style mouth open/close cycle is unmistakable
+    once rendered at H=12.
+  - **Enemy saucer animation** at `&3900-&3A1F` — 3 frames of 12×24 px
+    (72 B each), at `&3900` / `&3960` / `&39C0`, with 24-byte blank
+    columns separating them (and a trailing blank at `&3A08`). The
+    16-byte gap at `&38F0` is alignment pad to push the saucers onto
+    the `&3900` page boundary.
+  - **Small enemy animation** at `&4858-&48E7` — 2 frames of 12×24 px
+    (72 B each) at `&4858` / `&48A0`. Bounded by an 8-byte head pad
+    at `&4850` and a 24-byte trailing blank at `&48E8`.
+
+Several other sprites were nailed down (or had their dimensions
+corrected) earlier in the same session: 5 missile sprites at 20×8,
+`text_pause` at 36×14 (not 8×16), the four pickup colours at 8×16
+with 4-pixel blank gaps between, the 8 small icons at `&4800`, the
+`bomb` glyph at `&4848`, plus the `unknown_table` block at
+`&4500-&474F` (592 B, no code ref yet).
+
+Round-trip via BeebAsm of `GRAPHIX.beebasm` is byte-identical against
+the original `extracted/$.GRAPHIX` after all label changes.
+
+The catalog now spans the full atlas without unidentified gaps — only
+named pad regions (alignment, separators) and the still-mysterious
+`unknown_table`.
+
+`docs/file_layout.md` gets the full sprite table; renders of every
+sprite are in `graphix/` at 1:1 native resolution (`graphix_<addr>_<name>.png`).
+
+The probe tooling lives in `tools/probe_*.py` — kept for the next
+investigation rather than deleted.
+
+### Next
+
+  - Trace what code references `unknown_table` at `&4500`. The
+    disassembler should already have flagged any indexed loads against
+    it; if none, it may be the *destination* of data copies rather
+    than read from code.
+  - The 91 B of "trailing data" at `&49A5-&49FF` after `irq_install` —
+    likely small LUTs, not yet decoded.
+
+---
+
 ## 2026-05-14 — Session 2: maps and LEVD format
 
 ### Disassembler — reachability tracing

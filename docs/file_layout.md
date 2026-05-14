@@ -186,19 +186,99 @@ The victory bitmap. Drawn after completing scenario 4.
 
 ## `$.GRAPHIX` (4992 bytes at `&3680`)
 
+The file is in two halves: a shared sprite atlas at `&3680-&48FF`
+(4736 B, file offset `0x0000-0x127F`) followed by the palette /
+split-screen IRQ handler at `&4900-&49FF` (256 B, file offset
+`0x1280-0x137F`).
+
+### Sprite atlas — `&3680-&48FF`
+
+All sprites are **column-major** at 2 bpp (1 byte = 4 pixels wide).
+Dimensions below are in pixels (W × H), with the on-disk byte size
+in parentheses. Renders of every sprite are in `graphix/`.
+
+| CPU addr | Size px (B)    | Name / description                                                  |
+|----------|----------------|---------------------------------------------------------------------|
+| `&3680`  | 16×16 (64)     | `muzzle_flash_frame0` — player gun flash, frame 0                   |
+| `&36C0`  | 16×16 (64)     | `muzzle_flash_frame1` — player gun flash, frame 1                   |
+| `&3700`  | 16×32 (128)    | `enemy_slot15` — LEVD2/3 ptr-table slot 15 (shared cross-scenario)  |
+| `&3780`  | 16×32 (128)    | `enemy_slot16` — LEVD2/3 ptr-table slot 16                          |
+| `&3800`  | 24×16 (96)     | `text_wow` — "WOW!" inter-stage banner                              |
+| `&3860`  |  8×12 (24)     | `ball_frame0` — chomping-orb animation, frame 0                     |
+| `&3878`  |  8×12 (24)     | `ball_frame1`                                                       |
+| `&3890`  |  8×12 (24)     | `ball_frame2`                                                       |
+| `&38A8`  |  8×12 (24)     | `ball_frame3`                                                       |
+| `&38C0`  |  8×12 (24)     | `ball_frame4`                                                       |
+| `&38D8`  |  8×12 (24)     | `ball_frame5`                                                       |
+| `&38F0`  | — (16)         | Alignment pad — pushes the next sprite onto a page boundary         |
+| `&3900`  | 12×24 (72)     | `enemy_saucer_frame0` — rotating saucer, frame 0                    |
+| `&3948`  | — (24)         | Blank separator column (1×24)                                       |
+| `&3960`  | 12×24 (72)     | `enemy_saucer_frame1`                                               |
+| `&39A8`  | — (24)         | Blank separator                                                     |
+| `&39C0`  | 12×24 (72)     | `enemy_saucer_frame2`                                               |
+| `&3A08`  | — (24)         | Trailing blank                                                      |
+| `&3A20`  |  4×8 (8) ×8    | `icon_00..icon_07` — 8 small 4×8 glyphs (small-char bank, first 8)  |
+| `&3A60`  |  4×8 (8) ×10   | `digit_0..digit_9` — 10 small 4×8 digits                            |
+| `&3AB0`  |  4×8 (8) ×2    | `icon_08`, `icon_09` — two more small 4×8 glyphs                    |
+| `&3AC0`  | — (64)         | Blank pad — unused tail of the 28-slot small-char bank              |
+| `&3B00`  | 32×8 (64)      | `flame_frame0` — engine flame, frame 0                              |
+| `&3B40`  | 32×8 (64)      | `flame_frame1`                                                      |
+| `&3B80`  | 32×8 (64)      | `flame_frame2`                                                      |
+| `&3BC0`  | 80×16 (320)    | `text_press_space` — "PRESS SPACE!"                                 |
+| `&3D00`  | 28×32 (224)    | `logo_4thdim` — small "4TH DIM" logo block                          |
+| `&3DE0`  | 36×16 (144)    | `text_score` — "SCORE"                                              |
+| `&3E70`  |  4×16 (16)     | `punct_colon` — ":"                                                 |
+| `&3E80`  | 28×16 (112)    | `text_last` — "LAST"                                                |
+| `&3EF0`  | 28×16 (112)    | `text_high` — "HIGH"                                                |
+| `&3F60`  |  8×16 (32)     | `punct_ampersand` — "&"                                             |
+| `&3F80`  | 56×16 (224)    | `text_gpr90` — "GPR'90!"                                            |
+| `&4060`  |  8×16 (32)     | `pickup_red` — red pickup                                           |
+| `&4090`  |  8×16 (32)     | `pickup_yellow` — yellow pickup                                     |
+| `&40C0`  |  8×16 (32)     | `pickup_checker` — checker pickup                                   |
+| `&40E0`  | — (32)         | Pre-text pad                                                        |
+| `&4100`  | 64×16 (256)    | `text_get_ready` — "GET READY!"                                     |
+| `&4200`  | 32×16 (128)    | `text_game` — "GAME"                                                |
+| `&4280`  | 32×16 (128)    | `text_over` — "OVER"                                                |
+| `&4300`  | 24×16 (96)     | `text_on` — "ON!"                                                   |
+| `&4360`  | 16×32 (128)    | `enemy_slot19` — LEVD2/3 ptr-table slot 19                          |
+| `&43E0`  | — (48)         | Pre-missile pad                                                     |
+| `&4410`  | 20×8 (40)      | `missile_0` — projectile sprite, frame 0                            |
+| `&4438`  | 20×8 (40)      | `missile_1`                                                         |
+| `&4460`  | 20×8 (40)      | `missile_2`                                                         |
+| `&4488`  | 20×8 (40)      | `missile_3`                                                         |
+| `&44B0`  | 20×8 (40)      | `missile_4`                                                         |
+| `&44D8`  | — (40)         | Post-missile pad                                                    |
+| `&4500`  | — (592)        | `unknown_table` — 592 B data block, purpose TBD (no code ref yet)   |
+| `&4750`  |  8×16 (32)     | `pickup_white` — 4th pickup variant                                 |
+| `&4770`  | — (16)         | Pad                                                                 |
+| `&4780`  | 36×14 (126)    | `text_pause` — "PAUSE"                                              |
+| `&47FE`  | — (2)          | Pad                                                                 |
+| `&4800`  |  4×8 (8) ×8    | `icon_10..icon_17` — 8 more small 4×8 glyphs                        |
+| `&4840`  | — (8)          | Pad                                                                 |
+| `&4848`  |  4×8 (8)       | `bomb` — small bomb/ball sprite                                     |
+| `&4850`  | — (8)          | Pad                                                                 |
+| `&4858`  | 12×24 (72)     | `enemy_small_frame0` — small enemy animation, frame 0               |
+| `&48A0`  | 12×24 (72)     | `enemy_small_frame1` — frame 1                                      |
+| `&48E8`  | — (24)         | Trailing blank                                                      |
+
+The sprite-engine entry point (`sprite_plot_xy` at `&1173` in CODE)
+takes width-in-byte-cols in X and height-in-scanlines in Y, with the
+source pointer self-modified into `&1194`/`&1195`. Callers in
+CODE/CODE2/CODE3 are how each sprite address above was identified —
+either via `LDA #lo;STA &1194; LDA #hi;STA &1195` immediate pairs,
+or via the enemy-pointer tables in LEVD2/3 (slots 15, 16, 19 listed
+above).
+
+### Palette + IRQ — `&4900-&49FF`
+
 | File off       | CPU            | Size  | Contents                                                                                       |
 |----------------|----------------|-------|------------------------------------------------------------------------------------------------|
-| `0x0000-0x127F`| `&3680-&48FF`  | 4736  | **Shared sprite atlas.** Column-major 4×N sprites. Specific slots referenced from level enemy ptr tables: `&3700` (slot 15), `&3780` (slot 16), `&4360` (slot 19). Others are picked up as decoration sprites by the in-game code via various `LDA #&XX; STA sprite_src_lo` patterns. |
 | `0x1280-0x12BE`| `&4900-&493E`  |    63 | `irq_palette_split` — vsync IRQ handler. Saves A/X/Y, picks vsync vs T1 path, primes T1 latch for mid-frame, then writes 12 bytes from `palette_top` to `&FE21`. |
 | `0x12BF-0x12CE`| `&493F-&494E`  |    16 | `palette_top` — playfield palette table. **Only entries 0-11 are used by the IRQ**; the trailing 4 entries are unused padding. On disk these bytes hold the scenario-1 palette (`07 17 47 57 26 36 66 76 84 94 C4 D4 A0 B0 E0 F0` → red / yellow / white). |
 | `0x12CF-0x12DE`| `&494F-&495E`  |    16 | `palette_bottom` — scoreboard palette table. Same 12-effective-entries layout. Always `07 17 47 57 23 33 63 73 81 91 C1 D1 A0 B0 E0 F0` → blue / cyan / white. |
 | `0x12DF-0x12FD`| `&495F-&497D`  |    32 | `irq_palette_split_b` — T1-timer IRQ entry (mid-frame). Writes `palette_bottom` to `&FE21`, then optionally uninstalls if `zp_irq_enable != 0`. |
 | `0x12FE-0x1324`| `&497E-&49A4`  |    39 | `irq_install` — called by Loader2 line 1000 (`CALL &497E`). Saves the prior IRQ1V at zp `&64`/`&65`, installs `irq_palette_split` as the new vector, and primes the User VIA T1L-H + IER + ACR. |
 | `0x1325-0x137F`| `&49A5-&49FF`  |    91 | Trailing data — small lookup tables, purpose TBD. |
-
-The sprite atlas isn't yet carved into named sub-ranges; the slot
-addresses called out above are just the ones that the LEVD2 enemy
-pointer tables actually point at across all four scenarios.
 
 ---
 

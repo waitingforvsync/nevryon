@@ -41,8 +41,19 @@ CATALOG = [
     (0x3700, "enemy_slot15",          4, 32),
     (0x3780, "enemy_slot16",          4, 32),
     (0x3800, "text_wow",              6, 16),
-    (0x3860, "sprite_helix",          6, 16),
-    # 0x38C0..0x3A1F: 352-byte gap — purpose still TBD
+    # &3860..&38EF: 6 ball-chomp animation frames, 2×12 each (24 B/frame)
+    (0x3860, "ball", 2, 12, [
+        "ball_frame0", "ball_frame1", "ball_frame2",
+        "ball_frame3", "ball_frame4", "ball_frame5",
+    ]),
+    # &38F0..&38FF: 16 B alignment pad — page-aligns the enemies to &3900
+    # &3900..&3A1F: 3 enemy-saucer frames at 3×24 each, with 1×24 blank between
+    (0x3900, "enemy_saucer_frame0",   3, 24),
+    # &3948: 24 B blank separator
+    (0x3960, "enemy_saucer_frame1",   3, 24),
+    # &39A8: 24 B blank separator
+    (0x39C0, "enemy_saucer_frame2",   3, 24),
+    # &3A08..&3A1F: 24 B trailing blank
 
     # Small chars at &3A20..&3AFF: 28 cells of 4×8 col-major.
     # Non-blank ones (20 total) get their own files; blanks skipped.
@@ -108,7 +119,11 @@ CATALOG = [
     # &4840..&4847: 8 B pad
     # &4848..&484F: bomb/ball (1×8)
     (0x4848, "bomb",                  1, 8),
-    # &4850..&48FF: gap (176 B) — render at 24 lines tall to spot patterns
+    # &4850..&4857: 8 B pad
+    # &4858..&48E7: two 3×24 enemy animation frames (72 B each)
+    (0x4858, "enemy_small_frame0",    3, 24),
+    (0x48A0, "enemy_small_frame1",    3, 24),
+    # &48E8..&48FF: 24 B trailing pad
 ]
 
 
@@ -165,11 +180,7 @@ def main():
                 count += 1
 
     print()
-    print("Gaps (still unidentified):")
-    render_gap(data, 0x38C0, 0x3A20, "between_helix_and_smallchars")
-    print(f"  &38C0..&3A1F ({0x3A20-0x38C0} B)")
-    render_gap(data, 0x4850, 0x4900, "trailing_after_bomb", h=24)
-    print(f"  &4850..&48FF ({0x4900-0x4850} B, 24 lines high)")
+    print("Gaps (still unidentified): none")
     print()
     print(f"Total sprites rendered: {count}")
 
