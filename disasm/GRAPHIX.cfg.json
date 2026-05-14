@@ -1,13 +1,10 @@
 {
   "base": "0x3680",
+  "entries": ["0x4900", "0x497E"],
   "regions": [
-    {"start": "0x3680", "end": "0x4900", "kind": "data", "width": 16, "comment": "sprite graphics — shared enemy/decoration sprites (column-major, 128 bytes per 4×32 slot)"},
-    {"start": "0x4900", "end": "0x493F", "kind": "code", "comment": "vsync IRQ handler — entry path. Writes 12 entries from palette_top (&493F..&494A) to &FE21. The last 4 bytes of the table (&494B..&494E) are present but never written — entry 15 = white is set once by Loader2 and never overridden."},
-    {"start": "0x493F", "end": "0x494F", "kind": "data", "width": 16, "comment": "palette_top — only [0..11] are read by the IRQ; [12..15] are present but unused. DEFAULT bytes in the on-disk file are the scenario-1 palette (red/yellow). Scenarios 2-4 are loaded by Loader2 PROCL34 / PROCL56 / PROCL78 which `READ T%?&493F` 16 bytes each from DATA at lines 1160 / 1180 / 1200 (dispatched from L%=?&9D at lines 940-970)."},
-    {"start": "0x494F", "end": "0x495F", "kind": "data", "width": 16, "comment": "palette_bottom — 12 effective entries used for the scoreboard zone. Always black/blue/cyan/white regardless of scenario. Last 4 bytes again unused."},
-    {"start": "0x495F", "end": "0x497E", "kind": "code", "comment": "User VIA T1 timer-IRQ entry — fires mid-frame to swap to palette_bottom for the scoreboard. After writing, checks zp_irq_enable: if zero, chains immediately; otherwise restores the saved old IRQ vector (uninstall path) and chains. The BNE/BEQ pair at &497A/&497C is a guaranteed branch — both target irq_chain_old."},
-    {"start": "0x497E", "end": "0x49A5", "kind": "code", "comment": "irq_install — saves the prior IRQ1V (&0204/&0205) at zp &64/&65 then installs irq_palette_split as the new handler. Also primes User VIA T1, IER, ACR for the mid-frame timer."},
-    {"start": "0x49A5", "end": "0x4A00", "kind": "data", "width": 16, "comment": "trailing data — small lookup table(s), purpose TBD"}
+    {"start": "0x3680", "end": "0x4900", "kind": "data", "width": 16, "comment": "shared sprite atlas — column-major 4×N sprites referenced by enemy ptr slots 15, 16, 19 (from &3700, &3780, &4360) and many in-game decoration sprites"},
+    {"start": "0x493F", "end": "0x494F", "kind": "data", "width": 16, "comment": "palette_top — only [0..11] are read by the IRQ; [12..15] are present but unused. DEFAULT bytes are the scenario-1 palette (red/yellow). Scenarios 2-4 are loaded by Loader2 PROCL34 / PROCL56 / PROCL78 which `READ T%?&493F` 16 bytes each from DATA at lines 1160 / 1180 / 1200 (dispatched from L%=?&9D at lines 940-970)."},
+    {"start": "0x494F", "end": "0x495F", "kind": "data", "width": 16, "comment": "palette_bottom — scoreboard zone, always black/blue/cyan/white. Same 12-effective-entries layout as palette_top."}
   ],
   "labels": {
     "0x4900": "irq_palette_split",
@@ -30,7 +27,8 @@
     "0x0205": "irq1v_hi"
   },
   "comments": {
-    "0x4900": "Two-path IRQ handler. Common prologue saves A/X/Y. Tests User VIA IFR bit 7 (T1 IRQ pending) → if so, jumps to irq_palette_split_b for the bottom palette. Otherwise tests sysVIA IFR bit 7 (vsync); if not vsync, chains immediately. Vsync path re-primes UVIA T1 (BC34 cycles ≈ mid-frame), then writes palette_top[0..11] → &FE21."
+    "0x4900": "Common prologue saves A/X/Y. Tests User VIA IFR bit 7 (T1 IRQ pending) → if so, jumps to irq_palette_split_b for the bottom palette. Otherwise tests sysVIA IFR bit 7 (vsync); if not vsync, chains immediately. Vsync path re-primes UVIA T1 (BC34 cycles ≈ mid-frame), then writes palette_top[0..11] → &FE21.",
+    "0x497E": "Called by Loader2 line 1000 (CALL&497E). Saves the prior IRQ1V at zp_old_irq_vec_lo/hi, installs irq_palette_split as the handler, primes UVIA T1L-H + IER + ACR for the mid-frame timer."
   },
   "extern_labels": {
     "0xFFF1": "OSWORD",

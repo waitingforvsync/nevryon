@@ -156,6 +156,13 @@ class DisasmConfig:
     # Value is a literal BeebAsm expression that replaces the raw value
     # (e.g. "LO(some_label)" / "HI(some_label)").
     immediate_overrides: dict[int, str] = field(default_factory=dict)
+    # Reachability tracing entry points. When non-empty, the tool traces
+    # code reachability from these addresses (following JMP/JSR/branches
+    # until RTS/RTI/BRK) and synthesises code/data regions from the
+    # result, replacing any unrecognised gaps with EQUB data. User-
+    # declared `data` regions are still honoured (they're treated as
+    # forced data even if reached by the tracer).
+    entries: list[int] = field(default_factory=list)
 
     @classmethod
     def from_json(cls, path: str) -> "DisasmConfig":
@@ -178,6 +185,8 @@ class DisasmConfig:
             c.extern_labels[int(k, 0)] = v
         for k, v in j.get("immediate_overrides", {}).items():
             c.immediate_overrides[int(k, 0)] = v
+        for e in j.get("entries", []):
+            c.entries.append(int(e, 0) if isinstance(e, str) else e)
         return c
 
 
@@ -347,19 +356,272 @@ def disasm_data_region(data: bytes, base: int, region: Region,
             lines.append(f"    EQUB {', '.join(row)}")
 
 
-def disassemble(data: bytes, cfg: DisasmConfig) -> str:
-    # Auto-collect branch/JSR/JMP targets into the labels map (if not
-    # already named)
+def find_dead_jumps(data: bytes, base: int, code_bytes: set[int]) -> list[int]:
+    """Recover untraced instruction sequences sitting in unreached gaps.
+
+    For each contiguous gap of unreached bytes, decode forward from the
+    very start of the gap. If the decode reaches an unconditional flow
+    break (JMP / RTS / RTI / BRK) — and any branch / JMP target inside
+    that decode lands either inside the same gap or in already-reached
+    code — treat the gap-start as a recovered entry point.
+
+    This catches:
+      - Bare `JMP main_loop` / `JMP some_routine` left after a `JMP
+        external_call`.
+      - Trampoline routine stubs (`LDA #x; STA src_lo; LDA #y; STA
+        src_hi; JMP plotter`) called only from other binaries.
+    """
+    end_addr = base + len(data)
+    extras: list[int] = []
+    pc = base
+    while pc < end_addr:
+        if pc in code_bytes:
+            pc += 1
+            continue
+        gap_start = pc
+        # Find the end of this gap (next reached byte or EOF)
+        gap_end = gap_start
+        while gap_end < end_addr and gap_end not in code_bytes:
+            gap_end += 1
+        # Walk through the gap, trying to recover one stub at a time.
+        # Each recovered stub starts at the current position and must
+        # end with an unconditional flow break (JMP / RTS / RTI / BRK)
+        # whose target (for JMP) is in already-reached code or back into
+        # this gap. Stubs run end-to-end without padding.
+        stub_start = gap_start
+        while stub_start < gap_end:
+            cur = stub_start
+            terminated_cleanly = False
+            while cur < gap_end:
+                off = cur - base
+                info = OPCODES.get(data[off])
+                if info is None:
+                    break
+                mnem, mode, length = info
+                if cur + length > gap_end:
+                    break
+                if mnem in ("RTS", "RTI", "BRK"):
+                    terminated_cleanly = True
+                    cur += length
+                    break
+                if mnem == "JMP":
+                    if mode == "abs":
+                        target = (data[off + 2] << 8) | data[off + 1]
+                        if target in code_bytes or gap_start <= target < gap_end:
+                            terminated_cleanly = True
+                    cur += length
+                    break
+                cur += length
+            if not terminated_cleanly:
+                break
+            extras.append(stub_start)
+            stub_start = cur
+        pc = gap_end
+    return extras
+
+
+def trace_reachable(data: bytes, base: int, entries: list[int]) -> tuple[set[int], set[int]]:
+    """Trace code reachability from entry points.
+
+    Returns (instruction_starts, code_bytes):
+      - instruction_starts: addresses that begin a decoded instruction
+      - code_bytes: addresses covered by any decoded instruction
+    Flow stops at RTS / RTI / BRK / JMP. JSR follows the target AND
+    falls through after the call. Branches follow both arms.
+    """
+    instr_starts: set[int] = set()
+    code_bytes: set[int] = set()
+    end_addr = base + len(data)
+    work: list[int] = list(entries)
+    while work:
+        pc = work.pop()
+        while True:
+            if pc in instr_starts:
+                break
+            if pc < base or pc >= end_addr:
+                break
+            off = pc - base
+            opcode = data[off]
+            info = OPCODES.get(opcode)
+            if info is None:
+                break
+            mnem, mode, length = info
+            if pc + length > end_addr:
+                break
+            instr_starts.add(pc)
+            for i in range(length):
+                code_bytes.add(pc + i)
+
+            if mnem in ("RTS", "RTI", "BRK"):
+                break
+            if mnem == "JMP":
+                if mode == "abs":
+                    target = (data[off + 2] << 8) | data[off + 1]
+                    work.append(target)
+                break
+            if mnem == "JSR":
+                target = (data[off + 2] << 8) | data[off + 1]
+                work.append(target)
+                pc += length
+                continue
+            if mode == "rel":
+                rel = data[off + 1]
+                if rel & 0x80:
+                    rel -= 256
+                target = (pc + length + rel) & 0xFFFF
+                work.append(target)
+                pc += length
+                continue
+            pc += length
+    return instr_starts, code_bytes
+
+
+def synthesise_regions(code_bytes: set[int], base: int, length: int,
+                       forced_regions: list[Region]) -> list[Region]:
+    """Build a list of code/data regions covering [base, base+length).
+
+    Forced regions from cfg override the tracer:
+      - A forced `data` region masks any code reached by the tracer.
+      - A forced `code` region masks data — these contiguous bytes are
+        all decoded even if the tracer didn't reach them. (We add their
+        starts as entry points before calling this, so usually they ARE
+        in code_bytes; this just makes the kind explicit.)
+    """
+    end = base + length
+    # Build a per-address kind table
+    forced_data: set[int] = set()
+    forced_code: set[int] = set()
+    for r in forced_regions:
+        target = forced_data if r.kind == "data" else forced_code
+        for addr in range(r.start, r.end):
+            target.add(addr)
+
+    def kind_at(addr: int) -> str:
+        if addr in forced_data:
+            return "data"
+        if addr in forced_code or addr in code_bytes:
+            return "code"
+        return "data"
+
+    if length == 0:
+        return []
+
+    regions: list[Region] = []
+    cur_start = base
+    cur_kind = kind_at(base)
+    for addr in range(base + 1, end):
+        k = kind_at(addr)
+        if k != cur_kind:
+            regions.append(Region(start=cur_start, end=addr, kind=cur_kind))
+            cur_start = addr
+            cur_kind = k
+    regions.append(Region(start=cur_start, end=end, kind=cur_kind))
+    # Annotate forced regions with their comment so it survives synthesis
+    forced_by_start = {r.start: r for r in forced_regions}
+    for i, r in enumerate(regions):
+        f = forced_by_start.get(r.start)
+        if f is not None and f.end == r.end:
+            regions[i] = Region(start=r.start, end=r.end, kind=r.kind,
+                                 width=f.width, comment=f.comment)
+    return regions
+
+
+def collect_table_targets(data: bytes, base: int, instr_starts: set[int],
+                          code_bytes: set[int]) -> set[int]:
+    """For each absolute-indexed read in reached code (LDA abs,X / abs,Y;
+    LDX abs,Y; LDY abs,X; etc.), return the operand address if it sits
+    outside the code byte set (i.e. it's a data table)."""
     targets: set[int] = set()
-    for r in cfg.regions:
-        if r.kind == "code":
-            collect_branch_targets(data, cfg.base, r, targets)
-    # Generate L<hex> labels for targets that lie within any code region
-    code_ranges = [(r.start, r.end) for r in cfg.regions if r.kind == "code"]
-    for t in sorted(targets):
-        if any(s <= t < e for s, e in code_ranges):
-            if t not in cfg.labels:
+    indexed_modes = {"absx", "absy"}
+    for pc in instr_starts:
+        off = pc - base
+        info = OPCODES.get(data[off])
+        if info is None:
+            continue
+        mnem, mode, length = info
+        if mode not in indexed_modes:
+            continue
+        if length < 3:
+            continue
+        if mnem in ("STA", "STX", "STY"):
+            # Writes-to-table are interesting too; include them
+            pass
+        target = (data[off + 2] << 8) | data[off + 1]
+        if target not in code_bytes:
+            targets.add(target)
+    return targets
+
+
+def disassemble(data: bytes, cfg: DisasmConfig) -> str:
+    use_tracer = bool(cfg.entries)
+    if use_tracer:
+        # Treat the start of every user-declared code region as an
+        # additional entry point.
+        entries = list(cfg.entries)
+        for r in cfg.regions:
+            if r.kind == "code":
+                entries.append(r.start)
+        instr_starts, code_bytes = trace_reachable(data, cfg.base, entries)
+
+        # Recover dead JMPs / JSRs sitting in gaps whose targets are
+        # already classified as code. Re-trace once with those added.
+        dead = find_dead_jumps(data, cfg.base, code_bytes)
+        if dead:
+            instr_starts, code_bytes = trace_reachable(
+                data, cfg.base, entries + dead)
+
+        # Synthesise regions covering the whole file from the tracer
+        # output, with user-declared regions as forced overrides.
+        regions = synthesise_regions(code_bytes, cfg.base, len(data),
+                                      cfg.regions)
+        cfg = DisasmConfig(
+            base=cfg.base,
+            regions=regions,
+            labels=dict(cfg.labels),
+            comments=dict(cfg.comments),
+            extern_labels=dict(cfg.extern_labels),
+            immediate_overrides=dict(cfg.immediate_overrides),
+            entries=cfg.entries,
+        )
+
+        # Auto-label JMP/JSR/branch targets that fell inside reached code
+        targets: set[int] = set()
+        for r in cfg.regions:
+            if r.kind == "code":
+                collect_branch_targets(data, cfg.base, r, targets)
+        for t in sorted(targets):
+            if t in code_bytes and t not in cfg.labels:
                 cfg.labels[t] = f"L{t:04X}"
+
+        # Auto-label data tables referenced from code with absolute-indexed
+        # addressing. Don't override user-supplied names.
+        table_addrs = collect_table_targets(data, cfg.base, instr_starts,
+                                             code_bytes)
+        for addr in sorted(table_addrs):
+            if addr not in cfg.labels and cfg.base <= addr < cfg.base + len(data):
+                cfg.labels[addr] = f"tbl_{addr:04X}"
+
+        # Label each declared entry too
+        for e in cfg.entries:
+            if e not in cfg.labels:
+                cfg.labels[e] = f"sub_{e:04X}"
+
+        # Auto-label each synthesised data region with its start address so
+        # references can use a symbol instead of a raw hex.
+        for r in cfg.regions:
+            if r.kind == "data" and r.start not in cfg.labels:
+                cfg.labels[r.start] = f"data_{r.start:04X}"
+    else:
+        # Legacy region-based mode (no tracing).
+        targets = set()
+        for r in cfg.regions:
+            if r.kind == "code":
+                collect_branch_targets(data, cfg.base, r, targets)
+        code_ranges = [(r.start, r.end) for r in cfg.regions if r.kind == "code"]
+        for t in sorted(targets):
+            if any(s <= t < e for s, e in code_ranges):
+                if t not in cfg.labels:
+                    cfg.labels[t] = f"L{t:04X}"
 
     # Build output
     lines: list[str] = []

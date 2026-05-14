@@ -6,6 +6,38 @@ Newest entries at the top.
 
 ## 2026-05-14 — Session 2: maps and LEVD format
 
+### Disassembler — reachability tracing
+
+Added an `entries` field to the cfg. When present, the disassembler
+traces code reachability from those addresses (following JMP / JSR /
+branches, stopping at RTS / RTI / BRK / JMP-out) and synthesises the
+region list. Untraced bytes become EQUB data with auto-labels
+`data_XXXX`; absolute-indexed loads (`LDA tbl,X` etc.) into untraced
+bytes get a `tbl_XXXX` label so RAM tables are named at first use.
+
+Also added a "dead-stub recovery" heuristic: each gap of unreached
+bytes is decoded forward; if the decode terminates cleanly at an
+unconditional flow break (RTS / RTI / BRK / JMP into reached code or
+back into the same gap), the gap-start is treated as a recovered
+entry point. This catches:
+
+  - Lone `JMP main_loop` left after a `JMP &3300` (call-out to
+    CODE3).
+  - Trampoline routine stubs (`LDA #x; STA sprite_src_lo; LDA #y;
+    STA sprite_src_hi; JMP sprite_plot_xy`) called only from CODE2 /
+    CODE3 — there are several of these in CODE's `&271D..&2737`
+    region.
+
+Also added `immediate_overrides` so a `LDA #&XX` / `LDA #&YY` pair
+can render as `LDA #LO(label)` / `LDA #HI(label)` in the output
+(used in `irq_install` to clarify that the bytes form a vector
+pointing at `irq_palette_split`).
+
+`disasm/CODE.cfg.json` and `disasm/GRAPHIX.cfg.json` now both use
+the tracer; declared regions are mostly limited to the LUTs and the
+sprite atlas. The CODE disassembly is down to ~9 `data_XXXX` blocks
+(all genuine in-code state tables / padding), and GRAPHIX to 2.
+
 ### Per-level palettes — solved (mechanism + tables + override code)
 
 User confirmed each scenario uses a different MODE 5 palette and

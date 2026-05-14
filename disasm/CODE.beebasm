@@ -12,8 +12,7 @@ OSCLI            = &FFF7
 ORG &1100
 
 
-\ ----- code &1100..&1141 -----
-\ entry: jsr init x3 -> main loop
+\ ----- code &1100..&116B -----
 .main_init
     JSR &3115  \ Entry: jsr to three init routines then drop into main loop
     JSR L1F8E
@@ -36,15 +35,12 @@ ORG &1100
     JSR &2E94
     JMP &3300
 .L1130
-    LDA &268F
+    LDA data_268F
     BEQ main_loop
     JSR &3325
-    JSR L284C
+    JSR &284C
     JMP &3300
     JMP main_loop
-
-\ ----- code &1141..&116F -----
-\ LFSR random number generator (jsr targets at 898/907/1318/2406)
 .lfsr_random
     LDY #&20  \ Sprite plot routine: $76/$77 = dest screen addr; L1194/L1195 = sprite src (self-mod); $74 = width-in-byte-cols; $75 = height-in-scanlines; $79 = direction flag (1 = forward)
 .L1143
@@ -62,7 +58,7 @@ ORG &1100
     DEY
     BNE L1143
     LDA &0D
-    STA &116B
+    STA data_116B
     LSR A
     LSR A
     STA &116C
@@ -71,13 +67,12 @@ ORG &1100
     LSR A
     STA &116E
     RTS
-    NOP
-    NOP
-    NOP
-    NOP
+
+\ ----- data &116B..&116F -----
+.data_116B
+    EQUB &EA, &EA, &EA, &EA
 
 \ ----- code &116F..&1209 -----
-\ sprite plot: L116F = parameterless (X=1, Y=32); L1173 = X=width, Y=height; L1184 = inner loop using $74/$75/$76/$77/$78/$79 and self-mod source L1194/L1195
 .sprite_plot_default
     LDX #&01
     LDY #&20
@@ -168,25 +163,19 @@ ORG &1100
     INC sprite_src_hi
     JMP L11D6
 
-\ ----- data &1209..&121F -----
-\ screen line LUT - low byte for each of 22 char rows (MODE 5, base &5800, stride &140)
+\ ----- data &1209..&1236 -----
 .screen_row_lo_lut
     \ Screen char-row low-byte LUT — MODE 5 with base &5800, stride &140 per char row
     EQUB &00, &40, &80, &C0, &00, &40, &80, &C0
     EQUB &00, &40, &80, &C0, &00, &40, &80, &C0
     EQUB &00, &40, &80, &C0, &00, &40
-
-\ ----- data &121F..&1235 -----
-\ screen line LUT - high byte (corresponds to L1209 entries)
 .screen_row_hi_lut
     \ Screen char-row high-byte LUT — pairs with screen_row_lo_lut
     EQUB &58, &59, &5A, &5B, &5D, &5E, &5F, &60
     EQUB &62, &63, &64, &65, &67, &68, &69, &6A
-    EQUB &6C, &6D, &6E, &6F, &71, &72
+    EQUB &6C, &6D, &6E, &6F, &71, &72, &EA
 
-\ ----- code &1235..&2873 -----
-\ remainder of CODE (game logic, will be subdivided as we learn more)
-    NOP
+\ ----- code &1236..&1307 -----
 .calc_screen_addr
     TYA  \ Compute screen address from X (char-col) and Y (logical row); result in $76/$77
     EOR #&FF
@@ -289,15 +278,19 @@ ORG &1100
     LDA zp_sprite_src2_hi
     STA sprite_src_hi
     JMP sprite_plot_default
-    BPL L130A
+
+\ ----- data &1307..&1309 -----
+.data_1307
+    EQUB &10, &01
+
+\ ----- code &1309..&14D8 -----
 .L1309
     SEC
-.L130A
     LDY #&00
     LDX #&00
-    LDA &1307
+    LDA data_1307
     EOR #&50
-    STA &1307
+    STA data_1307
     ASL &1308
 .L1319
     LDA &30BB,X
@@ -307,7 +300,7 @@ ORG &1100
     STA zp_screen_ptr_lo
     LDA &307E,X
     STA zp_screen_ptr_hi
-    LDA &1307
+    LDA data_1307
     CMP #&10
     BNE L133B
     LDA #&40
@@ -511,7 +504,7 @@ ORG &1100
     JSR L198B
     JMP L17E7
 .L14B5
-    LDA &14D8
+    LDA data_14D8
     CMP #&01
     BEQ L14C8
     CMP #&02
@@ -527,8 +520,14 @@ ORG &1100
     LDA #&60
     STA sprite_src_lo
     JMP sprite_plot_xy
-    ORA (&A5,X)
-    EQUB &9F  \ ?? opcode &9F
+
+\ ----- data &14D8..&14D9 -----
+.data_14D8
+    EQUB &01
+
+\ ----- code &14D9..&1575 -----
+.L14D9
+    LDA &9F
     CMP #&01
     BEQ L1517
     LDX #&BD
@@ -613,8 +612,12 @@ ORG &1100
     BRK
     BRK
     BRK
-    NOP
-    NOP
+
+\ ----- data &1575..&1577 -----
+.tbl_1575
+    EQUB &EA, &EA
+
+\ ----- code &1577..&16FD -----
 .L1577
     LDA &25A7
     CMP #&01
@@ -636,7 +639,7 @@ ORG &1100
     SBC #&14
     STA &1572
     LDA #&01
-    STA &1575
+    STA tbl_1575
     STA &1576
     LDA #&01
     STA &1573
@@ -650,7 +653,7 @@ ORG &1100
     RTS
 .L15B8
     LDA #&00
-    STA &1575
+    STA tbl_1575
     RTS
 .L15BE
     LDA #&00
@@ -692,7 +695,7 @@ ORG &1100
 .L160E
     LDA #&01
     STA zp_sprite_dir_flag
-    LDA &1575
+    LDA tbl_1575
     CMP #&01
     BNE L1625
     LDX &156F
@@ -711,7 +714,7 @@ ORG &1100
     LDA &156F
     CMP #&24
     BCC L1688
-    LDA &1575
+    LDA tbl_1575
     BEQ L165E
     LDX &156F
     LDY &1571
@@ -776,12 +779,12 @@ ORG &1100
     CLC
     ADC #&04
     STA &82
-    INC &14D8
-    LDA &14D8
+    INC data_14D8
+    LDA data_14D8
     CMP #&04
     BNE L16CB
     LDA #&01
-    STA &14D8
+    STA data_14D8
 .L16CB
     RTS
 .L16CC
@@ -793,11 +796,11 @@ ORG &1100
     SEC
     SBC #&04
     STA &82
-    DEC &14D8
-    LDA &14D8
+    DEC data_14D8
+    LDA data_14D8
     BNE L16E5
     LDA #&03
-    STA &14D8
+    STA data_14D8
 .L16E5
     RTS
     BRK
@@ -823,24 +826,17 @@ ORG &1100
     NOP
     NOP
     BRK
-    EQUB &74  \ ?? opcode &74
-    EQUB &14  \ ?? opcode &14
-    EQUB &80  \ ?? opcode &80
-    NOP
-    NOP
-    NOP
-    EOR &45
-    LSR &46
-    NOP
-    NOP
-    NOP
-    SEI
-    EQUB &9C  \ ?? opcode &9C
-    RTS
-    DEC &EA,X
-    NOP
-    NOP
-    NOP
+
+\ ----- data &16FD..&1712 -----
+.data_16FD
+    EQUB &74, &14, &80, &EA, &EA
+.tbl_1702
+    EQUB &EA, &45, &45, &46, &46, &EA, &EA
+.tbl_1709
+    EQUB &EA, &78, &9C, &60, &D6, &EA, &EA, &EA
+    EQUB &EA
+
+\ ----- code &1712..&1A76 -----
 .L1712
     LDA &80
     CMP #&F0
@@ -868,11 +864,11 @@ ORG &1100
     STA &86
 .L173D
     TAX
-    LDA &1709,X
+    LDA tbl_1709,X
     STA &1710
     LDA &16FB,X
     STA &88
-    LDA &1702,X
+    LDA tbl_1702,X
     STA &89
     LDA #&00
     STA &87
@@ -890,9 +886,9 @@ ORG &1100
     LDA #&25
     STA &1A55,X
     LDA #&00
-    STA &1A76,X
+    STA tbl_1A76,X
     LDA &86
-    STA &1A81,X
+    STA tbl_1A81,X
     CMP #&05
     BEQ L1781
     CMP #&06
@@ -954,9 +950,9 @@ ORG &1100
     SEC
     SBC #&0C
     STA &16ED,X
-    LDA &2554
+    LDA data_2554
     STA &8A
-    JSR L2800
+    JSR &2800
     JMP &2975
 .L17E7
     LDX #&06
@@ -1152,13 +1148,13 @@ ORG &1100
     LDA #&00
     STA &16E6,X
     LDX &16F7
-    DEC &2077,X
-    LDA &2077,X
+    DEC tbl_2077,X
+    LDA tbl_2077,X
     BNE L1983
     LDA #&14
     STA &2065,X
     JSR L25E5
-    JSR L2822
+    JSR &2822
     LDX &16F5
     RTS
 .L1983
@@ -1302,41 +1298,20 @@ ORG &1100
     BRK
     BRK
     BRK
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    EQUB &FF  \ ?? opcode &FF
-    EQUB &FF  \ ?? opcode &FF
-    EQUB &FF  \ ?? opcode &FF
-    EQUB &FF  \ ?? opcode &FF
-    EQUB &FF  \ ?? opcode &FF
-    EQUB &FF  \ ?? opcode &FF
-    EQUB &FF  \ ?? opcode &FF
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
+
+\ ----- data &1A76..&1A99 -----
+.tbl_1A76
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA, &EA, &EA
+.tbl_1A81
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA, &EA
+.tbl_1A8B
+    EQUB &FF, &FF, &FF, &FF, &FF, &FF, &FF
+.tbl_1A92
+    EQUB &00, &00, &00, &00, &00, &00, &00
+
+\ ----- code &1A99..&1C12 -----
 .L1A99
     JSR lfsr_random
     LDA &116D
@@ -1358,7 +1333,7 @@ ORG &1100
 .L1AB6
     LDX #&04
 .L1AB8
-    LDA &1A8B,X
+    LDA tbl_1A8B,X
     CMP #&FF
     BEQ L1AC3
     DEX
@@ -1371,16 +1346,16 @@ ORG &1100
     CLC
     ADC #&02
     LDX &16F6
-    STA &1A8B,X
+    STA tbl_1A8B,X
     LDX &16F5
     LDA &1A60,X
     SEC
     SBC #&08
     LDX &16F6
-    STA &1A92,X
+    STA tbl_1A92,X
     LDA #&08
     STA &7E
-    JMP L2811
+    JMP &2811
 .L1AEB
     LDX #&08
 .L1AED
@@ -1414,7 +1389,7 @@ ORG &1100
     JMP L1AED
 .L1B2D
     TYA
-    STA &1A76,X
+    STA tbl_1A76,X
     LDA &16F6
     BEQ L1B4F
     CMP #&01
@@ -1457,12 +1432,12 @@ ORG &1100
 .L1B84
     JMP L1D35
 .L1B87
-    LDA &1A81,X
+    LDA tbl_1A81,X
     CMP #&05
     BEQ L1BA5
     CMP #&06
     BEQ L1BD1
-    LDY &1A76,X
+    LDY tbl_1A76,X
     LDA (&88),Y
     STA &16F6
     INY
@@ -1482,14 +1457,14 @@ ORG &1100
     BCC L1BC4
     LDA #&01
     STA &16F6
-    LDY &1A76,X
+    LDY tbl_1A76,X
     INY
     CPY &1710
     RTS
 .L1BC4
     LDA #&03
     STA &16F6
-    LDY &1A76,X
+    LDY tbl_1A76,X
     INY
     CPY &1710
     RTS
@@ -1498,7 +1473,7 @@ ORG &1100
     STA &16F7
     LDA #&00
     STA &16F6
-    LDY &1A76,X
+    LDY tbl_1A76,X
     INY
     CPY &1710
     RTS
@@ -1518,7 +1493,7 @@ ORG &1100
     TAX
     LDA &1C0C,X
     STA sprite_src_lo
-    LDA &1C13,X
+    LDA tbl_1C13,X
     STA sprite_src_hi
     LDX &16F5
     RTS
@@ -1527,9 +1502,14 @@ ORG &1100
     PHA
     BCS L1C21
     RTI
-    LDY #&EA
-    EOR &4D4D
-    LSR &4848
+
+\ ----- data &1C12..&1C1A -----
+.data_1C12
+    EQUB &A0
+.tbl_1C13
+    EQUB &EA, &4D, &4D, &4D, &4E, &48, &48
+
+\ ----- code &1C1A..&1E46 -----
 .L1C1A
     TAY
     INY
@@ -1618,7 +1598,7 @@ ORG &1100
     SEC
     SBC #&04
     STA &84
-    LDA &1575
+    LDA tbl_1575
     CMP #&01
     BNE L1CCC
     LDY #&00
@@ -1657,11 +1637,11 @@ ORG &1100
     BCC L1D02
     RTS
 .L1D02
-    JSR L2822
+    JSR &2822
     TYA
     TAX
     LDA #&00
-    STA &1575,X
+    STA tbl_1575,X
     LDY &1571,X
     LDX &156F
     JSR calc_screen_addr
@@ -1681,13 +1661,13 @@ ORG &1100
 .L1D35
     LDX #&06
 .L1D37
-    LDA &1A8B,X
+    LDA tbl_1A8B,X
     CMP #&FF
     BEQ L1D94
-    LDY &1A92,X
-    DEC &1A8B,X
-    DEC &1A8B,X
-    LDA &1A8B,X
+    LDY tbl_1A92,X
+    DEC tbl_1A8B,X
+    DEC tbl_1A8B,X
+    LDA tbl_1A8B,X
     STX &16F5
     TAX
     CMP #&27
@@ -1697,7 +1677,7 @@ ORG &1100
     JSR calc_screen_addr
     LDX &16F5
     LDA #&FF
-    STA &1A8B,X
+    STA tbl_1A8B,X
     LDX #&02
     LDY #&02
     LDA #&02
@@ -1731,9 +1711,9 @@ ORG &1100
 .L1DA0
     RTS
 .L1DA1
-    LDA &1A8B,X
+    LDA tbl_1A8B,X
     STA &83
-    LDA &1A92,X
+    LDA tbl_1A92,X
     STA &84
     LDA &81
     CMP &83
@@ -1756,8 +1736,8 @@ ORG &1100
     BCC L1DCB
     RTS
 .L1DCB
-    LDY &1A92,X
-    LDA &1A8B,X
+    LDY tbl_1A92,X
+    LDA tbl_1A8B,X
     TAX
     JSR calc_screen_addr
     LDX #&02
@@ -1769,14 +1749,14 @@ ORG &1100
     JSR sprite_plot_xy
     LDX &16F5
     LDA #&FF
-    STA &1A8B,X
+    STA tbl_1A8B,X
 .L1DEE
     STX &16F5
     LDA #&07
     JSR OSWRCH
-    LDA &1E46
+    LDA data_1E46
     EOR #&01
-    STA &1E46
+    STA data_1E46
     CMP #&00
     BNE L1E05
     DEC &2050
@@ -1790,7 +1770,7 @@ ORG &1100
     STA sprite_src_hi
     LDA #&38
     STA sprite_src_lo
-    LDY &1E46
+    LDY data_1E46
     CPY #&00
     BNE L1E2B
     LDA #&3A
@@ -1806,12 +1786,17 @@ ORG &1100
     LDX &16F5
     RTS
 .L1E3B
-    LDA &1E46
+    LDA data_1E46
     CMP #&01
     BEQ L1E47
     LDX &16F5
     RTS
-    NOP
+
+\ ----- data &1E46..&1E47 -----
+.data_1E46
+    EQUB &EA
+
+\ ----- code &1E47..&206E -----
 .L1E47
     LDA #&01
     STA zp_sprite_dir_flag
@@ -1822,7 +1807,7 @@ ORG &1100
     STA &82
     TAY
     JSR calc_screen_addr
-    JSR L2822
+    JSR &2822
     LDX #&04
     LDY #&20
     LDA &7A95
@@ -1945,7 +1930,7 @@ ORG &1100
     RTS
 .L1F8E
     LDA #&01
-    STA &1E46
+    STA data_1E46
     LDA #&05
     STA &81
     LDA #&C8
@@ -1961,20 +1946,20 @@ ORG &1100
     STA zp_sprite_src2_hi
     STA zp_sprite_src_hi
     LDA #&00
-    STA &268F
+    STA data_268F
     LDX #&00
 .L1FB6
     LDA #&00
     STA &205C,X
     STA &2052,X
     STA &2065,X
-    STA &2077,X
-    STA &2080,X
+    STA tbl_2077,X
+    STA tbl_2080,X
     STA &1A6B,X
     INX
     CPX #&09
     BNE L1FB6
-    STA &1575
+    STA tbl_1575
     STA &1576
     STA &2692
     STA &156F
@@ -1996,10 +1981,10 @@ ORG &1100
     LDA #&01
     STA &86
     LDA #&06
-    STA &2554
+    STA data_2554
     LDA #&00
     STA &25A0
-    STA &25A1
+    STA tbl_25A1
     STA &25A3
     STA &25A5
     STA &25A7
@@ -2008,7 +1993,7 @@ ORG &1100
     LDX &16F5
     LDY #&00
     LDA #&FF
-    STA &1A8B
+    STA tbl_1A8B
     STA &1A8C
     STA &1A8D
     STA &1A8E
@@ -2052,34 +2037,19 @@ ORG &1100
     BRK
     BRK
     BRK
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
+
+\ ----- data &206E..&208A -----
+.tbl_206E
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA
+.tbl_2077
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA
+.tbl_2080
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA, &EA
+
+\ ----- code &208A..&23C5 -----
 .spawn_check_step
     LDX &7B
     LDA &7B00,X
@@ -2114,7 +2084,7 @@ ORG &1100
     LSR A
     LSR A
     EOR #&01
-    STA &206E,X
+    STA tbl_206E,X
     TYA
     AND #&60
     LSR A
@@ -2135,9 +2105,9 @@ ORG &1100
     LDA #&28
     STA &2052,X
     LDA #&08
-    STA &2077,X
+    STA tbl_2077,X
     LDA #&04
-    STA &2080,X
+    STA tbl_2080,X
     LDA &2065,X
     CMP #&10
     BEQ L20FA
@@ -2148,17 +2118,17 @@ ORG &1100
     JMP spawn_check_step
 .L20FA
     LDA #&14
-    STA &2077,X
+    STA tbl_2077,X
     JMP spawn_check_step
 .L2102
     LDA #&06
-    STA &2077,X
+    STA tbl_2077,X
     JMP spawn_check_step
 .L210A
     LDA &23C7
     CMP #&01
     BNE L2130
-    LDX &23C5
+    LDX data_23C5
     LDY &23C6
     JSR calc_screen_addr
     LDA #&80
@@ -2210,7 +2180,7 @@ ORG &1100
     TAX
     JSR calc_screen_addr
     LDX &16F5
-    LDA &206E,X
+    LDA tbl_206E,X
     STA zp_sprite_dir_flag
     LDA &2065,X
     TAX
@@ -2250,7 +2220,7 @@ ORG &1100
     CMP #&F0
     BEQ L21EB
     LDA &2052,X
-    ADC &2080,X
+    ADC tbl_2080,X
     LDY &205C,X
     TAX
     JSR calc_screen_addr
@@ -2272,8 +2242,8 @@ ORG &1100
     TAX
     JSR calc_screen_addr
     LDX &16F5
-    DEC &2080,X
-    LDY &2080,X
+    DEC tbl_2080,X
+    LDY tbl_2080,X
     BEQ L2237
     LDA #&FF
     CLC
@@ -2291,9 +2261,9 @@ ORG &1100
     ADC sprite_src_lo
     STA sprite_src_lo
     LDX &16F5
-    LDA &206E,X
+    LDA tbl_206E,X
     STA zp_sprite_dir_flag
-    LDA &2080,X
+    LDA tbl_2080,X
     TAX
     JMP L21BC
 .L2237
@@ -2397,7 +2367,7 @@ ORG &1100
 .L22EC
     LDX #&06
 .L22EE
-    LDA &1A8B,X
+    LDA tbl_1A8B,X
     CMP #&FF
     BEQ L22FC
     DEX
@@ -2414,15 +2384,15 @@ ORG &1100
     RTS
 .L230D
     LDX &16F6
-    STA &1A8B,X
-    DEC &1A8B,X
+    STA tbl_1A8B,X
+    DEC tbl_1A8B,X
     LDX &16F5
     LDA &205C,X
     LDX &16F6
     SEC
     SBC #&10
-    STA &1A92,X
-    JSR L2800
+    STA tbl_1A92,X
+    JSR &2800
     LDX &16F5
     RTS
 .forcefield_render
@@ -2435,7 +2405,7 @@ ORG &1100
     STA &23C7
     LDX &16F5
     LDA &205C,X
-    LDY &206E,X
+    LDY tbl_206E,X
     BNE L234A
     SEC
     SBC #&20
@@ -2447,7 +2417,7 @@ ORG &1100
     STA &23C6
     LDA &2052,X
     STX &16F8
-    STA &23C5
+    STA data_23C5
     LDY &23C6
     TAX
     CPX #&02
@@ -2456,7 +2426,7 @@ ORG &1100
     BCS forcefield_erase
     JSR calc_screen_addr
     JSR lfsr_random
-    LDA &116B
+    LDA data_116B
     STA sprite_src_lo
     LDA #&80
     STA sprite_src_hi
@@ -2464,10 +2434,10 @@ ORG &1100
     LDY #&20
     JSR sprite_plot_xy
     LDA &81
-    CMP &23C5
+    CMP data_23C5
     BCS L23A1
     ADC #&04
-    CMP &23C5
+    CMP data_23C5
     BCC L23A1
     LDA &82
     SBC #&0C
@@ -2496,9 +2466,12 @@ ORG &1100
     STA &23C7
     LDX &16F5
     RTS
-    EQUB &FF  \ ?? opcode &FF
-    EQUB &FF  \ ?? opcode &FF
-    BRK
+
+\ ----- data &23C5..&23C8 -----
+.data_23C5
+    EQUB &FF, &FF, &00
+
+\ ----- code &23C8..&2554 -----
 .L23C8
     LDY &156F
     INY
@@ -2509,7 +2482,7 @@ ORG &1100
     SEC
     SBC #&04
     STA &84
-    LDA &1575
+    LDA tbl_1575
     CMP #&01
     BNE L23E4
     LDY #&00
@@ -2548,11 +2521,11 @@ ORG &1100
     BCC L241A
     RTS
 .L241A
-    JSR L2822
+    JSR &2822
     TYA
     TAX
     LDA #&00
-    STA &1575,X
+    STA tbl_1575,X
     LDY &1571,X
     LDX &156F
     JSR calc_screen_addr
@@ -2566,10 +2539,10 @@ ORG &1100
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX &16F5
-    LDA &2077,X
+    LDA tbl_2077,X
     SEC
     SBC #&04
-    STA &2077,X
+    STA tbl_2077,X
     BEQ L2458
     CMP #&08
     BCS L2458
@@ -2594,7 +2567,7 @@ ORG &1100
     LDA #&09
     STA &2065,X
     LDA &205C,X
-    LDY &206E,X
+    LDY tbl_206E,X
     SEC
     CPY #&01
     BNE L2487
@@ -2701,11 +2674,18 @@ ORG &1100
 .L2550
     INC &249C
     RTS
-    ASL &AD
-    EQUB &A3  \ ?? opcode &A3
-    AND &C9
-    ORA (&F0,X)
-    ORA (&60,X)
+
+\ ----- data &2554..&2555 -----
+.data_2554
+    EQUB &06
+
+\ ----- code &2555..&25A1 -----
+.L2555
+    LDA &25A3
+    CMP #&01
+    BEQ L255D
+    RTS
+.L255D
     LDA &1A6B,X
     CMP #&09
     BCC L2565
@@ -2742,15 +2722,13 @@ ORG &1100
     RTS
     BRK
     BRK
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
+
+\ ----- data &25A1..&25AA -----
+.tbl_25A1
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA
+
+\ ----- code &25AA..&268F -----
 .L25AA
     LDA &25A0
     CMP #&0A
@@ -2871,15 +2849,17 @@ ORG &1100
     CPX #&08
     BNE L267B
     LDA #&01
-    STA &268F
+    STA data_268F
 .L268A
     LDA #&01
     STA zp_sprite_dir_flag
     RTS
-    NOP
-    NOP
-    NOP
-    NOP
+
+\ ----- data &268F..&2693 -----
+.data_268F
+    EQUB &EA, &EA, &EA, &EA
+
+\ ----- code &2693..&27E7 -----
 .L2693
     LDA &2692
     BNE L2699
@@ -3023,7 +3003,7 @@ ORG &1100
     CMP #&01
     BNE L27D2
     LDA #&03
-    STA &2554
+    STA data_2554
     RTS
 .L27D2
     TAX
@@ -3033,7 +3013,7 @@ ORG &1100
     RTS
 .L27D9
     LDA #&01
-    STA &25A1,X
+    STA tbl_25A1,X
     CPX #&04
     BNE L27E6
     LDA #&08

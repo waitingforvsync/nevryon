@@ -1,12 +1,9 @@
 {
   "base": "0x1100",
+  "entries": ["0x1100"],
   "regions": [
-    {"start": "0x1100", "end": "0x1141", "kind": "code", "comment": "entry: jsr init x3 -> main loop"},
-    {"start": "0x1141", "end": "0x116F", "kind": "code", "comment": "LFSR random number generator (jsr targets at 898/907/1318/2406)"},
-    {"start": "0x116F", "end": "0x1209", "kind": "code", "comment": "sprite plot: L116F = parameterless (X=1, Y=32); L1173 = X=width, Y=height; L1184 = inner loop using $74/$75/$76/$77/$78/$79 and self-mod source L1194/L1195"},
     {"start": "0x1209", "end": "0x121F", "kind": "data", "width": 1, "comment": "screen line LUT - low byte for each of 22 char rows (MODE 5, base &5800, stride &140)"},
-    {"start": "0x121F", "end": "0x1235", "kind": "data", "width": 1, "comment": "screen line LUT - high byte (corresponds to L1209 entries)"},
-    {"start": "0x1235", "end": "0x2873", "kind": "code", "comment": "remainder of CODE (game logic, will be subdivided as we learn more)"}
+    {"start": "0x121F", "end": "0x1235", "kind": "data", "width": 1, "comment": "screen line LUT - high byte (corresponds to L1209 entries)"}
   ],
   "labels": {
     "0x1100": "main_init",
