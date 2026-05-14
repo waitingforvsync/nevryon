@@ -8,9 +8,7 @@
   ],
   "labels": {
     "0x3680": "muzzle_flash_frame0",
-    "0x36A0": "muzzle_flash_frame1",
-    "0x36C0": "muzzle_flash_frame2",
-    "0x36E0": "muzzle_flash_frame3",
+    "0x36C0": "muzzle_flash_frame1",
     "0x3700": "enemy_slot15_4x32",
     "0x3780": "enemy_slot16_4x32",
     "0x3800": "sprite_3800",
