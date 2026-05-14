@@ -11,7 +11,11 @@ LEVD2 spawn data (decoded from CODE.beebasm spawn_check_step at L208A):
                 others: index into &7A80/&7AC0 sprite ptr table
     - bits 5-6: Y row class — 0=&DF, 1=&BF, 2=&9F, 3=&7F
                 (after calc_screen_addr inversion → char rows 4, 8, 12, 16)
-    - bit 7:    horizontal mirror flag
+    - bit 7:    VERTICAL flip flag — drives zp_sprite_dir_flag via
+                &206E,X = ~bit7. Used to pair top/bottom decoration
+                sprites (e.g. arch curves hang from ceiling = flipped;
+                their floor counterparts at y_row=2 use the same
+                sprite data un-flipped).
 
 We produce two stacked strips per level:
   - Top half:    LEVD2 spawns over the LEVD2 map
@@ -143,7 +147,7 @@ def render_summary(level: int, scale: int = 2, both_halves: bool = True):
             attr = attr_data[i] if i < len(attr_data) else 0
             type_field = attr & 0x1F
             y_row = (attr >> 5) & 0x03
-            mirror = (attr & 0x80) != 0
+            v_flip = (attr & 0x80) != 0   # bit 7 → ~zp_sprite_dir_flag
 
             is_force_field = (type_field == 0x07)
             sprite_idx = type_field
@@ -182,12 +186,15 @@ def render_summary(level: int, scale: int = 2, both_halves: bool = True):
                 continue
 
             rgb, w, h = spr
-            if mirror:
-                # Horizontal flip the sprite bytes for display
+            if v_flip:
+                # Vertical flip — matches zp_sprite_dir_flag=0 path in
+                # the engine, which reads the column-major source bytes
+                # in reverse.
                 flipped = bytearray(len(rgb))
                 for yy in range(h):
+                    src_y = h - 1 - yy
                     for xx in range(w):
-                        src_i = (yy * w + (w - 1 - xx)) * 3
+                        src_i = (src_y * w + xx) * 3
                         dst_i = (yy * w + xx) * 3
                         flipped[dst_i:dst_i+3] = rgb[src_i:src_i+3]
                 rgb = bytes(flipped)

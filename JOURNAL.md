@@ -84,7 +84,15 @@ Traced the spawn/dispatch chain in `$.CODE`:
     |------|---------|---------|
     | 0-4  | type    | 0..31 — dispatched by `enemy_type_dispatch` (L22B2) |
     | 5-6  | y_row   | 0=&DF, 1=&BF, 2=&9F, 3=&7F (Y position in MODE 5) |
-    | 7    | mirror  | 0 = no flip, 1 = horizontal mirror |
+    | 7    | v_flip  | 0 = normal, 1 = **vertical flip** — pipes through `&206E,X = ~bit7` → `zp_sprite_dir_flag` in the enemy plot (`L216E` lines 2213-2214) |
+
+The "mirror" framing in earlier sessions was wrong — bit 7 toggles
+`zp_sprite_dir_flag`, which is a vertical flip (the inner sprite loop
+reads the column-major bytes back-to-front). This is used to pair
+ceiling-hanging and floor-rising decoration sprites: e.g. lev1's arch
+halves at slots 13/14 are placed at col 11-12 with v_flip=1 at y_row=0
+(hanging from ceiling) and v_flip=0 at y_row=2 (rising from floor),
+using the *same* sprite data both times.
 
   - The type field stored at `&2065,X` controls behavior dispatch:
 
