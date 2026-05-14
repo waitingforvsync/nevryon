@@ -63,7 +63,7 @@
     "0x44B0": "missile_4",
     "0x44D8": "pad_44D8",
     "0x4500": "unknown_table",
-    "0x4750": "graphic_4750",
+    "0x4750": "pickup_white",
     "0x4770": "pad_4770",
     "0x4780": "text_pause",
     "0x47FE": "pad_47FE",

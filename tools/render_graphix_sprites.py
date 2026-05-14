@@ -94,8 +94,8 @@ CATALOG = [
     # &44D8..&44FF: 40 B padding
     # &4500..&474F: unknown_table, 592 B — needs disasm investigation
     (0x4500, "unknown_table",         1, 592),  # rendered as a strip; really a data table
-    # &4750..&476F: 2×16 graphic — purpose TBD
-    (0x4750, "graphic_4750",          2, 16),
+    # &4750..&476F: 4th pickup variant — 2×16
+    (0x4750, "pickup_white",          2, 16),
     # &4770..&477F: 16 B padding
     # &4780..&47FD: "PAUSE" text, 9 cols × 14 lines = 126 B
     # &47FE..&47FF: 2 B padding
