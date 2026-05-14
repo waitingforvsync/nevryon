@@ -44,7 +44,7 @@ CATALOG = [
     (0x3860, "sprite_helix",          6, 16),
     # 0x38C0..0x3A1F: 352-byte gap — purpose still TBD
 
-    # Small chars at &3A20..&3B0F: 30 cells of 4×8 col-major.
+    # Small chars at &3A20..&3AFF: 28 cells of 4×8 col-major.
     # Non-blank ones (20 total) get their own files; blanks skipped.
     (0x3A20, "small_char", 1, 8, [
         "icon_00", "icon_01", "icon_02", "icon_03",
@@ -52,13 +52,13 @@ CATALOG = [
         "digit_0", "digit_1", "digit_2", "digit_3",
         "digit_4", "digit_5", "digit_6", "digit_7",
         "digit_8", "digit_9", "icon_08", "icon_09",
-        None, None, None, None, None, None, None, None, None, None,
+        None, None, None, None, None, None, None, None,
     ]),
 
-    # Flame frames at &3B10..&3BBF: three 7×8 frames (56 B each)
-    (0x3B10, "flame_frame0",          7, 8),
-    (0x3B48, "flame_frame1",          7, 8),
-    (0x3B80, "flame_frame2",          7, 8),
+    # Flame frames at &3B00..&3BBF: three 8×8 frames (64 B each)
+    (0x3B00, "flame_frame0",          8, 8),
+    (0x3B40, "flame_frame1",          8, 8),
+    (0x3B80, "flame_frame2",          8, 8),
 
     # Text region: 8×16 chars (& special 32-line logo) between &3BC0 and &4060
     (0x3BC0, "text_press_space",     20, 16),
