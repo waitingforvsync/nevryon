@@ -1,0 +1,42 @@
+{
+  "base": "0x3680",
+  "regions": [
+    {"start": "0x3680", "end": "0x4900", "kind": "data", "width": 16, "comment": "sprite graphics — shared enemy/decoration sprites (column-major, 128 bytes per 4×32 slot)"},
+    {"start": "0x4900", "end": "0x493F", "kind": "code", "comment": "vsync + timer-T1 IRQ handler — split-screen palette: top half from &493F, bottom half from &494F"},
+    {"start": "0x493F", "end": "0x494F", "kind": "data", "width": 16, "comment": "TOP palette table — 12 entries written to &FE21 at vsync (entries 0,1,2,3,4,5,6,7,8,9,12,13 of the 16-entry palette latch). DEFAULT BYTES are the scenario-1 palette (black/red/yellow/white); for scenarios 2-4 the data here is overwritten at level load (mechanism not yet located in code)."},
+    {"start": "0x494F", "end": "0x495F", "kind": "data", "width": 16, "comment": "BOTTOM palette table — 12 entries written to &FE21 mid-frame for the scoreboard zone (always black/blue/cyan/white regardless of level)"},
+    {"start": "0x495F", "end": "0x4978", "kind": "code", "comment": "second palette swap entry — reached from the timer-T1 IRQ branch; writes &494F[0..11] to &FE21"},
+    {"start": "0x4978", "end": "0x49A8", "kind": "code", "comment": "IRQ install / uninstall — installs &4900 as IRQ1V (&0204/&0205), chains via old vector saved at &64/&65"},
+    {"start": "0x49A8", "end": "0x4A00", "kind": "data", "width": 16, "comment": "trailing data — small lookup table(s), purpose TBD"}
+  ],
+  "labels": {
+    "0x4900": "irq_palette_split",
+    "0x4935": "irq_chain_old",
+    "0x493F": "palette_top",
+    "0x494F": "palette_bottom",
+    "0x495F": "irq_palette_split_b",
+    "0x497E": "irq_install",
+    "0xFE21": "via_palette_latch",
+    "0xFE64": "uvia_t1l_l",
+    "0xFE65": "uvia_t1l_h",
+    "0xFE6D": "uvia_ifr",
+    "0xFE4D": "svia_ifr",
+    "0xFE6E": "uvia_ier",
+    "0xFE6B": "uvia_acr",
+    "0x0064": "zp_old_irq_vec_lo",
+    "0x0065": "zp_old_irq_vec_hi",
+    "0x009C": "zp_irq_enable",
+    "0x0204": "irq1v_lo",
+    "0x0205": "irq1v_hi"
+  },
+  "comments": {
+    "0x4900": "Vsync + timer IRQ handler. Two entry paths share register-save preamble; vsync path falls through to write the top-screen palette (&493F[0..11] → &FE21), then chain to old vector. Timer-T1 path (entered when UVIA IFR bit 7 set) jumps to L495F to write the bottom-screen palette (&494F[0..11] → &FE21)."
+  },
+  "extern_labels": {
+    "0xFFF1": "OSWORD",
+    "0xFFF4": "OSBYTE",
+    "0xFFF7": "OSCLI",
+    "0xFFEE": "OSWRCH",
+    "0xFFE0": "OSRDCH"
+  }
+}

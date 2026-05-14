@@ -6,30 +6,43 @@ Newest entries at the top.
 
 ## 2026-05-14 — Session 2: maps and LEVD format
 
-### Per-level palettes — solved
+### Per-level palettes — partly solved (mechanism + tables)
 
-User correctly observed that each scenario has its own colour scheme.
-The palette source turned out to be in **Loader2 BASIC**, not in any
-of the CODE binaries. Lines 1140-1200 define four PROCs:
+User confirmed each scenario uses a different MODE 5 palette. The
+**rendering mechanism** is now fully decoded; the **per-scenario
+palette-override code** is still missing.
 
-  - `PROCLV12` (scenarios 1/2): no POKE — uses the default palette
-    table embedded in GRAPHIX at `&493F`
-  - `PROCL34`, `PROCL56`, `PROCL78` (scenarios 2/3/4 — the names
-    refer to start-level numbers 3-8 across the two halves of each
-    scenario): each POKEs 16 fresh bytes into `&493F` from inline
-    `DATA` statements.
+What we've decoded:
 
-An IRQ handler in `$.GRAPHIX` at `&492C` (installed by `CALL&497E`,
-also in GRAPHIX, called at Loader2 line 1000) is hooked into the
-User VIA vsync interrupt. Every frame it walks 12 entries of the
-table at `&493F` and writes them straight to the Video ULA palette
-latch at `&FE21`, then after a T1 timer it writes 12 more from
-`&494F` (split-screen secondary palette, used for OPSC-style screens
-that show two colour schemes at once — not used during gameplay).
+  - `$.GRAPHIX` at file offset `0x1280` (CPU `&4900`) is the
+    `irq_palette_split` IRQ handler. On a vsync IRQ it walks
+    `palette_top` (`&493F`, 12 bytes) and pours them straight into
+    the Video ULA palette latch (`&FE21`). On a User VIA T1 timer
+    IRQ (set up by the same handler for mid-frame), it walks
+    `palette_bottom` (`&494F`, 12 bytes) and writes those too —
+    that's the screen split.
+  - `irq_install` at `&497E` hooks IRQ1V (`&0204`/`&0205`) to
+    `&4900` and saves the prior vector at zp `&64`/`&65`.
+  - On-disk `&493F` already holds the scenario-1 playfield palette
+    (red/yellow); on-disk `&494F` is the always-blue/cyan scoreboard
+    palette. The bottom is constant across all scenarios.
+
+What's still missing:
+
+  - The code that **overwrites `&493F[0..11]` per scenario** for
+    scenarios 2-4 is not yet located. No `STA &49xx` instruction
+    targets that range in any of CODE/CODE2/CODE3/Loader2/Loader3,
+    no byte-pattern matching the expected lev2/3/4 palette tables
+    appears in any extracted file, and no PROC in any BASIC loader
+    POKEs into `&493F`. It could be (a) constructed dynamically by
+    code path I haven't disassembled, (b) loaded as part of a level
+    overlay I haven't isolated, or (c) carried inside the LEVD1
+    file at an unexpected offset for scenarios 2-4.
 
 The MODE 5 pixel→latch-entry mapping is the BBC's "interleaved" form:
 `pixel V → entry [0, 3, 12, 15][V]`. With that, each scenario's
-palette decodes cleanly:
+palette decodes cleanly (entries 0 and 15 are constant black/white;
+entries 3 and 12 carry the scenario primary/secondary):
 
 | Scenario | Pixel 0 | Pixel 1 | Pixel 2 | Pixel 3 |
 |----------|---------|---------|---------|---------|
@@ -39,10 +52,15 @@ palette decodes cleanly:
 | 4        | black   | red     | magenta | white   |
 
 All four match the user's stated colour schemes exactly.
-`render_screen.NEVRYON_LEVEL_PALETTES` now carries all four, and
+`render_screen.NEVRYON_LEVEL_PALETTES` carries all four, and
 `palette_for_level(n)` is the public selector. `render_map.py`,
 `render_level_summary.py` and `extract_enemies.py` all accept a
 `--level` argument and pick the right palette.
+
+Disassembly state: `disasm/GRAPHIX.beebasm` (+ `.cfg.json`) now
+covers the IRQ handler and both palette tables. The `data` regions
+in GRAPHIX still need to be carved up further (the sprite atlas is
+not yet decoded into named ranges).
 
 ### Cleanup pass on `work/`
 

@@ -68,18 +68,26 @@ def palette_from_mapping(logical_to_physical: dict[int, int]) -> list[tuple[int,
     return pal
 
 
-# Nevryon in-game palettes — one per scenario. Source: Loader2 sets the
-# palette table at &493F (in the loaded GRAPHIX file) via PROCL34/L56/L78,
-# which is then sent to &FE21 by an IRQ handler running off the User VIA
-# vsync interrupt (handler at &492C in GRAPHIX).
+# Nevryon in-game palettes — one per scenario. The actual mechanism:
 #
-# MODE 5 effective mapping is: pixel V (0..3) selects palette latch entry
-# E where E = [0, 3, 12, 15][V] (the BBC's "interleaved" 4-color mapping).
-# So decoding each scenario's palette to (phys for pixel 0..3):
-#   Scenario 1 (default in GRAPHIX): 0, 1, 3, 7 → black/red/yellow/white
-#   Scenario 2 (Loader2 PROCL34):    0, 4, 6, 7 → black/blue/cyan/white
-#   Scenario 3 (Loader2 PROCL56):    0, 1, 2, 7 → black/red/green/white
-#   Scenario 4 (Loader2 PROCL78):    0, 1, 5, 7 → black/red/magenta/white
+# A split-screen palette IRQ in GRAPHIX (irq_palette_split at &4900)
+# writes &493F[0..11] to the Video ULA palette latch (&FE21) at vsync
+# (top-half/playfield palette) and &494F[0..11] mid-frame at a User
+# VIA T1 IRQ (bottom-half/scoreboard palette). The IRQ source bytes
+# in the on-disk GRAPHIX file are the scenario-1 playfield palette
+# at &493F and the (always-blue/cyan) scoreboard palette at &494F.
+#
+# Scenarios 2-4 must rewrite &493F[0..11] at level load — but the code
+# that does this hasn't been positively located in CODE/CODE2/CODE3.
+# The four palettes here were derived by inspection of in-emulator
+# screenshots.
+#
+# MODE 5 effective mapping: pixel value V (0..3) selects palette
+# latch entry E where E = [0, 3, 12, 15][V] (the BBC ULA bit-
+# replicates the 2-bit pixel into a 4-bit palette index). So the four
+# MODE 5 "logical" colors correspond to palette[0,3,12,15]; entry 0
+# is always black, entry 15 is always white, and entries 3 and 12
+# carry the scenario-specific primary and secondary colors.
 NEVRYON_LEVEL_PALETTES = {
     1: palette_from_mapping({0: 0, 1: 1, 2: 3, 3: 7}),   # red/yellow/white
     2: palette_from_mapping({0: 0, 1: 4, 2: 6, 3: 7}),   # blue/cyan/white

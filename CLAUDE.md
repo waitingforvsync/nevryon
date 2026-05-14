@@ -86,29 +86,43 @@ as part of the LDA instruction.
   Used as storage for LEVD2/LEVD3 data.
 
 ### Per-level palette
-Each scenario (1-4) uses a different MODE 5 palette. Loader2 PROCs
-`PROCL34`/`PROCL56`/`PROCL78` (lines 1140-1200) POKE 16 bytes per
-level into `&493F` — the palette table embedded in GRAPHIX. An IRQ
-handler at `&492C` (also in GRAPHIX, installed by `CALL&497E` at
-Loader2 line 1000) writes those bytes to the Video ULA palette latch
-at `&FE21` every vsync.
+Each scenario (1-4) uses a different MODE 5 palette. The mechanism:
 
-The MODE 5 pixel→palette mapping is `pixel V → palette latch entry
-[0, 3, 12, 15][V]` (the BBC's "interleaved" 4-colour scheme; other
-entries are spares used by the OS but unread in MODE 5). Decoded:
+  - `irq_palette_split` (GRAPHIX file off `0x1280`, CPU `&4900`) is
+    an IRQ handler that writes 12 bytes from `palette_top` (`&493F`)
+    to the Video ULA palette latch (`&FE21`) at vsync, and 12 bytes
+    from `palette_bottom` (`&494F`) mid-frame on a User VIA T1 timer
+    IRQ. This split gives the top of the screen one palette and the
+    scoreboard another within the same frame.
+  - `irq_install` (`&497E`) hooks IRQ1V (`&0204`/`&0205`) to point at
+    `&4900`, saving the prior vector at zp `&64`/`&65`.
+  - The bytes in the on-disk GRAPHIX file at `&493F` are the scenario-1
+    palette (black/red/yellow/white). `&494F` is the always-on
+    scoreboard palette (black/blue/cyan/white).
+  - Scenarios 2-4 rewrite `&493F[0..11]` at level load. **The code
+    that does this rewrite hasn't been located yet** — it isn't a
+    direct `STA &49xx`, doesn't appear as a raw byte-pattern in any
+    extracted file, and doesn't appear in any BASIC loader. Treat
+    the per-scenario palettes here as observation-derived until
+    located.
+
+MODE 5 pixel→palette mapping: `pixel V → palette latch entry
+[0, 3, 12, 15][V]` (the BBC ULA bit-replicates the 2-bit pixel into
+a 4-bit palette index; other entries are spares unused by MODE 5).
+Decoded:
 
 | Scenario | Pixel 0 | Pixel 1 | Pixel 2 | Pixel 3 |
 |----------|---------|---------|---------|---------|
-| 1 (LV12) | black   | red     | yellow  | white   |
-| 2 (L34)  | black   | blue    | cyan    | white   |
-| 3 (L56)  | black   | red     | green   | white   |
-| 4 (L78)  | black   | red     | magenta | white   |
+| 1        | black   | red     | yellow  | white   |
+| 2        | black   | blue    | cyan    | white   |
+| 3        | black   | red     | green   | white   |
+| 4        | black   | red     | magenta | white   |
 
 Use `palette_for_level(scenario)` from `render_screen.py` to pick the
 right palette. `NEVRYON_GAME_PALETTE` defaults to scenario 1.
 
-**Loader screens** (title/options/scoreboard, before any PROCL call):
-Loader2 line 990 sets `VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` →
+**Loader screens** (title/options/scoreboard, before in-game IRQ
+takes over): Loader2 line 990 sets `VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` →
 0=black, 1=red, 2=cyan, 3=white. Use `NEVRYON_LOADER_PALETTE`.
 
 ### Map tile layout
