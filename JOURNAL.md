@@ -6,6 +6,64 @@ Newest entries at the top.
 
 ## 2026-05-14 — Session 2: maps and LEVD format
 
+### 528-byte mystery block — solved
+
+The "528 bytes at LEVD2 offset `&880`-`&A8F`" turns out to be two
+unrelated regions:
+
+| File off | Mem addr | Size | Contents |
+|----------|----------|------|----------|
+| `&880`-`&8FF` | `&7C00`-`&7C7F` | 128 | **Enemy sprite slot 25** (4×32 col-major) — per-level shootable item, intact frame |
+| `&900`-`&97F` | `&7C80`-`&7CFF` | 128 | **Enemy sprite slot 26** (4×32 col-major) — per-level shootable item, damaged frame |
+| `&980`-`&A8F` | `&7D00`-`&7E0F` | 272 | **All zeros** — blank/erase sprite region |
+
+Confirmed via:
+  1. Enemy ptr table `&7A80/&7AC0` slot 25 = `&7C00`, slot 26 = `&7C80`
+     in every LEVD2 (lev 1-4 all agree).
+  2. Dumped `&7D00`-`&7E0F` for all four files — every byte is zero.
+  3. Rendered slots 25/26 as 4×32 sprites: they're clearly two
+     animation frames of each level's signature shootable item
+     (Lev 1: horseshoe portal, Lev 2: white egg, Lev 3: figure-8
+     "snowman", Lev 4: organic biomech blob; in each case slot 26 is
+     the "broken/damaged" frame of slot 25).
+
+The zero region is reached by name in the code via `&7D80` (the default
+`sprite_src`/`zp_sprite_src_lo`/`hi` init in `L1F8E`) and `&7E02`
+(small effect erase). Plotting any W×H sprite from a zero source just
+writes color-0 (background) — i.e. it ERASES a screen rectangle. Used
+for: erasing destroyed enemies (4×24 from `&7D80`), erasing force
+fields (2×32 from `&7D80`), erasing bullets (3×2 from `&7E02`).
+
+### Force-field discriminator — confirmed
+
+Traced the spawn/dispatch chain in `$.CODE`:
+
+  - `spawn_check_step` (L208A) reads `&7B00[&7B]`, matches against
+    `&80` (current scroll col); if a hit, takes a free slot from `&7C`
+    and decodes the attribute byte at `&7B80[X]`:
+
+    | Bits | Field   | Meaning |
+    |------|---------|---------|
+    | 0-4  | type    | 0..31 — dispatched by `enemy_type_dispatch` (L22B2) |
+    | 5-6  | y_row   | 0=&DF, 1=&BF, 2=&9F, 3=&7F (Y position in MODE 5) |
+    | 7    | mirror  | 0 = no flip, 1 = horizontal mirror |
+
+  - The type field stored at `&2065,X` controls behavior dispatch:
+
+    | type | Action |
+    |------|--------|
+    | 4, &13 | jump to L22E5 (special multi-shot pattern) |
+    | 6    | jump to `&2A20` (handled in CODE2 overlay) |
+    | 7    | **force field** — `forcefield_render` (L232C → L234D draws a 2×32 vertical strip whose source is `&80XX`, with `XX` from lfsr_random — i.e. procedural noise read from sideways ROM) |
+    | 8    | jump to L2464 (TBD — possibly the rotating boss element) |
+    | &10  | high-HP enemy (`&2077,X` = 20 hits) — possibly the level boss |
+    | other | default: plot enemy sprite from `&7A80/&7AC0[type]` |
+
+The level summary tool's `(attr & 0x1F) == 7` heuristic for marking
+force fields is **correct**. New labels added to `CODE.cfg.json`:
+`spawn_check_step`, `enemy_type_dispatch`, `forcefield_render`,
+`forcefield_draw_or_erase`, `forcefield_erase`.
+
 ### Level summary visualization
 
 `tools/render_level_summary.py` combines everything we've decoded into a
@@ -101,8 +159,10 @@ In LEVD2 (loaded at `&7380`):
 | `&700`-`&73F` | `&7A80`-`&7ABF` | 64 | Enemy sprite ptr LOW (64 slots) |
 | `&740`-`&77F` | `&7AC0`-`&7AFF` | 64 | Enemy sprite ptr HIGH (paired with LOW) |
 | `&780`-`&7FF` | `&7B00`-`&7B7F` | 128 | **Enemy spawn-column schedule** (sorted; `&FF` = terminator) |
-| `&800`-`&87F` | `&7B80`-`&7BFF` | 128 | **Enemy attribute byte** per spawn (low 5 bits = sprite-index into ptr table; bit 7 = mirror flag) |
-| `&880`-`&A8F` | `&7C00`-`&7E0F` | 528 | More tables — TBD (force-field positions?) |
+| `&800`-`&87F` | `&7B80`-`&7BFF` | 128 | **Enemy attribute byte** per spawn — bits 0-4 = type (→ `enemy_type_dispatch`), bits 5-6 = Y row, bit 7 = mirror |
+| `&880`-`&8FF` | `&7C00`-`&7C7F` | 128 | **Enemy sprite slot 25** (4×32 col-major) — level's shootable item, intact frame |
+| `&900`-`&97F` | `&7C80`-`&7CFF` | 128 | **Enemy sprite slot 26** (4×32 col-major) — level's shootable item, damaged frame |
+| `&980`-`&A8F` | `&7D00`-`&7E0F` | 272 | **Zero-fill (erase brush)** — accessed via `&7D80`/`&7E02` for erasing screen rects |
 | `&A90`-`&B7F` | `&7E10`-`&7EFF` | 240 | Map LOWER tile id per column |
 | `&B80`-`&B8F` | `&7F00`-`&7F0F` | 16 | Gap/pad |
 | `&B90`-`&C7F` | `&7F10`-`&7FFF` | 240 | Map UPPER tile id per column |

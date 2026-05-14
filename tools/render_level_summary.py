@@ -102,15 +102,15 @@ def render_summary(level: int, scale: int = 2, both_halves: bool = True):
             if col == 0xFF:
                 break
             attr = attr_data[i] if i < len(attr_data) else 0
-            sprite_idx = attr & 0x1F
+            type_field = attr & 0x1F             # 0..31 → enemy_type_dispatch
+            y_row = (attr >> 5) & 0x03           # 0=&DF, 1=&BF, 2=&9F, 3=&7F
             mirror = (attr & 0x80) != 0
-            type_field = (attr >> 5) & 0x03  # bits 5-6
 
-            # Force-field detection: low 5 bits == 7 OR type bits set?
-            # We tentatively treat sprite_idx == 7 as force-field, since
-            # the disasm dispatch at L22D6 keys on a separate "type" byte
-            # that we haven't fully identified yet. Try the simple test.
-            is_force_field = (sprite_idx == 0x07)
+            # Force fields are type==7 — verified via disasm trace
+            # spawn_check_step → enemy_type_dispatch → forcefield_render
+            # (procedurally rendered using LFSR-indexed sideways ROM data).
+            is_force_field = (type_field == 0x07)
+            sprite_idx = type_field  # default: sprite-index = type
 
             x = col * MAP_PX_PER_COL
             if is_force_field:

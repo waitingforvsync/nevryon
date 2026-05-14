@@ -396,7 +396,7 @@ ORG &1100
 .L13D1
     JSR L25AA
     JSR L1712
-    JSR L208A
+    JSR spawn_check_step
     LDX &80
     LDA &7F10,X
     TAX
@@ -2080,7 +2080,7 @@ ORG &1100
     NOP
     NOP
     NOP
-.L208A
+.spawn_check_step
     LDX &7B
     LDA &7B00,X
     CMP &80
@@ -2145,15 +2145,15 @@ ORG &1100
     BEQ L2102
     CMP #&03
     BCC L2102
-    JMP L208A
+    JMP spawn_check_step
 .L20FA
     LDA #&14
     STA &2077,X
-    JMP L208A
+    JMP spawn_check_step
 .L2102
     LDA #&06
     STA &2077,X
-    JMP L208A
+    JMP spawn_check_step
 .L210A
     LDA &23C7
     CMP #&01
@@ -2309,7 +2309,7 @@ ORG &1100
     STA &2065,X
     JMP L2140
 .L2253
-    JSR L22B2
+    JSR enemy_type_dispatch
     LDA &2065,X
     CMP #&14
     BCC L2260
@@ -2358,7 +2358,7 @@ ORG &1100
     STA &2052,X
     STA &205C,X
     RTS
-.L22B2
+.enemy_type_dispatch
     LDA &2065,X
     CMP #&04
     BNE L22BC
@@ -2382,7 +2382,7 @@ ORG &1100
 .L22D6
     CMP #&07
     BNE L22DD
-    JMP L232C
+    JMP forcefield_render
 .L22DD
     CMP #&08
     BNE L22E4
@@ -2425,7 +2425,7 @@ ORG &1100
     JSR L2800
     LDX &16F5
     RTS
-.L232C
+.forcefield_render
     LDA &23C7
     CMP #&01
     BNE L2334
@@ -2439,11 +2439,11 @@ ORG &1100
     BNE L234A
     SEC
     SBC #&20
-    JMP L234D
+    JMP forcefield_draw_or_erase
 .L234A
     CLC
     ADC #&20
-.L234D
+.forcefield_draw_or_erase
     STA &23C6
     LDA &2052,X
     STX &16F8
@@ -2451,9 +2451,9 @@ ORG &1100
     LDY &23C6
     TAX
     CPX #&02
-    BCC L23A8
+    BCC forcefield_erase
     CPX #&25
-    BCS L23A8
+    BCS forcefield_erase
     JSR calc_screen_addr
     JSR lfsr_random
     LDA &116B
@@ -2483,7 +2483,7 @@ ORG &1100
     LDX &16F8
     STX &16F5
     RTS
-.L23A8
+.forcefield_erase
     JSR calc_screen_addr
     LDA #&80
     STA sprite_src_lo
