@@ -19,7 +19,10 @@
 
 \ ----- Shared externs ----------------------------------------
 
-\ Zero-page locations used by the engine
+\ Zero-page locations used by the engine. Pre-declare everything we
+\ name so per-binary cfgs can reference any zp slot without forward-
+\ reference issues (BeebAsm pass divergence on undefined symbols can
+\ leave a silently corrupt layout — see Session 6 notes).
 zp_old_irq_vec_lo         = &0064
 zp_old_irq_vec_hi         = &0065
 zp_screen_ptr_lo          = &0070
@@ -30,10 +33,33 @@ zp_dest_x_lo              = &0076
 zp_dest_x_hi              = &0077
 zp_sprite_end_index       = &0078
 zp_sprite_dir_flag        = &0079
-zp_sprite_src2_hi         = &008B
-zp_sprite_src2_lo         = &008C
-zp_sprite_src_hi          = &008D
-zp_sprite_src_lo          = &008E
+zp_frame_progress         = &007A
+zp_scroll_col             = &0080
+zp_player_x               = &0081
+zp_player_y               = &0082
+zp_test_x                 = &0083
+zp_test_y                 = &0084
+\ Map-tile source pointers. Misnamed historically as
+\ "zp_sprite_src" — these are NOT the sprite engine's source bytes
+\ (those are the self-modified operand at sprite_src_lo / _hi at
+\ &1194/&1195 inside sprite_plot_inner). They're the per-column
+\ tile pointers used by L13D1: each frame walks the LEVD2 tile-id
+\ table to compute where to read the current column's tile from in
+\ the LEVD1 catalog at &4E80. Two pairs because the upper and lower
+\ tile bands are drawn in the same column update from different
+\ sources — the upper band is rendered with zp_sprite_dir_flag=0
+\ (vertically mirrored, used by L127B at Y=&FF / row 0), the lower
+\ band with dir_flag=1 (normal, Y=&7F / row 16).
+zp_tile_lower_hi          = &008B
+zp_tile_lower_lo          = &008C
+zp_tile_upper_hi          = &008D
+zp_tile_upper_lo          = &008E
+zp_get_ready_erase        = &008F
+zp_print_idx              = &0090
+zp_continues              = &0091
+zp_game_speed             = &0092
+zp_string_ptr_lo          = &0095
+zp_string_ptr_hi          = &0096
 zp_irq_enable             = &009C
 zp_level_num              = &009D
 
@@ -47,6 +73,31 @@ irq1v_hi                  = &0205
 \ "erase brush" — overlays touch it at +&80, +&B0, +&100, +&102.
 lev_player_sprite         = &4E80
 lev_erase_brush           = &7D00
+
+\ Internal BBC key scan codes (OSBYTE &81 with Y=&FF, X=&XX). These
+\ map to BASIC's `INKEY -N` values. The byte stored in X is the two's
+\ complement of the BASIC scan code, e.g. KEY_RIGHT = &BD = -67 mod
+\ 256 → INKEY -67. check_key_pressed in CODE wraps the call.
+KEY_RIGHT                 = &BD     \ INKEY -67  (the "X" key)
+KEY_LEFT                  = &9E     \ INKEY -98  (the "Z" key)
+KEY_DOWN                  = &B7     \ INKEY -73
+KEY_UP                    = &97     \ INKEY -105
+KEY_FIRE                  = &B6     \ INKEY -74
+KEY_PAUSE                 = &C8     \ INKEY -56
+KEY_QUIT                  = &8F     \ INKEY -113 (force game over)
+
+\ Loader2 / Loader4 persistence area (page &C, &0CF3..&0CFF).
+\ save_score_to_loader / restore_score_from_loader move state here
+\ across the BASIC chain.
+loader_lives_save         = &0CF3
+loader_score_save         = &0CF4
+loader_hiscore_save       = &0CFA
+
+\ Cross-file labels referencing bytes that LIVE inside one of the
+\ binaries (e.g. score_dN at &2A02 in CODE2, data_2051 at &2051 in
+\ CODE) are defined inline by that binary's cfg, not here — the
+\ disassembler emits them at the byte location and they're visible
+\ globally once BeebAsm has INCLUDE'd the binary.
 
 \ Cross-file LXXXX labels (auto-generated from branch targets) and
 \ mid-instruction equates (sprite_src_lo/hi, LXXXX inside CODE2 etc.)

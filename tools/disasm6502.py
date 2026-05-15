@@ -150,8 +150,20 @@ class DisasmConfig:
     regions: list[Region] = field(default_factory=list)
     labels: dict[int, str] = field(default_factory=dict)
     comments: dict[int, str] = field(default_factory=dict)
-    # OS / external addresses to give friendly names
+    # OS / external addresses to give friendly names. Items from the
+    # cfg JSON go here; they're assumed to be defined elsewhere
+    # (master `Nevryon.6502`) when `emit_externs=false`.
     extern_labels: dict[int, str] = field(default_factory=dict)
+    # Auto-promoted externs (out-of-range data / zp slots discovered
+    # while disassembling). The master doesn't know about these, so
+    # they're always emitted inline in the per-binary .6502 to keep
+    # the build self-contained.
+    auto_extern_labels: dict[int, str] = field(default_factory=dict)
+    # Master-file equates: addr → name parsed from the master
+    # `Nevryon.6502` (or whichever file the user points to). Loading
+    # these makes the disasm prefer the master's preferred names over
+    # auto-generated `zp_XX` / `data_XXXX` fallbacks.
+    master_externs: dict[int, str] = field(default_factory=dict)
     # Immediate-operand overrides keyed by the PC of the # instruction.
     # Value is a literal BeebAsm expression that replaces the raw value
     # (e.g. "LO(some_label)" / "HI(some_label)").
@@ -228,9 +240,14 @@ def fmt_operand(mode: str, value: int, target_label: str | None) -> str:
 
 
 def collect_branch_targets(data: bytes, base: int, region: Region,
-                           targets: set[int]):
+                           targets: set[int],
+                           jsr_targets: set[int] | None = None):
     """First pass: scan code in this region and add all branch / JMP / JSR
-    targets to the `targets` set (for label generation)."""
+    targets to the `targets` set (for label generation). If `jsr_targets`
+    is also given, populate it with JSR-only destinations — used by the
+    code emitter to insert a blank line before every routine entry
+    point so the output reads as discrete subroutines instead of one
+    wall of text."""
     pc = region.start
     while pc < region.end:
         off = pc - base
@@ -253,18 +270,31 @@ def collect_branch_targets(data: bytes, base: int, region: Region,
         elif mnem in ("JMP", "JSR") and mode in ("abs", "ind"):
             target = (operand_hi << 8) | operand_lo
             targets.add(target)
+            if jsr_targets is not None and mnem == "JSR":
+                jsr_targets.add(target)
         pc += length
 
 
 def disasm_code_region(data: bytes, base: int, region: Region,
                        labels: dict[int, str], extern_labels: dict[int, str],
                        comments: dict[int, str], lines: list[str],
-                       immediate_overrides: dict[int, str] | None = None):
+                       immediate_overrides: dict[int, str] | None = None,
+                       auto_extern_labels: dict[int, str] | None = None,
+                       jsr_targets: set[int] | None = None):
     immediate_overrides = immediate_overrides or {}
+    auto_extern_labels = auto_extern_labels or {}
+    jsr_targets = jsr_targets or set()
+    def lookup(addr: int):
+        return (labels.get(addr) or extern_labels.get(addr)
+                or auto_extern_labels.get(addr))
     pc = region.start
     while pc < region.end:
-        # Emit pending label if this PC has one
+        # Emit pending label if this PC has one. Routine entries
+        # (JSR destinations) get a leading blank line so each
+        # subroutine is visually separated.
         if pc in labels:
+            if pc in jsr_targets and pc != region.start and lines and lines[-1] != "":
+                lines.append("")
             lines.append(f".{labels[pc]}")
         off = pc - base
         if off < 0 or off >= len(data):
@@ -296,16 +326,16 @@ def disasm_code_region(data: bytes, base: int, region: Region,
                 operand_str = fmt_operand(mode, value, None)
         elif mode in ("zp", "zpx", "zpy", "inx", "iny"):
             value = operand_lo
-            tgt_lbl = (labels.get(value) or extern_labels.get(value))
+            tgt_lbl = lookup(value)
             operand_str = fmt_operand(mode, value, tgt_lbl)
         elif mode == "rel":
             offset = (operand_lo - 256) if operand_lo & 0x80 else operand_lo
             value = (pc + 2 + offset) & 0xFFFF
-            tgt_lbl = labels.get(value) or extern_labels.get(value)
+            tgt_lbl = lookup(value)
             operand_str = fmt_operand(mode, value, tgt_lbl)
         elif mode in ("abs", "absx", "absy", "ind"):
             value = (operand_hi << 8) | operand_lo
-            tgt_lbl = labels.get(value) or extern_labels.get(value)
+            tgt_lbl = lookup(value)
             operand_str = fmt_operand(mode, value, tgt_lbl)
         elif mode == "acc":
             value = 0
@@ -335,6 +365,35 @@ def disasm_data_region(data: bytes, base: int, region: Region,
             break
         if pc in comments:
             lines.append(f"    \\ {comments[pc]}")
+
+        if region.kind == "string":
+            # Emit ASCII as EQUS "...", &XX terminators; break each line
+            # at a CR (&0D) or at the next label.
+            parts: list[str] = []
+            buf: list[int] = []
+            run_start = pc
+            def flush_buf():
+                if buf:
+                    s = ''.join(chr(b) for b in buf).replace('\\', '\\\\').replace('"', '\\"')
+                    parts.append(f'"{s}"')
+                    buf.clear()
+            while pc < region.end and off < len(data):
+                if pc != run_start and pc in labels:
+                    break
+                b = data[off]
+                if 0x20 <= b < 0x7F and b != 0x22:  # printable, not '"'
+                    buf.append(b)
+                else:
+                    flush_buf()
+                    parts.append(fmt_hex(b, 2))
+                pc += 1
+                off = pc - base
+                if b == 0x0D:  # CR — end of string
+                    break
+            flush_buf()
+            if parts:
+                lines.append(f"    EQUS {', '.join(parts)}")
+            continue
 
         if region.width == 2:
             if pc + 2 > region.end or off + 2 > len(data):
@@ -497,7 +556,7 @@ def synthesise_regions(code_bytes: set[int], base: int, length: int,
     forced_data: set[int] = set()
     forced_code: set[int] = set()
     for r in forced_regions:
-        target = forced_data if r.kind == "data" else forced_code
+        target = forced_code if r.kind == "code" else forced_data
         for addr in range(r.start, r.end):
             target.add(addr)
 
@@ -521,40 +580,60 @@ def synthesise_regions(code_bytes: set[int], base: int, length: int,
             cur_start = addr
             cur_kind = k
     regions.append(Region(start=cur_start, end=end, kind=cur_kind))
-    # Annotate forced regions with their comment so it survives synthesis
+    # Annotate forced regions with their kind/comment so they survive synthesis
     forced_by_start = {r.start: r for r in forced_regions}
     for i, r in enumerate(regions):
         f = forced_by_start.get(r.start)
         if f is not None and f.end == r.end:
-            regions[i] = Region(start=r.start, end=r.end, kind=r.kind,
+            regions[i] = Region(start=r.start, end=r.end, kind=f.kind,
                                  width=f.width, comment=f.comment)
     return regions
 
 
 def collect_table_targets(data: bytes, base: int, instr_starts: set[int],
-                          code_bytes: set[int]) -> set[int]:
-    """For each absolute-indexed read in reached code (LDA abs,X / abs,Y;
-    LDX abs,Y; LDY abs,X; etc.), return the operand address if it sits
-    outside the code byte set (i.e. it's a data table)."""
-    targets: set[int] = set()
+                          code_bytes: set[int]) -> tuple[set[int], set[int], set[int]]:
+    """Catalog every data operand reached. Returns
+    (indexed_abs, plain_abs, zp_addrs):
+
+      - indexed_abs:  `LDA tbl,X` / `STA tbl,Y` etc. — multi-byte
+        table accessed by index. Name as `tbl_XXXX`. Skipped when the
+        target is inside reached code (an indexed read of code bytes
+        is exotic and probably intentional, but the existing label
+        machinery has nowhere clean to put the name).
+      - plain_abs:   `LDA abs` / `STA abs` / `INC abs` etc. — single
+        named variable / state byte. Name as `data_XXXX`. INCLUDES
+        targets that fall inside an instruction (BBC code routinely
+        reuses an instruction operand byte as scratchpad RAM); the
+        emit pass promotes those to mid-instruction equates.
+      - zp_addrs:    `LDA zp` / `STA zp,X` etc. — zero-page slot.
+        Name as `zp_XX`.
+
+    JMP/JSR are handled separately by collect_branch_targets, so they
+    aren't included here even though their mode is `abs`."""
+    indexed_abs: set[int] = set()
+    plain_abs: set[int] = set()
+    zp_addrs: set[int] = set()
     indexed_modes = {"absx", "absy"}
+    zp_modes = {"zp", "zpx", "zpy", "inx", "iny"}
     for pc in instr_starts:
         off = pc - base
         info = OPCODES.get(data[off])
         if info is None:
             continue
         mnem, mode, length = info
-        if mode not in indexed_modes:
+        if mnem in ("JMP", "JSR"):
+            continue
+        if mode in zp_modes and length >= 2:
+            zp_addrs.add(data[off + 1])
             continue
         if length < 3:
             continue
-        if mnem in ("STA", "STX", "STY"):
-            # Writes-to-table are interesting too; include them
-            pass
         target = (data[off + 2] << 8) | data[off + 1]
-        if target not in code_bytes:
-            targets.add(target)
-    return targets
+        if mode in indexed_modes:
+            indexed_abs.add(target)
+        elif mode == "abs":
+            plain_abs.add(target)
+    return indexed_abs, plain_abs, zp_addrs
 
 
 def disassemble(data: bytes, cfg: DisasmConfig) -> str:
@@ -585,27 +664,68 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
             labels=dict(cfg.labels),
             comments=dict(cfg.comments),
             extern_labels=dict(cfg.extern_labels),
+            auto_extern_labels=dict(cfg.auto_extern_labels),
+            master_externs=dict(cfg.master_externs),
             immediate_overrides=dict(cfg.immediate_overrides),
             entries=cfg.entries,
             emit_externs=cfg.emit_externs,
         )
 
-        # Auto-label JMP/JSR/branch targets that fell inside reached code
+        # Auto-label JMP/JSR/branch targets that fell inside reached code.
+        # Track which labels are "routine entries" so the code emitter
+        # can insert a blank line before each. Three sources count:
+        #   1. JSR destinations.
+        #   2. cfg.entries (the user's declared entry points).
+        #   3. Any address with a user-supplied name in cfg.labels
+        #      (auto-generated `L<addr>` labels added later don't count
+        #      — they're typically branch / jmp targets *inside* a
+        #      routine).
         targets: set[int] = set()
+        jsr_targets: set[int] = set(cfg.entries) | set(cfg.labels)
         for r in cfg.regions:
             if r.kind == "code":
-                collect_branch_targets(data, cfg.base, r, targets)
+                collect_branch_targets(data, cfg.base, r, targets, jsr_targets)
         for t in sorted(targets):
             if t in code_bytes and t not in cfg.labels:
                 cfg.labels[t] = f"L{t:04X}"
 
-        # Auto-label data tables referenced from code with absolute-indexed
-        # addressing. Don't override user-supplied names.
-        table_addrs = collect_table_targets(data, cfg.base, instr_starts,
-                                             code_bytes)
-        for addr in sorted(table_addrs):
-            if addr not in cfg.labels and cfg.base <= addr < cfg.base + len(data):
+        # Auto-label data referenced from code with absolute or zp
+        # addressing. Don't override user-supplied names. Out-of-range
+        # refs that the master pre-declares get the master's preferred
+        # name (added to cfg.extern_labels — assumed defined upstream);
+        # everything else falls back to a `zp_XX` / `data_XXXX` /
+        # `tbl_XXXX` auto-promotion emitted inline in this file.
+        indexed_addrs, plain_addrs, zp_addrs = collect_table_targets(
+            data, cfg.base, instr_starts, code_bytes)
+        end_addr_now = cfg.base + len(data)
+        def known(a: int) -> bool:
+            return (a in cfg.labels or a in cfg.extern_labels
+                    or a in cfg.auto_extern_labels)
+        def adopt_extern(addr: int, fallback: str):
+            """Pick the master's name if it has one; else use the
+            fallback and emit inline."""
+            if addr in cfg.master_externs:
+                cfg.extern_labels.setdefault(addr, cfg.master_externs[addr])
+            else:
+                cfg.auto_extern_labels[addr] = fallback
+        for addr in sorted(indexed_addrs):
+            if known(addr):
+                continue
+            if cfg.base <= addr < end_addr_now:
                 cfg.labels[addr] = f"tbl_{addr:04X}"
+            else:
+                adopt_extern(addr, f"tbl_{addr:04X}")
+        for addr in sorted(plain_addrs):
+            if known(addr):
+                continue
+            if cfg.base <= addr < end_addr_now:
+                cfg.labels[addr] = f"data_{addr:04X}"
+            else:
+                adopt_extern(addr, f"data_{addr:04X}")
+        for addr in sorted(zp_addrs):
+            if known(addr):
+                continue
+            adopt_extern(addr, f"zp_{addr:02X}")
 
         # Label each declared entry too
         for e in cfg.entries:
@@ -620,9 +740,10 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
     else:
         # Legacy region-based mode (no tracing).
         targets = set()
+        jsr_targets: set[int] = set()
         for r in cfg.regions:
             if r.kind == "code":
-                collect_branch_targets(data, cfg.base, r, targets)
+                collect_branch_targets(data, cfg.base, r, targets, jsr_targets)
         code_ranges = [(r.start, r.end) for r in cfg.regions if r.kind == "code"]
         for t in sorted(targets):
             if any(s <= t < e for s, e in code_ranges):
@@ -698,6 +819,18 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
         for addr, name in sorted(out_range_ext.items()):
             lines.append(f"\\   {name} = {fmt_hex(addr, 4)}")
         lines.append("")
+    # Auto-promoted externs (zp slots, data state outside this binary).
+    # These aren't in the master, so always emit them inline. Avoid
+    # re-declaring anything already covered by a cfg extern.
+    cfg_extern_addrs = set(cfg.extern_labels)
+    auto_ext_to_emit = {a: n for a, n in cfg.auto_extern_labels.items()
+                        if a not in cfg_extern_addrs}
+    if auto_ext_to_emit:
+        lines.append("\\ Auto-promoted externs (zp/data outside this binary):")
+        for addr, name in sorted(auto_ext_to_emit.items()):
+            width = 2 if addr <= 0xFF else 4
+            lines.append(f"{name:16} = {fmt_hex(addr, width)}")
+        lines.append("")
     lines.append(f"ORG {fmt_hex(cfg.base, 4)}")
     lines.append("")
 
@@ -718,7 +851,8 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
             lines.append(f"\\ {r.comment}")
         if r.kind == "code":
             disasm_code_region(data, cfg.base, r, cfg.labels, cfg.extern_labels,
-                               cfg.comments, lines, cfg.immediate_overrides)
+                               cfg.comments, lines, cfg.immediate_overrides,
+                               cfg.auto_extern_labels, jsr_targets)
         else:
             disasm_data_region(data, cfg.base, r, cfg.labels, cfg.comments, lines)
         cursor = r.end
@@ -734,6 +868,25 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
     return "\n".join(lines) + "\n"
 
 
+def parse_master_externs(path: str) -> dict[int, str]:
+    """Parse a BeebAsm source file for `name = &VAL` equates so we can
+    use the master's preferred names for shared zp / hardware / extern
+    addresses (instead of auto-promoting to `zp_XX` / `data_XXXX`)."""
+    import re
+    pat = re.compile(
+        r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*&([0-9A-Fa-f]+)\s*(?:\\|$)')
+    out: dict[int, str] = {}
+    with open(path) as f:
+        for line in f:
+            m = pat.match(line)
+            if not m:
+                continue
+            name = m.group(1)
+            value = int(m.group(2), 16)
+            out.setdefault(value, name)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input", help="binary file to disassemble")
@@ -742,6 +895,10 @@ def main():
     ap.add_argument("--config", help="JSON config file (regions, labels, comments)")
     ap.add_argument("--end", type=lambda s: int(s, 0),
                     help="if no config, treat from base..end as one big code region")
+    ap.add_argument("--master",
+                    help="master .6502 file to scan for shared equates "
+                         "(`name = &VAL`); preferred names override auto-promoted "
+                         "`zp_XX` / `data_XXXX` fallback labels.")
     ap.add_argument("--output", "-o", required=True)
     args = ap.parse_args()
 
@@ -757,6 +914,9 @@ def main():
         end = args.end or args.base + len(data)
         cfg = DisasmConfig(base=args.base,
                            regions=[Region(start=args.base, end=end, kind="code")])
+
+    if args.master:
+        cfg.master_externs = parse_master_externs(args.master)
 
     out = disassemble(data, cfg)
     with open(args.output, "w") as f:

@@ -11,6 +11,23 @@ if ! command -v beebasm >/dev/null 2>&1; then
     exit 1
 fi
 
+echo "Regenerating per-binary .6502 sources from extracted/ + cfg ..."
+# Cumulative master: each binary inherits auto-promoted externs from
+# the binaries that get INCLUDE'd before it, so the same `zp_XX` /
+# `data_XXXX` slot is declared exactly once across the whole build.
+master_tmp="$(mktemp)"
+cumulative_tmp="$(mktemp)"
+cp disasm/Nevryon.6502 "$master_tmp"
+for spec in 'CODE:0x1100' 'CODE2:0x2800' 'CODE3:0x3300' 'GRAPHIX:0x3680'; do
+    name="${spec%:*}"; base="${spec#*:}"
+    python3 tools/disasm6502.py "extracted/\$.$name" --base "$base" \
+        --master "$master_tmp" \
+        --config "disasm/$name.cfg.json" -o "disasm/$name.6502" >/dev/null
+    cat "$master_tmp" "disasm/$name.6502" > "$cumulative_tmp"
+    mv "$cumulative_tmp" "$master_tmp"
+done
+rm -f "$master_tmp"
+
 echo "Building from disasm/Nevryon.6502 ..."
 ( cd disasm && beebasm -i Nevryon.6502 ) >/dev/null
 

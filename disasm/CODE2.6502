@@ -3,248 +3,336 @@
 \ ============================================================
 
 \ Mid-instruction labels (referenced by branches/jumps):
-L2975            = &2975
+data_28D8        = &28D8
+score_d3         = &2A02
+score_d2         = &2A03
+score_d1         = &2A04
+score_d0         = &2A05
+L2FF0            = &2FF0
 
 \ Extern labels defined in master Nevryon.6502 wrapper:
+\   zp_screen_ptr_lo = &0070
+\   zp_screen_ptr_hi = &0071
+\   zp_sprite_cols_remaining = &0074
+\   zp_sprite_height = &0075
+\   zp_dest_x_lo = &0076
+\   zp_dest_x_hi = &0077
+\   zp_sprite_end_index = &0078
+\   zp_sprite_dir_flag = &0079
+\   zp_scroll_col = &0080
+\   zp_player_x = &0081
+\   zp_player_y = &0082
+\   zp_test_x = &0083
+\   zp_test_y = &0084
+\   zp_tile_lower_hi = &008B
+\   zp_tile_lower_lo = &008C
+\   zp_tile_upper_hi = &008D
+\   zp_tile_upper_lo = &008E
+\   zp_get_ready_erase = &008F
+\   zp_print_idx = &0090
+\   zp_continues = &0091
+\   zp_string_ptr_lo = &0095
+\   zp_string_ptr_hi = &0096
+\   zp_9A = &009A
+\   zp_irq_enable = &009C
+\   zp_level_num = &009D
+\   loader_lives_save = &0CF3
+\   loader_score_save = &0CF4
+\   loader_hiscore_save = &0CFA
+\   main_init = &1100
+\   main_loop = &1109
+\   lfsr_random = &1141
+\   sprite_plot_default = &116F
+\   sprite_plot_xy = &1173
+\   sprite_plot_inner = &1184
+\   sprite_plot_lda_sm = &1193
+\   sprite_src_lo = &1194
+\   sprite_src_hi = &1195
+\   screen_row_lo_lut = &1209
+\   screen_row_hi_lut = &121F
+\   calc_screen_addr = &1236
 \   starfield_update = &1309
+\   player_bullet_x = &16E6
+\   player_bullet_y = &16ED
+\   lose_a_life = &1DEE
+\   L2016 = &2016
+\   data_2051 = &2051
+\   enemy_x = &2052
+\   enemy_y = &205C
+\   enemy_flip = &206E
+\   spawn_check_step = &208A
+\   tbl_20A2 = &20A2
+\   enemy_type_dispatch = &22B2
+\   forcefield_render = &232C
+\   forcefield_draw_or_erase = &234D
+\   forcefield_erase = &23A8
+\   fire_cooldown_reload = &2554
+\   force_pod_state = &25A5
 \   starfield_init = &2656
+\   stage_loading_screen = &3300
+\   stage_clear_screen = &3325
+\   game_over_or_continue = &3432
+\   get_ready_overlay = &3513
+\   print_doubled_string = &3560
+\   str_loading = &3620
+\   OSRDCH = &FFE0
+\   OSWRCH = &FFEE
+\   OSWORD = &FFF1
+\   OSBYTE = &FFF4
+\   OSCLI = &FFF7
+
+\ Auto-promoted externs (zp/data outside this binary):
+zp_2F            = &2F
+zp_72            = &72
 
 ORG &2800
 
 
-\ ----- code &2800..&3041 -----
-.L2800
-    LDA #&07
+\ ----- code &2800..&2809 -----
+.sfx_fire
+    LDA #&07  \ Single-tone shot/fire sound effect — tail-call into OSWORD &07 with param block at sfx_fire_params.
     LDX #&09
     LDY #&28
-    JMP &FFF1
-    EQUB &13  \ ?? opcode &13
-    BRK
-    EQUB &02  \ ?? opcode &02
-    BRK
-    EQUB &4B  \ ?? opcode &4B
-    BRK
-    ORA (&00,X)
-.L2811
-    LDA #&07
+    JMP OSWORD
+
+\ ----- data &2809..&2811 -----
+\ OSWORD &07 (SOUND) param block for sfx_fire: ch=&0013 amp=2 pitch=&4B dur=1
+.sfx_fire_params
+    EQUB &13, &00, &02, &00, &4B, &00, &01, &00
+
+\ ----- code &2811..&281A -----
+.sfx_hit_lo
+    LDA #&07  \ Single-tone hit sound effect — tail-call into OSWORD &07 with param block at sfx_hit_lo_params.
     LDX #&1A
     LDY #&28
-    JMP &FFF1
-    EQUB &12  \ ?? opcode &12
-    BRK
-    EQUB &02  \ ?? opcode &02
-    BRK
-    PLP
-    BRK
-    ORA (&00,X)
-.L2822
-    STY &28D3
+    JMP OSWORD
+
+\ ----- data &281A..&2822 -----
+\ OSWORD &07 param block for sfx_hit_lo: ch=&0012 amp=2 pitch=&28 dur=1
+.sfx_hit_lo_params
+    EQUB &12, &00, &02, &00, &28, &00, &01, &00
+
+\ ----- code &2822..&283B -----
+.sfx_explode
+    STY scratch_28D3  \ Explosion sound effect — plays two queued OSWORD &07 SOUNDs back-to-back (noise on ch 0 then tone on ch 1).
     LDA #&07
     LDX #&3B
     LDY #&28
-    JSR &FFF1
+    JSR OSWORD
     LDA #&07
     LDX #&43
     LDY #&28
-    JSR &FFF1
-    LDY &28D3
+    JSR OSWORD
+    LDY scratch_28D3
     RTS
-    BPL L283D
-.L283D
-    SBC (&00),Y
-    EQUB &07  \ ?? opcode &07
-    BRK
-    PLP
-    BRK
-    ORA (&00),Y
-    EQUB &03  \ ?? opcode &03
-    BRK
-    EQUB &FF  \ ?? opcode &FF
-    BRK
-    ORA (&00,X)
-    NOP
+
+\ ----- data &283B..&284C -----
+.sfx_explode_params_a
+    EQUB &10, &00, &F1, &00, &07, &00, &28, &00
+.sfx_explode_params_b
+    EQUB &11, &00, &03, &00, &FF, &00, &01, &00
+    EQUB &EA
+
+\ ----- code &284C..&28D3 -----
 .shutter_fade
     LDX #&09
 .L284E
     TXA
     PHA
     LDA #&13
-    JSR &FFF4
+    JSR OSBYTE
     PLA
     TAX
     LDA #&57
-    STA &72
+    STA zp_72
     LDA #&00
-    STA &71
+    STA zp_screen_ptr_hi
     DEX
 .L2860
-    INC &72
-    LDA &72
+    INC zp_72
+    LDA zp_72
     CMP #&71
     BEQ L284E
     LDY #&00
 .L286A
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     LSR A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     ASL A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     LSR A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     ASL A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     LSR A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     ASL A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     LSR A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     ASL A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     LSR A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     ASL A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     LSR A
-    STA (&71),Y
+
+.L28A9
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     ASL A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     LSR A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     ASL A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     LSR A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
-    LDA (&71),Y
+    LDA (zp_screen_ptr_hi),Y
     ASL A
-    STA (&71),Y
+    STA (zp_screen_ptr_hi),Y
     INY
     CPY #&00
     BEQ L2860
     CPX #&00
     BNE L286A
     RTS
-    NOP
-    NOP
-    NOP
-    NOP
-.L28D7
-    LDA &25A5
+
+\ ----- data &28D3..&28D7 -----
+.scratch_28D3
+    EQUB &EA
+.scratch_28D4
+    EQUB &EA
+.data_28D5
+    EQUB &EA, &EA
+
+\ ----- code &28D7..&2973 -----
+.force_pod_anim
+    LDA force_pod_state  \ Per-frame: if &25A5 == 1, animate the force-pod (chomping ball at &2972/&2973). Steps a 6-frame cycle (&3860..&38D8) and watches for a key to dismiss.
     CMP #&01
     BEQ L28DF
     RTS
 .L28DF
-    LDX &2972
-    LDY &2973
-    JSR &1236
+    LDX force_pod_x
+    LDY force_pod_y
+    JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
-    STA &1195
+    STA sprite_src_hi
     LDX #&02
     LDY #&0C
-    JSR &1173
+    JSR sprite_plot_xy
     LDX #&9D
     LDA #&81
     LDY #&FF
-    JSR &FFF4
+    JSR OSBYTE
     CPY #&FF
     BNE L2909
     JMP L299F
 .L2909
-    LDA &81
+    LDA zp_player_x
     SEC
     SBC #&06
     CMP #&1E
     BCS L291A
-    CMP &2972
+    CMP force_pod_x
     BCC L291A
     JMP L299F
 .L291A
     CLC
     ADC #&10
-    CMP &2972
+    CMP force_pod_x
     BCS L2925
     JMP L299F
 .L2925
-    LDA &82
+    LDA zp_player_y
     SEC
     SBC #&28
-    CMP &2973
+    CMP force_pod_y
     BCC L2932
     JMP L299F
 .L2932
-    LDA &82
+    LDA zp_player_y
     CLC
     ADC #&1E
-    CMP &2973
+    CMP force_pod_y
     BCS L293F
     JMP L299F
 .L293F
-    LDX &2972
-    LDY &2973
-    JSR &1236
+    LDX force_pod_x
+    LDY force_pod_y
+    JSR calc_screen_addr
     LDA #&48
     CLC
-    LDX &2974
+    LDX force_pod_frame
 .L294E
     ADC #&18
     DEX
     BNE L294E
-    STA &1194
+    STA sprite_src_lo
     LDA #&38
-    STA &1195
+    STA sprite_src_hi
     LDX #&02
     LDY #&0C
-    JSR &1173
-    INC &2974
-    LDA &2974
+    JSR sprite_plot_xy
+    INC force_pod_frame
+    LDA force_pod_frame
     CMP #&07
     BNE L2971
     LDA #&01
-    STA &2974
+    STA force_pod_frame
 .L2971
     RTS
+
+.force_pod_x
     BRK
-    INY
-    ORA (&AD,X)
-    LDA &25
+
+\ ----- data &2973..&2975 -----
+.force_pod_y
+    EQUB &C8
+.force_pod_frame
+    EQUB &01
+
+\ ----- code &2975..&29D8 -----
+.L2975
+    LDA force_pod_state
     CMP #&01
     BEQ L297D
     RTS
 .L297D
     LDX #&06
 .L297F
-    LDA &16E6,X
+    LDA player_bullet_x,X
     CMP #&00
     BEQ L298C
     DEX
@@ -252,69 +340,64 @@ ORG &2800
     BNE L297F
     RTS
 .L298C
-    LDA &2972
-    STA &16E6,X
-    LDA &2973
+    LDA force_pod_x
+    STA player_bullet_x,X
+    LDA force_pod_y
     SEC
     SBC #&05
-    STA &16ED,X
-    JSR L2800
+
+.L2998
+    STA player_bullet_y,X
+    JSR sfx_fire
     RTS
 .L299F
-    LDX &81
+    LDX zp_player_x
     INX
     INX
     TXA
-    CMP &2972
+    CMP force_pod_x
     BEQ L29B4
     BCC L29B1
-    INC &2972
+    INC force_pod_x
     JMP L29B4
 .L29B1
-    DEC &2972
+    DEC force_pod_x
 .L29B4
-    LDA &82
+    LDA zp_player_y
     SEC
     SBC #&04
-    CMP &2973
+    CMP force_pod_y
     BEQ L293F
     BCC L29CC
-    LDA &2973
+    LDA force_pod_y
     CLC
     ADC #&04
-    STA &2973
+    STA force_pod_y
     JMP L293F
 .L29CC
-    LDA &2973
+    LDA force_pod_y
     SEC
     SBC #&04
-    STA &2973
+    STA force_pod_y
     JMP L293F
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-.L29E7
-    LDX #&09
+
+\ ----- data &29D8..&29E7 -----
+.data_29D8
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA
+
+\ ----- code &29E7..&2B9A -----
+.draw_score
+    LDX #&09  \ Draw 6-digit score at char-col 9 row &5F. Loops X=0..5 reading score_d* (&2A02..&2A07) and calls draw_score_digit per digit.
     LDY #&5F
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&00
+
 .L29F0
-    LDA &2A02,X
-    STX &28D3
-    JSR L2A08
-    LDX &28D3
+    LDA score_d3,X
+    STX scratch_28D3
+    JSR draw_score_digit
+    LDX scratch_28D3
     INX
     CPX #&06
     BNE L29F0
@@ -325,371 +408,383 @@ ORG &2800
     BRK
     BRK
     BRK
-.L2A08
-    STX &28D3
+
+.draw_score_digit
+    STX scratch_28D3  \ Draw one score digit. A=digit value (0..9), X=column offset; selects gfx_digit_N (= &3A60 + 8*N) and plots a 4x8 sprite.
     ASL A
     ASL A
     ASL A
     CLC
     ADC #&60
-    STA &1194
+    STA sprite_src_lo
     LDA #&3A
-    STA &1195
+    STA sprite_src_hi
     LDX #&01
     LDY #&08
-    JMP &1173
-.L2A20
-    LDA &8F
+    JMP sprite_plot_xy
+
+.spawn_enemy_missile
+    LDA zp_get_ready_erase  \ Try to spawn a new enemy missile in one of the two slots (tbl_2B9A[0..1]). Validates enemy X position, copies enemy XY into the missile slot, sets direction (up if player_x >= enemy_x else down), and beeps via sfx_score_tick to mark launch.
     CMP #&02
     BNE L2A3E
-    STX &28D4
+    STX scratch_28D4
     LDX #&00
-    LDA &2B9A,X
+    LDA tbl_2B9A,X
     CMP #&FF
     BEQ L2A3F
     LDX #&01
-    LDA &2B9A,X
+    LDA tbl_2B9A,X
     CMP #&FF
     BEQ L2A3F
-    LDX &28D4
+    LDX scratch_28D4
 .L2A3E
     RTS
 .L2A3F
-    STX &28D3
-    LDX &28D4
-    LDA &2052,X
+    STX scratch_28D3
+    LDX scratch_28D4
+    LDA enemy_x,X
     CMP #&08
     BCC L2A9E
     CMP #&25
     BCS L2A9E
     CLC
     ADC #&02
-    LDX &28D3
-    STA &2B9A,X
-    LDX &28D4
-    LDA &206E,X
+    LDX scratch_28D3
+    STA tbl_2B9A,X
+    LDX scratch_28D4
+    LDA enemy_flip,X
     CMP #&01
     BEQ L2A6F
-    STA &2B9E
-    LDA &205C,X
+    STA tbl_2B9E
+    LDA enemy_y,X
     SEC
     SBC #&18
     JMP L2A7B
 .L2A6F
-    LDX &28D3
-    STA &2B9E,X
-    LDX &28D4
-    LDA &205C,X
+    LDX scratch_28D3
+    STA tbl_2B9E,X
+    LDX scratch_28D4
+    LDA enemy_y,X
 .L2A7B
-    LDX &28D3
-    STA &2B9C,X
+    LDX scratch_28D3
+    STA tbl_2B9C,X
     LDA #&00
-    STA &2BA0,X
-    STA &2BA2,X
-    LDA &81
+    STA tbl_2BA0,X
+    STA tbl_2BA2,X
+    LDA zp_player_x
     CLC
     ADC #&03
-    CMP &2B9A,X
+    CMP tbl_2B9A,X
     BCS L2A96
     JMP L2A9B
 .L2A96
     LDA #&01
-    STA &2BA2,X
+    STA tbl_2BA2,X
 .L2A9B
-    JSR L2E83
+    JSR sfx_score_tick
 .L2A9E
-    LDX &28D4
+    LDX scratch_28D4
     RTS
-.L2AA2
-    LDX #&00
-    LDA &2B9A,X
+
+.update_enemy_missiles
+    LDX #&00  \ Per-frame: step each of the two enemy missiles (at slots 0 and 1) then collision-check against the player. Slots with X=&FF are inactive.
+    LDA tbl_2B9A,X
     CMP #&FF
     BEQ L2AAE
-    JSR L2AC4
+    JSR step_enemy_missile
 .L2AAE
     LDX #&01
-    LDA &2B9A,X
+    LDA tbl_2B9A,X
     CMP #&FF
     BEQ L2ABA
-    JSR L2AC4
+    JSR step_enemy_missile
 .L2ABA
     LDX #&00
-    JSR L2B48
+    JSR missile_player_collide
     LDX #&01
-    JMP L2B48
-.L2AC4
-    STX &28D3
-    LDA &2B9A,X
-    LDY &2B9C,X
+    JMP missile_player_collide
+
+.step_enemy_missile
+    STX scratch_28D3  \ Move one enemy missile by 2 px (up or down per tbl_2BA2[X]) and redraw. Erases old position with lev_erase_brush, plots gfx_icon_08 at new position. Deactivates the slot when the missile leaves the playfield.
+    LDA tbl_2B9A,X
+    LDY tbl_2B9C,X
     TAX
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
-    STA &1195
+    STA sprite_src_hi
     LDX #&01
     LDY #&06
-    JSR &1173
-    LDX &28D3
-    LDA &2BA2,X
+    JSR sprite_plot_xy
+    LDX scratch_28D3
+    LDA tbl_2BA2,X
     CMP #&01
     BEQ L2AF5
-    DEC &2B9A,X
-    DEC &2B9A,X
+    DEC tbl_2B9A,X
+    DEC tbl_2B9A,X
     JMP L2AF8
 .L2AF5
-    INC &2B9A,X
+    INC tbl_2B9A,X
 .L2AF8
-    LDA &2B9A,X
+    LDA tbl_2B9A,X
     CMP #&03
     BCC L2B42
     CMP #&25
     BCS L2B42
-    LDA &2B9E,X
+    LDA tbl_2B9E,X
     CMP #&01
     BEQ L2B1A
     SEC
-    LDA &2B9C,X
+    LDA tbl_2B9C,X
     SBC #&02
-    STA &2B9C,X
+    STA tbl_2B9C,X
     CMP #&82
     BCC L2B42
     JMP L2B27
 .L2B1A
     CLC
-    LDA &2B9C,X
+    LDA tbl_2B9C,X
     ADC #&02
-    STA &2B9C,X
+    STA tbl_2B9C,X
     CMP #&C8
     BCS L2B42
 .L2B27
-    LDA &2B9A,X
-    LDY &2B9C,X
+    LDA tbl_2B9A,X
+    LDY tbl_2B9C,X
     TAX
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_icon_08)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_icon_08)
-    STA &1195
+    STA sprite_src_hi
     LDX #&01
     LDY #&06
-    JMP &1173
+    JMP sprite_plot_xy
 .L2B42
     LDA #&FF
-    STA &2B9A,X
+    STA tbl_2B9A,X
     RTS
-.L2B48
-    STX &28D3
-    LDA &2B9A,X
-    STA &83
-    LDA &2B9C,X
+
+.missile_player_collide
+    STX scratch_28D3  \ Box-collision check between missile X (slot scratch_28D3) and player_x/player_y (rough &83/&84 bounds). On hit, jumps to the player-death path.
+    LDA tbl_2B9A,X
+    STA zp_test_x
+    LDA tbl_2B9C,X
     SEC
     SBC #&04
-    STA &84
-    LDA &81
-    CMP &83
+    STA zp_test_y
+    LDA zp_player_x
+    CMP zp_test_x
     BCS L2B99
     ADC #&06
-    CMP &83
+    CMP zp_test_x
     BCC L2B99
-    LDA &82
-    CMP &84
+    LDA zp_player_y
+    CMP zp_test_y
     BCC L2B99
     SBC #&18
-    CMP &84
+    CMP zp_test_y
     BCS L2B99
-    LDY &2B9C,X
-    LDA &2B9A,X
+    LDY tbl_2B9C,X
+    LDA tbl_2B9A,X
     TAX
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
-    STA &1195
+    STA sprite_src_hi
     LDX #&01
     LDY #&06
-    JSR &1173
-    LDX &28D3
+    JSR sprite_plot_xy
+    LDX scratch_28D3
     LDA #&FF
-    STA &2B9A,X
-    JSR &1DEE
-    JSR L2822
+    STA tbl_2B9A,X
+    JSR lose_a_life
+    JSR sfx_explode
 .L2B99
     RTS
-    EQUB &FF  \ ?? opcode &FF
-    EQUB &FF  \ ?? opcode &FF
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-.L2BA4
-    JSR L29E7
+
+\ ----- data &2B9A..&2BA4 -----
+.tbl_2B9A
+    EQUB &FF
+.data_2B9B
+    EQUB &FF
+.tbl_2B9C
+    EQUB &EA, &EA
+.tbl_2B9E
+    EQUB &EA, &EA
+.tbl_2BA0
+    EQUB &EA, &EA
+.tbl_2BA2
+    EQUB &EA, &EA
+
+\ ----- code &2BA4..&2E8C -----
+.intro_get_ready
+    JSR draw_score  \ Level-start GET READY!: draws the score, plots 7 icon_10 'lives' sprites at row &57 col 8..&F, shutter-fades to a black star field, plays sfx_explode for drama, then loops 75 frames updating starfield and blitting gfx_text_get_ready (split as two 8-col halves at cols 12 and 20) before erasing.
     LDA #&08
-    STA &28D3
+    STA scratch_28D3
 .L2BAC
-    LDX &28D3
+    LDX scratch_28D3
     LDY #&57
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_icon_10)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_icon_10)
-    STA &1195
+    STA sprite_src_hi
     LDX #&01
     LDY #&08
-    JSR &1173
-    INC &28D3
-    LDA &28D3
+    JSR sprite_plot_xy
+    INC scratch_28D3
+    LDA scratch_28D3
     CMP #&0F
     BNE L2BAC
     JSR shutter_fade
     LDX #&00
-    STX &28D5
-    JSR L2822
+    STX data_28D5
+    JSR sfx_explode
 .L2BDA
-    LDX &28D5
+    LDX data_28D5
     INX
-    STX &28D5
+    STX data_28D5
     CPX #&4B
     BEQ L2C20
     JSR starfield_update
     LDX #&0C
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&08
     LDY #&10
     LDA #LO(gfx_text_get_ready)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_get_ready)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
     LDX #&14
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&08
     LDY #&10
     LDA #LO(gfx_text_get_ready + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_get_ready + &80)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
     LDA #&13
-    JSR &FFF4
+    JSR OSBYTE
     JMP L2BDA
 .L2C20
     LDX #&0C
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&08
     LDY #&10
     LDA #LO(lev_erase_brush + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
     LDX #&14
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&08
     LDY #&10
     LDA #LO(lev_erase_brush + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
     LDX #&00
-    STX &28D5
+    STX data_28D5
 .L2C55
-    INC &28D5
-    LDX &28D5
+    INC data_28D5
+    LDX data_28D5
     CPX #&19
     BEQ L2C6A
     JSR starfield_update
     LDA #&13
-    JSR &FFF4
+    JSR OSBYTE
     JMP L2C55
 .L2C6A
-    JSR L2822
+    JSR sfx_explode
     LDX #&00
-    STX &28D5
+    STX data_28D5
 .L2C72
-    LDX &28D5
+    LDX data_28D5
     INX
-    STX &28D5
+    STX data_28D5
     CPX #&64
     BEQ L2CB8
     JSR starfield_update
     LDX #&0E
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&08
     LDY #&10
     LDA #LO(gfx_text_game)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_game)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
     LDX #&16
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&05
     LDY #&10
     LDA #LO(gfx_text_on)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_on)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
     LDA #&13
-    JSR &FFF4
+    JSR OSBYTE
     JMP L2C72
 .L2CB8
     LDA #&FF
-    STA &2B9A
-    STA &2B9B
+    STA tbl_2B9A
+    STA data_2B9B
     LDA #&03
-    STA &8F
-    JSR L2EFF
-    JMP L2822
-.L2CCA
-    JSR shutter_fade
+    STA zp_get_ready_erase
+    JSR intro_or_scoreboard
+    JMP sfx_explode
+
+.draw_title_screen
+    JSR shutter_fade  \ Title screen renderer: shutter_fade + 7 icon_10 row + icon_11 indicator(s) + the 4th Dimension logo (gfx_logo_4thdim, 56x32 at col 7 row &FD) + ampersand + 'GPR 90' + 'PRESS SPACE' (two 10-col halves, cols 10 and 20, row &82). Called by main_init.
     JSR starfield_update
     LDA #&08
-    STA &28D3
+    STA scratch_28D3
 .L2CD5
-    LDX &28D3
+    LDX scratch_28D3
     LDY #&57
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_icon_10)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_icon_10)
-    STA &1195
+    STA sprite_src_hi
     LDX #&01
     LDY #&08
-    JSR &1173
-    INC &28D3
-    LDA &28D3
+    JSR sprite_plot_xy
+    INC scratch_28D3
+    LDA scratch_28D3
     CMP #&0F
     BNE L2CD5
     LDX #&20
     LDY #&5F
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_icon_11)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_icon_11)
-    STA &1195
-    LDX &9A
+    STA sprite_src_hi
+    LDX zp_9A
     LDY #&08
-    JSR &1173
+    JSR sprite_plot_xy
     LDX #&20
     LDY #&57
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_icon_11)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_icon_11)
-    STA &1195
+    STA sprite_src_hi
     LDX #&06
     LDY #&08
     NOP
@@ -697,58 +792,58 @@ ORG &2800
     NOP
     LDX #&07
     LDY #&FD
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_logo_4thdim)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_logo_4thdim)
-    STA &1195
+    STA sprite_src_hi
     LDX #&07
     LDY #&20
-    JSR &1173
+    JSR sprite_plot_xy
     LDX #&11
     LDY #&F7
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_punct_ampersand)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_punct_ampersand)
-    STA &1195
+    STA sprite_src_hi
     LDX #&08
     LDY #&10
-    JSR &1173
+    JSR sprite_plot_xy
     LDX #&19
     LDY #&F7
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_text_gpr90 + &60)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_gpr90 + &60)
-    STA &1195
+    STA sprite_src_hi
     LDX #&08
     LDY #&10
-    JSR &1173
+    JSR sprite_plot_xy
     LDX #&0A
     LDY #&82
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_text_press_space)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_press_space)
-    STA &1195
+    STA sprite_src_hi
     LDX #&0A
     LDY #&10
-    JSR &1173
+    JSR sprite_plot_xy
     LDX #&14
     LDY #&82
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_text_press_space + &A0)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_press_space + &A0)
-    STA &1195
+    STA sprite_src_hi
     LDX #&0A
     LDY #&10
-    JSR &1173
+    JSR sprite_plot_xy
     JSR L2E60
     LDX #&11
     LDY #&BE
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&00
     JSR L29F0
     LDA #&00
@@ -761,27 +856,27 @@ ORG &2800
     NOP
     NOP
     NOP
-    JSR L29E7
+    JSR draw_score
     JSR L2E3F
 .L2DC1
     JSR starfield_update
     LDX #&0F
     LDY #&D2
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_text_score)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_score)
-    STA &1195
+    STA sprite_src_hi
     LDX #&09
     LDY #&10
-    JSR &1173
+    JSR sprite_plot_xy
     LDX #&0B
     LDY #&D2
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_text_last)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_last)
-    STA &1195
+    STA sprite_src_hi
     LDX #&07
     LDY #&10
     NOP
@@ -789,61 +884,64 @@ ORG &2800
     NOP
     LDX #&14
     LDY #&AA
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_text_score)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_score)
-    STA &1195
+    STA sprite_src_hi
     LDX #&09
     LDY #&10
-    JSR &1173
+    JSR sprite_plot_xy
     LDX #&0B
     LDY #&AA
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_text_high)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_high)
-    STA &1195
+    STA sprite_src_hi
     LDX #&07
     LDY #&10
-    JSR &1173
+    JSR sprite_plot_xy
     LDA #&13
-    JSR &FFF4
+    JSR OSBYTE
     LDX #&9D
     LDY #&FF
     LDA #&81
-    JSR &FFF4
+    JSR OSBYTE
     CPY #&FF
     BEQ L2E39
     JMP L2DC1
 .L2E39
     JSR shutter_fade
-    JMP L2BA4
+    JMP intro_get_ready
+
 .L2E3F
     LDX #&11
     LDY #&96
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&00
 .L2E48
-    LDA &2E5A,X
-    STX &28D3
-    JSR L2A08
-    LDX &28D3
+    LDA tbl_2E5A,X
+    STX scratch_28D3
+    JSR draw_score_digit
+    LDX scratch_28D3
     INX
     CPX #&06
     BNE L2E48
     RTS
+.tbl_2E5A
     BRK
     BRK
     BRK
     BRK
     BRK
     BRK
+
 .L2E60
     LDX #&00
 .L2E62
-    LDA &2E5A,X
-    CMP &2A02,X
+    LDA tbl_2E5A,X
+    CMP score_d3,X
     BEQ L2E6F
     BCS L2E74
     JMP L2E75
@@ -856,128 +954,136 @@ ORG &2800
 .L2E75
     LDX #&00
 .L2E77
-    LDA &2A02,X
-    STA &2E5A,X
+    LDA score_d3,X
+    STA tbl_2E5A,X
     INX
     CPX #&06
     BNE L2E77
     RTS
-.L2E83
-    LDA #&07
+
+.sfx_score_tick
+    LDA #&07  \ Beep that plays during the BONUS countdown roll-up (called from stage_clear_screen).
     LDX #&8C
     LDY #&2E
-    JMP &FFF1
-    EQUB &12  \ ?? opcode &12
-    BRK
-    EQUB &04  \ ?? opcode &04
-    BRK
-    EQUB &64  \ ?? opcode &64
-    BRK
-    EQUB &03  \ ?? opcode &03
-    BRK
-.L2E94
-    LDA #&06
+    JMP OSWORD
+
+\ ----- data &2E8C..&2E94 -----
+\ OSWORD &07 param block for sfx_score_tick: ch=&0012 amp=4 pitch=&64 dur=3
+.sfx_score_tick_params
+    EQUB &12, &00, &04, &00, &64, &00, &03, &00
+
+\ ----- code &2E94..&2EF6 -----
+.play_death_sequence
+    LDA #&06  \ Death/level-end transition: shutter_fade + explosion sound + state-clear loop. Called from CODE on death and from CODE3 game_over_or_continue.
     NOP
     NOP
     NOP
     JSR shutter_fade
-    JSR L2822
+    JSR sfx_explode
     LDX #&00
-    STX &28D8
+    STX data_28D8
 .L2EA4
-    LDX &28D8
+    LDX data_28D8
     INX
-    STX &28D8
+    STX data_28D8
     CPX #&C8
     BEQ L2EEA
     JSR starfield_update
     LDX #&0C
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&08
     LDY #&10
     LDA #LO(gfx_text_game)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_game)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
     LDX #&15
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&08
     LDY #&10
     LDA #LO(gfx_text_over)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_over)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
     LDA #&13
-    JSR &FFF4
+    JSR OSBYTE
     JMP L2EA4
 .L2EEA
     JMP shutter_fade
-.L2EED
-    LDA #&07
+
+.sfx_level_start
+    LDA #&07  \ Level-start fanfare beep — long high-pitched tone. Tail-call into OSWORD &07.
     LDX #&F6
     LDY #&2E
-    JMP &FFF1
-    ORA (&00),Y
-    EQUB &04  \ ?? opcode &04
-    BRK
-    EQUB &FF  \ ?? opcode &FF
-    BRK
-    EQUB &0F  \ ?? opcode &0F
-    BRK
-    NOP
-.L2EFF
-    LDA &2051
+    JMP OSWORD
+
+\ ----- data &2EF6..&2EFF -----
+.sfx_level_start_params
+    EQUB &11, &00, &04, &00, &FF, &00, &0F, &00
+.data_2EFE
+    EQUB &EA
+
+\ ----- code &2EFF..&3041 -----
+.intro_or_scoreboard
+    LDA data_2051  \ Branch: if &2051==6 (fresh game, full lives) → ship_intro_anim; otherwise → draw_final_scoreboard.
     CMP #&06
-    BEQ L2F09
-    JMP L31B1
-.L2F09
-    LDA #&00
-    STA &2EFE
+    BEQ ship_intro_anim
+    JMP draw_final_scoreboard
+
+.ship_intro_anim
+    LDA #&00  \ Plays the four-frame ship reveal animation (right-to-left): the player ship at lev_player_sprite (&4E80) is plotted progressively wider from col 5 → col 2 over four vsyncs.
+    STA data_2EFE
     JSR shutter_fade
-    JSR L2F20
-    JSR L2F2D
-    JSR L2F3A
-    JSR L2F47
+    JSR ship_intro_frame_5
+    JSR ship_intro_frame_4
+    JSR ship_intro_frame_3
+    JSR ship_intro_frame_2
     JMP L2F78
-.L2F20
-    JSR L2F54
+
+.ship_intro_frame_5
+    JSR ship_intro_blit_setup
     LDA #&D8
-    STA &1194
+    STA sprite_src_lo
     LDX #&01
-    JMP &1173
-.L2F2D
-    JSR L2F54
+    JMP sprite_plot_xy
+
+.ship_intro_frame_4
+    JSR ship_intro_blit_setup
     LDA #&C2
-    STA &1194
+    STA sprite_src_lo
     LDX #&02
-    JMP &1173
-.L2F3A
-    JSR L2F54
+    JMP sprite_plot_xy
+
+.ship_intro_frame_3
+    JSR ship_intro_blit_setup
     LDA #&AC
-    STA &1194
+    STA sprite_src_lo
     LDX #&03
-    JMP &1173
-.L2F47
-    JSR L2F54
+    JMP sprite_plot_xy
+
+.ship_intro_frame_2
+    JSR ship_intro_blit_setup
     LDA #&96
-    STA &1194
+    STA sprite_src_lo
     LDX #&04
-    JMP &1173
-.L2F54
-    JSR L2F66
+    JMP sprite_plot_xy
+
+.ship_intro_blit_setup
+    JSR wait_one_frame  \ Setup helper for ship_intro_frame_*: wait a frame, then calc_screen_addr at (0, &C8), set sprite_src_hi=&4E (LEVD1), Y=&16 (22 lines).
     LDX #&00
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDA #&4E
-    STA &1195
+    STA sprite_src_hi
     LDY #&16
     RTS
-.L2F66
-    JSR starfield_update
+
+.wait_one_frame
+    JSR starfield_update  \ Run one frame: starfield_update + ~256*60 cycle delay + OSBYTE &13 (wait vsync).
     LDX #&3C
 .L2F6B
     LDY #&FF
@@ -987,116 +1093,115 @@ ORG &2800
     DEX
     BNE L2F6B
     LDA #&13
-    JMP &FFF4
+    JMP OSBYTE
 .L2F78
     LDA #&00
-    STA &90
+    STA zp_print_idx
 .L2F7C
-    JSR L2F66
-    LDX &90
+    JSR wait_one_frame
+    LDX zp_print_idx
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&05
     LDY #&16
     LDA #LO(lev_player_sprite)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_player_sprite)
-    STA &1195
-    JSR &1173
-    INC &90
-    LDA &90
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    INC zp_print_idx
+    LDA zp_print_idx
     CMP #&04
     BCC L2FEB
-    LDA &90
+    LDA zp_print_idx
     SEC
     SBC #&04
     TAX
     LDY #&C4
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&04
     LDY #&10
     LDA #LO(gfx_muzzle_flash_frame0 + &10)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_muzzle_flash_frame0 + &10)
-    STA &1195
-    LDA &2EFE
+    STA sprite_src_hi
+    LDA data_2EFE
     CMP #&01
     BNE L2FC4
     LDA #&C0
-    STA &1194
+    STA sprite_src_lo
 .L2FC4
-    LDA &2EFE
+    LDA data_2EFE
     EOR #&01
-    STA &2EFE
-    JSR &1173
-    LDA &90
+    STA data_2EFE
+    JSR sprite_plot_xy
+    LDA zp_print_idx
     SEC
     SBC #&05
     TAX
     LDY #&C4
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&01
     LDY #&10
     LDA #LO(lev_erase_brush + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
-    STA &1195
-    JSR &1173
+    STA sprite_src_hi
+    JSR sprite_plot_xy
 .L2FEB
-    LDA &90
+    LDA zp_print_idx
     CMP #&19
     BNE L2F7C
-    LDA &90
+    LDA zp_print_idx
     SEC
     SBC #&04
     TAX
     LDY #&C4
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
-    STA &1195
+    STA sprite_src_hi
     LDX #&04
     LDY #&10
-    JSR &1173
-    JSR L2F66
-    JSR L2F66
-    JSR L2F66
-    JSR L2F66
-    DEC &90
+    JSR sprite_plot_xy
+    JSR wait_one_frame
+    JSR wait_one_frame
+    JSR wait_one_frame
+    JSR wait_one_frame
+    DEC zp_print_idx
 .L301B
-    JSR L2F66
-    LDX &90
+    JSR wait_one_frame
+    LDX zp_print_idx
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&06
     LDY #&16
     LDA #LO(lev_player_sprite)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_player_sprite)
-    STA &1195
-    JSR &1173
-    DEC &90
-    LDA &90
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    DEC zp_print_idx
+    LDA zp_print_idx
     CMP #&04
     BNE L301B
-    INC &90
+    INC zp_print_idx
     RTS
 
 \ ----- data &3041..&30F8 -----
-\ Starfield engine state — three parallel 61-byte arrays. Loop bound is X<60 (60 active stars; the 61st slot in each array is unused). Mutated in place every frame by `starfield_update` in CODE.
+\ Starfield engine state — three parallel 61-byte arrays. Loop bound is X<60 (60 active stars; the 61st slot in each array is unused). Mutated in place every frame by starfield_update in CODE.
 .starfield_pos_lo
-    \ per-star screen-address LO byte (60 entries used)
     EQUB &00, &D0, &18, &30, &48, &F0, &F0, &10
     EQUB &08, &38, &D0, &98, &68, &70, &68, &90
-    EQUB &90, &F0, &08, &10, &C8, &10, &50, &E8
-    EQUB &28, &F0, &50, &90, &B0, &B0, &00, &28
-    EQUB &08, &A0, &B8, &D8, &58, &F0, &B0, &F8
-    EQUB &C8, &00, &B0, &68, &A0, &90, &80, &F8
-    EQUB &68, &F0, &30, &F8, &10, &50, &B0, &E8
-    EQUB &48, &E0, &E0, &F0, &40
+    EQUB &90, &F0, &08, &10, &C8, &10, &50
+.L3058
+    EQUB &E8, &28, &F0, &50, &90, &B0, &B0, &00
+    EQUB &28, &08, &A0, &B8, &D8, &58, &F0, &B0
+    EQUB &F8, &C8, &00, &B0, &68, &A0, &90, &80
+    EQUB &F8, &68, &F0, &30, &F8, &10, &50, &B0
+    EQUB &E8, &48, &E0, &E0, &F0, &40
 .starfield_pos_hi
-    \ per-star screen-address HI byte — &5E..&6C maps to playfield char-rows 6..16
     EQUB &6C, &6A, &63, &5E, &66, &63, &63, &66
     EQUB &6A, &5F, &60, &5E, &5F, &6B, &68, &62
     EQUB &66, &6B, &63, &69, &61, &5E, &6B, &65
@@ -1106,7 +1211,6 @@ ORG &2800
     EQUB &62, &62, &62, &5E, &66, &62, &62, &6B
     EQUB &5F, &6A, &6A, &67, &5F
 .starfield_type
-    \ per-star type flag — &03 = slow (drawn as pixel byte &20), &02 = fast (drawn as pixel byte &02)
     EQUB &03, &03, &03, &03, &03, &03, &03, &03
     EQUB &03, &03, &03, &03, &03, &03, &03, &03
     EQUB &03, &03, &03, &03, &03, &02, &02, &02
@@ -1117,112 +1221,116 @@ ORG &2800
     EQUB &02, &02, &02, &02, &02
 
 \ ----- code &30F8..&31E9 -----
-.L30F8
-    JSR L2E60
+.save_score_to_loader
+    JSR L2E60  \ Save current score (score_d0..d3) and high score (&2E5A..) to the loader persistence area at page &0CF3+. Called when handing off to the BASIC loader.
     LDX #&00
 .L30FD
-    LDA &2A02,X
-    STA &0CF4,X
-    LDA &2E5A,X
-    STA &0CFA,X
+    LDA score_d3,X
+    STA loader_score_save,X
+    LDA tbl_2E5A,X
+    STA loader_hiscore_save,X
     INX
     CPX #&06
     BNE L30FD
-    LDA &2051
-    STA &0CF3
+    LDA data_2051
+    STA loader_lives_save
     RTS
-.L3115
-    LDX #&00
+
+.restore_score_from_loader
+    LDX #&00  \ Restore score / high-score from loader area &0CF3+ back into &2051 / &2A02..&2A07 / &2E5A..&2E5F. Called by main_init at game start.
 .L3117
-    LDA &0CF4,X
-    STA &2A02,X
-    LDA &0CFA,X
-    STA &2E5A,X
+    LDA loader_score_save,X
+    STA score_d3,X
+    LDA loader_hiscore_save,X
+    STA tbl_2E5A,X
     INX
     CPX #&06
     BNE L3117
-    LDA &0CF3
-    STA &2051
+    LDA loader_lives_save
+    STA data_2051
     LDA #&20
-    STA &28D3
+    STA scratch_28D3
 .L3133
-    LDX &28D3
+    LDX scratch_28D3
     LDY #&57
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_icon_10)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_icon_10)
-    STA &1195
+    STA sprite_src_hi
     LDX #&01
     LDY #&08
-    JSR &1173
-    INC &28D3
-    LDA &28D3
+    JSR sprite_plot_xy
+    INC scratch_28D3
+    LDA scratch_28D3
     CMP #&26
     BNE L3133
     LDX #&20
     LDY #&57
-    JSR &1236
-    LDX &2051
+    JSR calc_screen_addr
+    LDX data_2051
     LDY #&08
     LDA #LO(gfx_icon_11)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_icon_11)
-    STA &1195
-    JMP &1173
+    STA sprite_src_hi
+    JMP sprite_plot_xy
     RTS
-.L3170
-    LDX #&10
+
+.pause_game
+    LDX #&10  \ PAUSE: plot gfx_text_pause (&4780) at col 16 row &D0, then loop waiting for SPACE (key code &C9). Erase the sprite using lev_erase_brush (&7D80).
     LDY #&D0
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_text_pause)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_pause)
-    STA &1195
+    STA sprite_src_hi
     LDX #&09
     LDY #&0E
     LDA #&01
-    STA &79
-    JSR &1173
-.L318C
+    STA zp_sprite_dir_flag
+    JSR sprite_plot_xy
+
+.pause_wait_unpause
     LDX #&C9
     LDA #&81
     LDY #&FF
-    JSR &FFF4
+    JSR OSBYTE
     CPY #&FF
-    BNE L318C
+    BNE pause_wait_unpause
     LDX #&10
     LDY #&D0
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
-    STA &1195
+    STA sprite_src_hi
     LDX #&09
     LDY #&0E
-    JMP &1173
-.L31B1
-    JSR shutter_fade
-    JSR L2F20
-    JSR L2F2D
-    JSR L2F3A
-    JSR L2F47
+    JMP sprite_plot_xy
+
+.draw_final_scoreboard
+    JSR shutter_fade  \ End-of-game / scoreboard display. Calls shutter_fade then a sequence of ship/text plot helpers; followed by a 6-iteration plot loop. Triggered when data_2051 != 6 in intro_or_scoreboard.
+    JSR ship_intro_frame_5
+    JSR ship_intro_frame_4
+    JSR ship_intro_frame_3
+    JSR ship_intro_frame_2
     LDA #&00
-    STA &90
+    STA zp_print_idx
 .L31C4
-    JSR L2F66
-    LDX &90
+    JSR wait_one_frame
+    LDX zp_print_idx
     LDY #&C8
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&05
     LDY #&16
     LDA #LO(lev_player_sprite)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_player_sprite)
-    STA &1195
-    JSR &1173
-    INC &90
-    LDA &90
+    STA sprite_src_hi
+    JSR sprite_plot_xy
+    INC zp_print_idx
+    LDA zp_print_idx
     CMP #&06
     BNE L31C4
     RTS

@@ -3,279 +3,332 @@
 \ ============================================================
 
 \ Mid-instruction labels (referenced by branches/jumps):
-L3685            = &3685
+print_str_src_lo = &3588
+print_str_src_hi = &3589
+
+\ Extern labels defined in master Nevryon.6502 wrapper:
+\   zp_sprite_dir_flag = &0079
+\   zp_scroll_col = &0080
+\   zp_get_ready_erase = &008F
+\   zp_print_idx = &0090
+\   zp_continues = &0091
+\   zp_string_ptr_lo = &0095
+\   zp_string_ptr_hi = &0096
+\   KEY_UP = &0097
+\   zp_level_num = &009D
+\   loader_lives_save = &0CF3
+\   loader_score_save = &0CF4
+\   main_init = &1100
+\   sprite_plot_xy = &1173
+\   sprite_src_lo = &1194
+\   sprite_src_hi = &1195
+\   calc_screen_addr = &1236
+\   data_2051 = &2051
+\   sfx_fire = &2800
+\   draw_score = &29E7
+\   score_d3 = &2A02
+\   score_d2 = &2A03
+\   score_d1 = &2A04
+\   score_d0 = &2A05
+\   sfx_score_tick = &2E83
+\   play_death_sequence = &2E94
+\   save_score_to_loader = &30F8
+\   OSWRCH = &FFEE
+\   OSWORD = &FFF1
+\   OSBYTE = &FFF4
+\   tbl_FFFF = &FFFF
+
+\ Auto-promoted externs (zp/data outside this binary):
+zp_98            = &98
 
 ORG &3300
 
 
-\ ----- code &3300..&3690 -----
-.L3300
-    LDA #&20
-    STA &95
-    LDA #&36
-    STA &96
+\ ----- code &3300..&3501 -----
+.stage_loading_screen
+    LDA #LO(str_loading)  \ Inter-level loading screen: prints 'LOADING' / 'PLEASE WAIT' then jumps to &30F8 (the level loader in CODE2).
+    STA zp_string_ptr_lo
+    LDA #HI(str_loading)
+    STA zp_string_ptr_hi
     LDA #&03
     LDX #&07
     LDY #&06
-    JSR L3560
-    LDA #&28
-    STA &95
-    LDA #&36
-    STA &96
+    JSR print_doubled_string
+    LDA #LO(str_please_wait)
+    STA zp_string_ptr_lo
+    LDA #HI(str_please_wait)
+    STA zp_string_ptr_hi
     LDA #&02
     LDX #&05
     LDY #&0B
-    JSR L3560
-    JMP &30F8
-.L3325
-    LDA #&34
-    STA &95
-    LDA #&36
-    STA &96
+    JSR print_doubled_string
+    JMP save_score_to_loader
+
+.stage_clear_screen
+    LDA #LO(str_wow)  \ Stage-clear celebration: 'WOW!' / 'LEVEL X COMPLETED' then 'BONUS X000' with a score-rolling animation; optional '+ EXTRA SHIP!' if score crosses the threshold; returns RTS.
+    STA zp_string_ptr_lo
+    LDA #HI(str_wow)
+    STA zp_string_ptr_hi
     LDA #&03
     LDX #&08
     LDY #&04
-    JSR L3560
-    LDA &9D
+    JSR print_doubled_string
+    LDA zp_level_num
     CLC
     ADC #&30
-    STA &363F
-    STA &3651
-    LDA #&39
-    STA &95
-    LDA #&36
-    STA &96
+    STA data_363F
+    STA data_3651
+    LDA #LO(str_level_x_completed)
+    STA zp_string_ptr_lo
+    LDA #HI(str_level_x_completed)
+    STA zp_string_ptr_hi
     LDA #&02
     LDX #&01
     LDY #&07
-    JSR L3560
-    LDA #&4B
-    STA &95
-    LDA #&36
-    STA &96
+    JSR print_doubled_string
+    LDA #LO(str_bonus_xnnn)
+    STA zp_string_ptr_lo
+    LDA #HI(str_bonus_xnnn)
+    STA zp_string_ptr_hi
     LDA #&01
     LDX #&05
     LDY #&0A
-    JSR L3560
+    JSR print_doubled_string
     LDX #&32
 .L3365
-    STX &95
+    STX zp_string_ptr_lo
     LDA #&13
-    JSR &FFF4
-    LDX &95
+    JSR OSBYTE
+    LDX zp_string_ptr_lo
     DEX
     BNE L3365
-    LDX &9D
+    LDX zp_level_num
 .L3373
-    DEC &3651
+    DEC data_3651
     LDA #&3A
-    STA &3652
+    STA data_3652
     LDY #&FF
 .L337D
-    DEC &3652
+    DEC data_3652
     INY
-    STY &97
-    STX &98
-    JSR &2E83
-    JSR &29E7
-    INC &2A05
-    LDA #&4B
-    STA &95
-    LDA #&36
-    STA &96
+    STY KEY_UP
+    STX zp_98
+    JSR sfx_score_tick
+    JSR draw_score
+    INC score_d0
+    LDA #LO(str_bonus_xnnn)
+    STA zp_string_ptr_lo
+    LDA #HI(str_bonus_xnnn)
+    STA zp_string_ptr_hi
     LDA #&01
     LDX #&05
     LDY #&0A
-    JSR L3560
-    LDY &97
-    LDX &98
-    LDA &2A05
+    JSR print_doubled_string
+    LDY KEY_UP
+    LDX zp_98
+    LDA score_d0
     CMP #&0A
     BNE L33D0
     LDA #&00
-    STA &2A05
-    INC &2A04
-    LDA &2A04
+    STA score_d0
+    INC score_d1
+    LDA score_d1
     CMP #&0A
     BNE L33D0
     LDA #&00
-    STA &2A04
-    INC &2A03
-    LDA &2A03
+    STA score_d1
+    INC score_d2
+    LDA score_d2
     CMP #&0A
     BNE L33D0
     LDA #&00
-    STA &2A03
-    INC &2A02
+    STA score_d2
+    INC score_d3
 .L33D0
     CPY #&09
     BNE L337D
     DEX
     BNE L3373
-    JSR &29E7
+    JSR draw_score
     LDX #&32
 .L33DC
-    STX &95
-    LDX &95
+    STX zp_string_ptr_lo
+    LDX zp_string_ptr_lo
     DEX
     BNE L33DC
-    LDA &2051
+    LDA data_2051
     CMP #&06
     BEQ L341A
-    LDA #&56
-    STA &95
-    LDA #&36
-    STA &96
+    LDA #LO(str_extra_ship)
+    STA zp_string_ptr_lo
+    LDA #HI(str_extra_ship)
+    STA zp_string_ptr_hi
     LDA #&02
     LDX #&04
     LDY #&0E
-    JSR L3560
-    INC &2051
-    JSR &2800
+    JSR print_doubled_string
+    INC data_2051
+    JSR sfx_fire
     LDX #&20
     LDY #&57
-    JSR &1236
+    JSR calc_screen_addr
     LDA #LO(gfx_icon_11)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_icon_11)
-    STA &1195
-    LDX &2051
+    STA sprite_src_hi
+    LDX data_2051
     LDY #&08
-    JSR &1173
+    JSR sprite_plot_xy
 .L341A
     LDX #&02
 .L341C
     LDY #&32
 .L341E
-    STX &95
-    STY &96
+    STX zp_string_ptr_lo
+    STY zp_string_ptr_hi
     LDA #&13
-    JSR &FFF4
-    LDX &95
-    LDY &96
+    JSR OSBYTE
+    LDX zp_string_ptr_lo
+    LDY zp_string_ptr_hi
     DEY
     BNE L341E
     DEX
     BNE L341C
     RTS
-.L3432
-    LDA &91
+
+.game_over_or_continue
+    LDA zp_continues  \ Continue / game-over: if &91 (continues left) is non-zero, decrement it and offer a '10' (10 seconds) countdown 'PRESS SPACE TO / CONTINUE PLAY!'. Times out via INKEY at &FFF4 to the final game-over branch. Resets score on continue and re-enters at stage_loading_screen.
     CMP #&00
     BNE L343B
     JMP L34CD
 .L343B
-    DEC &91
-    LDA #&64
-    STA &95
-    LDA #&36
-    STA &96
+    DEC zp_continues
+    LDA #LO(str_press_space_to)
+    STA zp_string_ptr_lo
+    LDA #HI(str_press_space_to)
+    STA zp_string_ptr_hi
     LDA #&03
     LDX #&03
     LDY #&05
-    JSR L3560
+    JSR print_doubled_string
     LDA #&30
-    STA &3683
+    STA data_3683
     LDA #&31
-    STA &3682
-    LDA #&82
-    STA &95
-    LDA #&36
-    STA &96
+    STA str_two_digits
+    LDA #LO(str_two_digits)
+    STA zp_string_ptr_lo
+    LDA #HI(str_two_digits)
+    STA zp_string_ptr_hi
     LDA #&02
     LDX #&09
     LDY #&08
-    JSR L3560
-    LDA #&73
-    STA &95
-    LDA #&36
-    STA &96
+    JSR print_doubled_string
+    LDA #LO(str_continue_play)
+    STA zp_string_ptr_lo
+    LDA #HI(str_continue_play)
+    STA zp_string_ptr_hi
     LDA #&01
     LDX #&03
     LDY #&0B
-    JSR L3560
-    LDA &91
+    JSR print_doubled_string
+    LDA zp_continues
     ADC #&30
-    STA &368E
-    LDA #&85
-    STA &95
-    LDA #&36
-    STA &96
+    STA data_368E
+    LDA #LO(str_credits_nn)
+    STA zp_string_ptr_lo
+    LDA #HI(str_credits_nn)
+    STA zp_string_ptr_hi
     LDA #&02
     LDX #&05
     LDY #&0E
-    JSR L3560
+    JSR print_doubled_string
     LDA #&30
-    STA &3682
+    STA str_two_digits
     LDA #&39
-    STA &3683
+    STA data_3683
     JSR L34D7
 .L349F
-    LDA #&82
-    STA &95
-    LDA #&36
-    STA &96
+    LDA #LO(str_two_digits)
+    STA zp_string_ptr_lo
+    LDA #HI(str_two_digits)
+    STA zp_string_ptr_hi
     LDA #&02
     LDX #&09
     LDY #&08
-    JSR L3560
+    JSR print_doubled_string
     JSR L34D7
     LDX #&9D
     LDY #&FF
     LDA #&81
-    JSR &FFF4
+    JSR OSBYTE
     CPY #&FF
     BEQ L34EC
-    DEC &3683
-    LDA &3683
+    DEC data_3683
+    LDA data_3683
     CMP #&2F
     BEQ L34CD
     JMP L349F
 .L34CD
     LDA #&00
-    STA &9D
-    JSR &2E94
-    JMP L3300
+    STA zp_level_num
+    JSR play_death_sequence
+    JMP stage_loading_screen
+
 .L34D7
-    JSR &2E83
+    JSR sfx_score_tick
     LDX #&32
 .L34DC
-    STX &95
+    STX zp_string_ptr_lo
     LDA #&13
-    JSR &FFF4
-    DEC &95
-    LDX &95
+    JSR OSBYTE
+    DEC zp_string_ptr_lo
+    LDX zp_string_ptr_lo
     CPX #&00
     BNE L34DC
     RTS
 .L34EC
-    JSR &30F8
+    JSR save_score_to_loader
     LDA #&00
     LDX #&05
 .L34F3
-    STA &0CF4,X
+    STA loader_score_save,X
     DEX
     BNE L34F3
     LDA #&06
-    STA &0CF3
-    JMP &1100
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-.L350A
-    LDA #&0A
+    STA loader_lives_save
+    JMP main_init
+
+\ ----- data &3501..&350A -----
+\ OSWORD &0A parameter block: [0]=ASCII char in/out, [1..8]=8 bytes of font bitmap returned
+.chardef_buf
+    \ OSWORD &0A parameter block. [0]=ASCII code in / unused on out; [1..8] = 8 rows of the OS font bitmap returned. (Bytes shown as NOPs are just zero/EA placeholders — the OS overwrites them.)
+    EQUB &EA
+.chardef_r0
+    EQUB &EA
+.chardef_r1
+    EQUB &EA
+.chardef_r2
+    EQUB &EA
+.chardef_r3
+    EQUB &EA
+.chardef_r4
+    EQUB &EA
+.chardef_r5
+    EQUB &EA
+.chardef_r6
+    EQUB &EA, &EA
+
+\ ----- code &350A..&3620 -----
+.osword_read_char_def
+    LDA #&0A  \ OSWORD &0A trampoline: read the 8-byte font bitmap for the character in chardef_buf back into chardef_r0..r7. Called per character from print_doubled_string.
     LDX #&01
     LDY #&35
-    JMP &FFF1
-.L3513
-    LDA #&01
-    STA &79
-    LDA &80
+    JMP OSWORD
+
+.get_ready_overlay
+    LDA #&01  \ GET READY! overlay during the &E2..&EC stretch of the per-level scroll counter (&80). Bit 0 of &80 alternates 'draw' / 'erase'; &8F=1 means erase from a different code path. Plots gfx_text_get_ready (or lev_erase_brush) at col 13, row &C0 via the standard sprite blitter.
+    STA zp_sprite_dir_flag
+    LDA zp_scroll_col
     CMP #&E2
     BCS L351E
     RTS
@@ -289,161 +342,151 @@ ORG &3300
     BEQ L3541
     LDX #&0D
     LDY #&C0
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&0F
     LDY #&10
     LDA #LO(gfx_text_get_ready)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(gfx_text_get_ready)
-    STA &1195
-    JMP &1173
+    STA sprite_src_hi
+    JMP sprite_plot_xy
 .L3541
-    LDA &8F
+    LDA zp_get_ready_erase
     CMP #&01
     BNE L355F
     LDX #&0D
     LDY #&C0
-    JSR &1236
+    JSR calc_screen_addr
     LDX #&0F
     LDY #&10
     LDA #LO(lev_erase_brush)
-    STA &1194
+    STA sprite_src_lo
     LDA #HI(lev_erase_brush)
-    STA &1195
-    JMP &1173
+    STA sprite_src_hi
+    JMP sprite_plot_xy
 .L355F
     RTS
-.L3560
-    PHA
+
+.print_doubled_string
+    PHA  \ Doubled-height string printer. Inputs: A=COLOUR (printed as VDU 17,A), X=column, Y=row, (&95/&96)=string address (loaded into the self-modified LDA at print_str_lda_sm). For each char: OSWORD &0A reads the OS font bitmap; we then redefine VDU chars 225 (top half) and 226 (bottom half) so the 8 source rows become a scanline-stretched two-cell glyph; print 225, back-1, down-1, 226, up-1. CR (&0D) terminates.
     LDA #&11
-    JSR &FFEE
+    JSR OSWRCH
     PLA
-    JSR &FFEE
-    LDA &95
-    STA &3588
-    LDA &96
-    STA &3589
+    JSR OSWRCH
+    LDA zp_string_ptr_lo
+    STA print_str_src_lo
+    LDA zp_string_ptr_hi
+    STA print_str_src_hi
     LDA #&1F
-    JSR &FFEE
+    JSR OSWRCH
     TXA
-    JSR &FFEE
+    JSR OSWRCH
     TYA
-    JSR &FFEE
+    JSR OSWRCH
     LDX #&00
-    STX &90
-.L3585
-    LDX &90
-    LDA &FFFF,X
+    STX zp_print_idx
+
+.print_str_loop
+    LDX zp_print_idx  \ Top of per-character print loop in print_doubled_string.
+
+.print_str_lda_sm
+    LDA tbl_FFFF,X  \ Self-modified LDA &XXXX,X — the operand bytes at print_str_src_lo / print_str_src_hi were patched from (&95/&96) at routine entry to point at the source string.
     CMP #&0D
     BEQ L355F
-    STA &3501
-    JSR L350A
+    STA chardef_buf
+    JSR osword_read_char_def
     LDA #&17
-    JSR &FFEE
+    JSR OSWRCH
     LDA #&E1
-    JSR &FFEE
+    JSR OSWRCH
     LDA #&00
-    JSR &FFEE
-    LDA &3502
-    JSR &FFEE
-    LDA &3503
-    ORA &3502
-    JSR &FFEE
+    JSR OSWRCH
+    LDA chardef_r0
+    JSR OSWRCH
+    LDA chardef_r1
+    ORA chardef_r0
+    JSR OSWRCH
     LDA #&00
-    JSR &FFEE
-    LDA &3504
-    JSR &FFEE
+    JSR OSWRCH
+    LDA chardef_r2
+    JSR OSWRCH
     LDA #&00
-    JSR &FFEE
-    LDA &3505
-    JSR &FFEE
+    JSR OSWRCH
+    LDA chardef_r3
+    JSR OSWRCH
     LDA #&00
-    JSR &FFEE
+    JSR OSWRCH
     LDA #&17
-    JSR &FFEE
+    JSR OSWRCH
     LDA #&E2
-    JSR &FFEE
-    LDA &3506
-    JSR &FFEE
-    JSR &FFEE
+    JSR OSWRCH
+    LDA chardef_r4
+    JSR OSWRCH
+    JSR OSWRCH
     LDA #&00
-    JSR &FFEE
-    LDA &3507
-    JSR &FFEE
-    LDA &3507
-    ORA &3508
-    JSR &FFEE
-    LDA &3508
-    JSR &FFEE
+    JSR OSWRCH
+    LDA chardef_r5
+    JSR OSWRCH
+    LDA chardef_r5
+    ORA chardef_r6
+    JSR OSWRCH
+    LDA chardef_r6
+    JSR OSWRCH
     LDA #&00
-    JSR &FFEE
-    JSR &FFEE
+    JSR OSWRCH
+    JSR OSWRCH
     LDA #&E1
-    JSR &FFEE
+    JSR OSWRCH
     LDA #&08
-    JSR &FFEE
+    JSR OSWRCH
     LDA #&0A
-    JSR &FFEE
+    JSR OSWRCH
     LDA #&E2
-    JSR &FFEE
+    JSR OSWRCH
     LDA #&0B
-    JSR &FFEE
-    INC &90
-    JMP L3585
-    JMP &414F
-    EQUB &44  \ ?? opcode &44
-    EOR #&4E
-    EQUB &47  \ ?? opcode &47
-    ORA &4C50
-    EOR &41
-    EQUB &53  \ ?? opcode &53
-    EOR &20
-    EQUB &57  \ ?? opcode &57
-    EOR (&49,X)
-    EQUB &54  \ ?? opcode &54
-    ORA &4F57
-    EQUB &57  \ ?? opcode &57
-    AND (&0D,X)
-    JMP &5645
-    EOR &4C
-    JSR &2058
-    EQUB &43  \ ?? opcode &43
-    EQUB &4F  \ ?? opcode &4F
-    EOR &4C50
-    EOR &54
-    EOR &44
-    ORA &4F42
-    LSR &5355
-    JSR &3058
-    BMI L3685
-    ORA &202B
-    EOR &58
-    EQUB &54  \ ?? opcode &54
-    EQUB &52  \ ?? opcode &52
-    EOR (&20,X)
-    EQUB &53  \ ?? opcode &53
-    PHA
-    EOR #&50
-    AND (&0D,X)
-    BVC &36B8
-    EOR &53
-    EQUB &53  \ ?? opcode &53
-    JSR &5053
-    EOR (&43,X)
-    EOR &20
-    EQUB &54  \ ?? opcode &54
-    EQUB &4F  \ ?? opcode &4F
-    ORA &4F43
-    LSR &4954
-    LSR &4555
-    JSR &4C50
-    EOR (&59,X)
-    AND (&0D,X)
-    AND (&30),Y
-    ORA &5243
-    EOR &44
-    EOR #&54
-    EQUB &53  \ ?? opcode &53
-    EQUB &3A  \ ?? opcode &3A
-    BMI &36BF
-    EQUB &0D  \ ORA truncated
+    JSR OSWRCH
+    INC zp_print_idx
+    JMP print_str_loop
+
+\ ----- string &3620..&3690 -----
+\ ASCII string table (each terminated with &0D), printed by print_doubled_string
+.str_loading
+    \ 'LOADING' (used by stage_loading_screen).
+    EQUS "LOADING", &0D
+.str_please_wait
+    \ 'PLEASE WAIT'.
+    EQUS "PLEASE WAIT", &0D
+.str_wow
+    \ 'WOW!' (stage_clear_screen header).
+    EQUS "WOW!", &0D
+.str_level_x_completed
+    \ 'LEVEL X COMPLETED' — the 'X' at &363F is overwritten with the level digit (ASCII '1'..'8') before printing.
+    EQUS "LEVEL "
+.data_363F
+    EQUS "X COMPLETED", &0D
+.str_bonus_xnnn
+    \ 'BONUS X000' — 'X' at &3651 overwritten with the level digit; the three '0' digits become an animated score roll-up at &3652..&3654 (carry chain mirrors the per-decimal-digit score store at &2A02..&2A05).
+    EQUS "BONUS "
+.data_3651
+    EQUS "X"
+.data_3652
+    EQUS "000", &0D
+.str_extra_ship
+    \ '+ EXTRA SHIP!' (printed by stage_clear_screen only if the score has crossed an extra-ship threshold).
+    EQUS "+ EXTRA SHIP!", &0D
+.str_press_space_to
+    \ 'PRESS SPACE TO' (game_over_or_continue countdown).
+    EQUS "PRESS SPACE TO", &0D
+.str_continue_play
+    \ 'CONTINUE PLAY!' (game_over_or_continue countdown).
+    EQUS "CONTINUE PLAY!", &0D
+.str_two_digits
+    \ '10' — first char at &3682 is the displayed seconds (set to '1' or '0' depending on the count), second char at &3683 rolls '0'..'9' during the per-second countdown.
+    EQUS "1"
+.data_3683
+    EQUS "0", &0D
+.str_credits_nn
+    \ 'CREDITS:00' — the trailing '00' at &368D/&368E shows the player's credit count, written before the print call.
+    EQUS "CREDITS:0"
+.data_368E
+    EQUS "0", &0D

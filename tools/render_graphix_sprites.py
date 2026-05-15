@@ -46,13 +46,16 @@ CATALOG = [
         "ball_frame0", "ball_frame1", "ball_frame2",
         "ball_frame3", "ball_frame4", "ball_frame5",
     ]),
-    # &38F0..&38FF: 16 B alignment pad — page-aligns the enemies to &3900
-    # &3900..&3A1F: 3 enemy-saucer frames at 3×24 each, with 1×24 blank between
-    (0x3900, "enemy_saucer_frame0",   3, 24),
+    # &38F0..&38FF: 16 B alignment pad — page-aligns the pods to &3900
+    # &3900..&3A1F: 3 player-force-pod frames at 3×24 each, with 1×24 blank
+    # between. (Originally mis-labelled "enemy_saucer_*" — no enemy ptr
+    # references these; only draw_player_pod in CODE uses them, picking
+    # one frame per cycle of pod_anim_frame.)
+    (0x3900, "pod_frame0",   3, 24),
     # &3948: 24 B blank separator
-    (0x3960, "enemy_saucer_frame1",   3, 24),
+    (0x3960, "pod_frame1",   3, 24),
     # &39A8: 24 B blank separator
-    (0x39C0, "enemy_saucer_frame2",   3, 24),
+    (0x39C0, "pod_frame2",   3, 24),
     # &3A08..&3A1F: 24 B trailing blank
 
     # Small chars at &3A20..&3AFF: 28 cells of 4×8 col-major.
@@ -103,8 +106,9 @@ CATALOG = [
     (0x4488, "missile_3",             5, 8),
     (0x44B0, "missile_4",             5, 8),
     # &44D8..&44FF: 40 B padding
-    # &4500..&474F: unknown_table, 592 B — needs disasm investigation
-    (0x4500, "unknown_table",         1, 592),  # rendered as a strip; really a data table
+    # &4500..&474F: orphan_4500, 592 B of sprite-like bytes (`00 03 00 03 ...`)
+    # — no references in CODE/CODE2/CODE3 or any BASIC loader. Dead data.
+    (0x4500, "orphan_4500",           1, 592),  # rendered as a strip
     # &4750..&476F: 4th pickup variant — 2×16
     (0x4750, "pickup_white",          2, 16),
     # &4770..&477F: 16 B padding

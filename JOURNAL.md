@@ -4,6 +4,577 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-15 — Session 11: bullets / hazards / tile-pointer pair
+
+### `L17E7` is the real `update_bullets`
+
+Last session I'd called `L1AEB` "update_bullets", but the second look
+through the per-frame chain showed the real player-bullet update lives
+at `&17E7`: iterate the 6 `player_bullet_x/y` slots, advance each by
++2 px/frame to the right, erase + clear when it crosses col `&25`,
+otherwise replot the 3×2 bullet sprite and run `check_bullet_hits`
+(`L1847`). Decrements the fire cooldown (`zp_8A`) at the end. Now
+named `update_bullets`.
+
+### `L1847` → `check_bullet_hits`
+
+Called once per active player-bullet by `update_bullets`. Two
+collision loops over the current bullet's position:
+
+  - **X=8..1** over the 8-slot "hazard" track (`hazard_x` /
+    `hazard_y` / `hazard_state`, formerly `tbl_1A55..tbl_1A6B`). A hit
+    INCs `hazard_state[X]`; values 3 / 5 / 7 trigger an OSWRCH 7
+    milestone (the Loader2-redefined bell — see Session 10) and bump
+    `data_25A0`; `>=9` retires the hazard.
+  - **X=0..7** over the active enemy table. A hit decrements
+    `enemy_hp`, plays explode, and on kill clears the slot.
+
+The bullet erases itself (3×2 brush) and frees its slot regardless.
+
+### `L1AEB` → `update_hazards`
+
+The 8-slot mover for the same hazard track that
+`check_player_collisions` and `check_bullet_hits` both reference.
+Each frame moves an active hazard by ±1 X / ±4 Y (depending on the
+`data_16F6` / `data_16F7` direction flags), erases + redraws the 4×24
+sprite, deactivates the slot when `hazard_state == 0`. Renamed the
+backing tables to `hazard_x` / `hazard_y` / `hazard_state` (= the
+3 parallel 11-byte arrays at `&1A55` / `&1A60` / `&1A6B`).
+
+### `zp_sprite_src` / `zp_sprite_src2` were misnamed
+
+The two zp pairs at `&8D/&8E` and `&8B/&8C` are NOT the sprite
+engine's source bytes (those are the self-modified operand at
+`sprite_src_lo/hi` = `&1194` / `&1195` inside `sprite_plot_inner`).
+They are the **per-column map-tile pointers** used by `L13D1`:
+each frame walks the LEVD2 tile-id table and computes where to read
+the current column's tile from in the LEVD1 catalog at `&4E80`. Two
+pairs because the upper and lower tile bands are drawn in the same
+column-update cycle from different sources:
+
+| New name             | Old name              | Tile band  | Drawn at      | dir_flag           |
+|----------------------|-----------------------|------------|---------------|--------------------|
+| `zp_tile_upper_hi/lo` | `zp_sprite_src_hi/lo` (`&8D/&8E`)   | top (mirror) | row 0  | 0 = vertical mirror |
+| `zp_tile_lower_hi/lo` | `zp_sprite_src2_hi/lo` (`&8B/&8C`) | bottom    | row 16 | 1 = normal          |
+
+Renamed in `Nevryon.6502` and both per-binary cfgs that reference
+them, with a multi-line comment in the master explaining the
+historical confusion.
+
+### Open question: which tile-id table is upper vs lower?
+
+A direct trace of `L13D1` followed into `L127B` says
+`tbl_7E10` feeds `zp_tile_upper` (drawn mirrored at row 0) and
+`tbl_7F10` feeds `zp_tile_lower` (drawn normally at row 16) — i.e.
+the opposite of how `docs/file_layout.md` and `render_map.py` had
+them labelled. Since the rendered maps look right with the
+renderer's current assignment, the resolution is either (a) the
+test cases happen to be visually similar with either assignment,
+or (b) my assembly trace is missing something subtle. Captured the
+discrepancy in the docs with an "[open Q]" marker; for now the
+disassembly uses the names the code trace implies.
+
+### `docs/file_layout.md` updated
+
+Routine table now lists all the new identifications:
+`frame_delay`, `draw_player`, `draw_player_pod`, `read_input`,
+`read_joystick`, `check_key_pressed`, the four `move_player_*`
+helpers, `on_fire_pressed`, `update_bullets`, `check_bullet_hits`,
+`check_player_collisions`, `update_hazards`, `lose_a_life`, `init`,
+`starfield_init`, `starfield_update`. GRAPHIX table rebranded
+the three "enemy saucer" frames to `gfx_pod_frame0/1/2`.
+
+All four binaries continue to build byte-identical.
+
+### Next
+
+  - Settle the tile-table upper/lower question (visual A/B against a
+    live game capture).
+  - Trace `data_25A3`'s set path — gates the force-pod drawing, so
+    it's the "force-pod attached" flag.
+  - `data_2050` looks like a 4-bit shield / damage counter from
+    `lose_a_life`'s every-other-call decrement; would be nice to
+    confirm.
+  - The remaining `L<addr>` entry points in CODE2 (`L28A9`, `L2975`,
+    `L2998`, `L2FF0`, `L3058`).
+
+---
+
+## 2026-05-15 — Session 10: player rendering + collision + readability
+
+### Routines named
+
+| Addr     | Name                       | Purpose |
+|----------|----------------------------|---------|
+| `&13BC`  | `frame_delay`              | (named last session — restated for completeness.) |
+| `&1478`  | `draw_player`              | Plot `lev_player_sprite` (6×22 from `&4E80`) at `(zp_player_x, zp_player_y)`. If `data_25A3 == 1` (force-pod power-up active), also call `draw_player_pod` at `(player_x+5, player_y+1)`. Then JSR `check_player_collisions`, JMP to update_player_bullets. |
+| `&14B5`  | `draw_player_pod`          | Plot the player's force-pod (the rotating saucer that orbits the ship after a power-up). Selects one of three frames at `gfx_pod_frame0/1/2` (`&3900/&3960/&39C0`) based on `pod_anim_frame` (= `data_14D8`). |
+| `&14D8`  | `pod_anim_frame`           | 1/2/3 frame selector for `draw_player_pod`. Cycles on every player vertical move: `move_player_down` INCs it (wraps 4→1), `move_player_up` DECs it (wraps 0→3). |
+| `&198B`  | `check_player_collisions`  | Per-frame player collision check. Two loops over slots 1..8 / 0..7 testing player vs 6×&18 bounding boxes around (a) entries in `tbl_1A55/tbl_1A60/tbl_1A6B` and (b) entries in the active-enemy table (`enemy_x/y/type < &14`). The "delay" appearance is two parallel 8-slot iterations, not actual delay loops. On hit: OSWRCH &07 (see "OSWRCH 7 = blip" below) + JSR `lose_a_life`. |
+| `&1DEE`  | `lose_a_life`              | Plays the OSWRCH 7 collision blip, toggles `data_1E46` (0↔1), decrements `data_2050` every other call (two-step blink), and redraws the lives icon at row `&5F`. |
+
+### The "enemy_saucer" sprites are actually the player force-pod
+
+The three 4×24 sprites at `&3900` / `&3960` / `&39C0`, previously
+labelled `gfx_enemy_saucer_frame0..2`, were a session 3 misidentification.
+A grep across all binaries shows **zero** code references to those
+addresses except via `draw_player_pod`. No LEVD2 enemy ptr-table slot
+points at them either — they're solely the player's orbiting force-pod
+animation, three rotation frames driven by `pod_anim_frame`. Renamed
+to `gfx_pod_frame0` / `gfx_pod_frame1` / `gfx_pod_frame2` in
+`disasm/GRAPHIX.cfg.json`.
+
+### OSWRCH &07 — the redefined BBC bell
+
+`check_player_collisions` and `lose_a_life` both do `LDA #&07 / JSR
+OSWRCH`. That's the BBC's "ring bell" character — normally a quarter-
+second piano-like beep. Loader2 lines 5-9 redefine it via OSBYTE
+`*FX211 / *FX212 / *FX213 / *FX214` to be a short un-musical blip with
+duration 1, used in-game as a generic "collision / hit / pickup" SFX
+without burning a `OSWORD &07` slot.
+
+### Disassembler — blank line before each routine entry
+
+`disasm/CODE.6502` was getting hard to read with subroutine bodies
+running into each other. Three sources of "routine entry" addresses
+now trigger a leading blank line in the code emitter:
+
+  1. Any address that's a JSR destination (from any code region).
+  2. Any address in `cfg.entries`.
+  3. Any address with a user-supplied name in `cfg.labels` —
+     auto-generated `L<addr>` / `data_<addr>` labels are excluded
+     so local branch targets inside a routine don't break the flow.
+
+`collect_branch_targets` got a `jsr_targets` out-param, and
+`disasm_code_region` got a matching input set that gates a leading
+`""` line before each named label. The check skips the very first
+label in a region (no leading blank) and de-dupes adjacent blanks.
+
+All four binaries still build byte-identical.
+
+### Next
+
+  - Decode `tbl_1A55 / tbl_1A60 / tbl_1A6B / tbl_1A76` — the 11-slot
+    parallel array `check_player_collisions` iterates as "objects in
+    the world that aren't in the main enemy slot table". Candidates:
+    enemy bullets, hazards, or item pickups.
+  - Trace `data_25A3`'s set/reset path — it gates the force-pod
+    drawing in `draw_player`, so it's the "have-power-up" flag.
+  - Document `data_2050` (`lose_a_life` decrements every other call)
+    — looks like a 4-bit "damage absorbed" / "shield" counter.
+
+---
+
+## 2026-05-15 — Session 9: init routine + input layer named
+
+### Per-level init (`&1F8E`) renamed
+
+`L1F8E` → `init`. Called once per level by `main_init`. The
+nine-iteration loop at `&1FB6` is the clear-enemy-slots pass —
+zero-fills six parallel 9-byte tables. Each got a real name:
+
+| Old name   | New name      | Purpose |
+|------------|---------------|---------|
+| `tbl_2052` | `enemy_x`     | X coord per slot. `&FF` would mean "off-screen right" but here 0 = empty (`tbl_2065,X==0` is the canonical empty test). |
+| `tbl_205C` | `enemy_y`     | Y coord per slot (rows 0/1/2/3 of the playfield map to &DF/&BF/&9F/&7F). |
+| `tbl_2065` | `enemy_type`  | Spawn type (0 = empty, else index into the LEVD2 enemy ptr table at `&7A80`/`&7AC0`; `&14` = "exploding" pseudo-type). |
+| `tbl_2077` | `enemy_hp`    | Hit points; init `&08`, special types `&14` (boss) or `&06`. |
+| `tbl_2080` | `enemy_step`  | Slide-in / animation counter (initial `&04`, decrements until 1 then erases). |
+| `tbl_206E` | `enemy_flip`  | Vertical flip flag (drives `zp_sprite_dir_flag`; set from spawn-attribute bit 7). |
+
+(`tbl_1A6B` is also zeroed in the same loop but is a separate
+9-byte table used by the bullet update path — left as `tbl_1A6B`
+until the bullet system is fully traced.)
+
+The trailing singleton stores from `&1FC9` onwards initialise:
+the four (well, 7) player-bullet slots at `player_bullet_x` /
+`player_bullet_y` (= old `tbl_16E6` / `tbl_16ED` at `&16E6` /
+`&16ED`); the force-pod registers at `&25A0..&25A9`; the
+bullet-inactive markers at `&1A8B..&1A91` (init `&FF`); and
+`fire_cooldown_reload = &06` (= `data_2554` rebranded, since
+`on_fire_pressed` reloads `zp_8A` from it after each shot).
+
+### Input handler — symbolic key constants
+
+`L155B` → `check_key_pressed`: thin wrapper over `OSBYTE &81`
+(INKEY -X) with Y=&FF. Returns Z=1 when the key whose internal
+scan code is in X is NOT pressed, Z=0 when pressed. Seven call
+sites, each with a hard-coded `LDX #&XX` — now rewritten via
+immediate-overrides so they read as named constants:
+
+| Hex (X reg) | INKEY -N | New constant |
+|-------------|----------|--------------|
+| `&BD` | `-67`  | `KEY_RIGHT` ("X" key) — calls `move_player_right` |
+| `&9E` | `-98`  | `KEY_LEFT`  ("Z" key) — calls `move_player_left` |
+| `&B7` | `-73`  | `KEY_DOWN`  — calls `move_player_down` |
+| `&97` | `-105` | `KEY_UP`    — calls `move_player_up` |
+| `&B6` | `-74`  | `KEY_FIRE`  — calls `on_fire_pressed` |
+| `&C8` | `-56`  | `KEY_PAUSE` — calls `pause_game` |
+| `&8F` | `-113` | `KEY_QUIT`  — abandons the run (resets level_num=0, saves score, plays death sequence, returns to stage_loading_screen) |
+
+Constants are declared once in `disasm/Nevryon.6502` so every binary
+can reference them. The matching player-movement routines and the
+fire-button handler were named in the same pass:
+
+| Addr     | New name              |
+|----------|-----------------------|
+| `&14D9`  | `read_input`          |
+| `&1517`  | `read_joystick`       |
+| `&1565`  | `move_player_left`    |
+| `&16A6`  | `move_player_right`   |
+| `&16B0`  | `move_player_down`    |
+| `&16CC`  | `move_player_up`      |
+| `&17B9`  | `on_fire_pressed`     |
+| `&1AEB`  | `update_bullets`      |
+
+CODE.cfg gained comments explaining what each routine does (clamp
+bounds for movement, find-empty-slot logic for fire, etc.). All
+four binaries still build byte-identical.
+
+### Side-effects
+
+- CODE2.cfg externs updated to use the new names (`player_bullet_x`,
+  `enemy_x/y/type/flip`, `fire_cooldown_reload`) so the same address
+  shows the same identifier across all three CODE binaries.
+- `data_2051` confirmed: != 0 means alive / playing; == 0 means
+  game over (see `main_loop`: `LDA data_2051 / BNE L1114 /
+  JMP game_over_or_continue`). Worth a `lives_remaining` rename
+  in a future pass.
+
+### Next
+
+  - Decode the bullet system at `tbl_1A55 / tbl_1A60 / tbl_1A6B /
+    tbl_1A76` — the 11-slot parallel arrays look like a separate
+    weapon-projectile track (maybe enemy bullets, or the force-pod
+    pellet stream).
+  - Trace the remaining `L<addr>` entry points in CODE2 (`L28A9`,
+    `L2975`, `L2998`, `L2FF0`, `L3058`) — most likely the
+    title-screen state machine.
+  - Rename `data_2051` → `lives_remaining` once a few more
+    accesses are confirmed.
+  - Inspect the four offset-into-named sprite call sites
+    (CODE2 &2C0B, &2D5F, &2D8F, &2FAE).
+
+---
+
+## 2026-05-15 — Session 8: zero raw addresses + cumulative-master build
+
+The disassembler now auto-promotes EVERY absolute (abs / abs,X / abs,Y)
+and zero-page operand reference to a label — no more raw `INC &28D5`
+or `STA &16E6,X` lines surviving in the output.
+
+### Disassembler changes (`tools/disasm6502.py`)
+
+  - `collect_table_targets` extended to return a third set
+    `zp_addrs` in addition to indexed/plain absolute targets, and to
+    INCLUDE targets that fall inside reached code (BBC code often
+    reuses an instruction operand byte as scratchpad RAM — e.g.
+    `play_death_sequence`'s 200-frame counter at `&28D8`, which is
+    actually the LO operand byte of the `LDA force_pod_state` at
+    `&28D7`). Mid-instruction targets get promoted to mid-instruction
+    equates (the existing `code_emit_points` machinery already
+    handled the emit; we just had to feed it the right addresses).
+  - `DisasmConfig` gained two new dicts:
+      - `auto_extern_labels`: out-of-range names auto-promoted by the
+        tool (`zp_XX`, `data_XXXX`, `tbl_XXXX`). Always emitted
+        inline so the per-binary `.6502` builds without help.
+      - `master_externs`: parsed from the master file (see below).
+        If an address has a master name, that name is adopted as a
+        cfg extern (no inline equate) — the master's preferred name
+        wins over an auto-generated fallback.
+  - `--master <path>` CLI flag parses `name = &VAL` lines from a
+    BeebAsm source so the disassembler knows which addresses are
+    pre-declared. Trivial regex; ignores everything else.
+  - The header dump now has a dedicated section
+    *"Auto-promoted externs (zp/data outside this binary)"* listing
+    the inline equates added by the tool, separate from the
+    user-supplied externs.
+
+### Build script (`build.sh`)
+
+Build now regenerates the four `.6502` files from `extracted/` +
+`*.cfg.json` before running BeebAsm — the source of truth is the
+cfg, not the on-disk `.6502`. Each binary's regen uses a
+**cumulative master** built from `Nevryon.6502` plus every
+already-regenerated `.6502` file, in the same order they're
+`INCLUDE`d in the final master. That guarantees an auto-promoted
+`zp_9A = &9A` declared inside `CODE.6502` is visible (and skipped
+inline) by the time `CODE2.6502` is regenerated — exactly once
+across the whole build.
+
+### Result
+
+| File           | Raw 16-bit refs | Raw zp refs |
+|----------------|-----------------|-------------|
+| `CODE.6502`    | 0               | 0           |
+| `CODE2.6502`   | 0               | 0           |
+| `CODE3.6502`   | 0               | 0           |
+| `GRAPHIX.6502` | 0               | 0           |
+
+(Numerical offsets like `gfx_text_press_space + &A0` inside
+`LO()/HI()` expressions don't count — those are arithmetic
+constants, not address references.)
+
+The `INC &28D5` the user flagged at CODE2 line 679 now reads
+`INC data_28D5`. Same treatment for every other previously-raw
+operand. CODE.cfg.json also gained explicit cross-binary names for
+`force_pod_x/y/frame` and `score_d0..d3` so CODE and CODE2 use the
+same labels for the same addresses.
+
+All four binaries continue to build byte-identical against the
+originals.
+
+### Next
+
+  - Trace the remaining `L<addr>` entry points in CODE2 (`L28A9`,
+    `L2975`, `L2998`, `L2FF0`, `L3058`) and CODE — most likely
+    candidates for naming: the title-screen state machine, the
+    enemy-fire path, and the bullet/object update routines.
+  - Many of the auto-promoted `tbl_XXXX` / `data_XXXX` names are
+    placeholders. The next pass should rename the well-known ones
+    (`tbl_1A6B` = active-enemy table, `tbl_2065` = enemy attribute
+    cache, etc.) to descriptive identifiers.
+  - Inspect the four offset-into-named sprite call sites
+    (CODE2 &2C0B, &2D5F, &2D8F, &2FAE).
+  - Label LEVD1 decoration sprite slots so CODE &1C25/&1C36 can
+    use explicit names.
+
+---
+
+## 2026-05-15 — Session 7: CODE2 cross-references and routine names
+
+CODE2 was the last binary still full of raw `JSR &1236` / `STA &1194`
+forms — readable to nobody. Switched it to entries-mode tracing
+(matching CODE / CODE3) and built out the cross-binary symbol table
+in `disasm/CODE2.cfg.json`. The disasm now uses real names
+everywhere:
+
+  - `JSR calc_screen_addr` instead of `JSR &1236`
+  - `STA sprite_src_lo` instead of `STA &1194`
+  - `LDA force_pod_state` instead of `LDA &25A5`
+  - `LDA score_d3,X` instead of `LDA &2A02,X`
+  - `LDX force_pod_x` / `LDY force_pod_y` instead of raw `&2972/&2973`
+
+### Newly named routines
+
+| Addr     | Name                       | Purpose |
+|----------|----------------------------|---------|
+| `&2800`  | `sfx_fire`                 | Shot/fire SOUND (ch &13, pitch &4B) — tail-calls OSWORD &07 with param block at `sfx_fire_params`. |
+| `&2811`  | `sfx_hit_lo`               | Lower-pitched single-tone SOUND (ch &12, pitch &28). |
+| `&2822`  | `sfx_explode`              | Two queued SOUNDs in sequence: noise burst on ch 0 then tone on ch 1 — the classic explosion. |
+| `&28D7`  | `force_pod_anim`           | Per-frame: if `force_pod_state` (&25A5) == 1, animates the 6-frame chomping-ball pod at (`force_pod_x`, `force_pod_y`) cycling through gfx_ball_frame0..5. |
+| `&29E7`  | `draw_score`               | Plots the 6-digit BCD score at char-col 9 row &5F. |
+| `&2A08`  | `draw_score_digit`         | Helper: takes A=digit, X=offset, picks gfx_digit_N (`&3A60 + 8*N`). |
+| `&2A20`  | `spawn_enemy_missile`      | Allocates one of the two homing-missile slots (`tbl_2B9A[0..1]`), copies enemy XY in, sets direction, beeps. |
+| `&2AA2`  | `update_enemy_missiles`    | Per-frame: step + collide both missile slots. |
+| `&2AC4`  | `step_enemy_missile`       | Erase + move ±2 px + redraw one missile (`gfx_icon_08`). |
+| `&2B48`  | `missile_player_collide`   | Box-test missile vs player; jump to death path on hit. |
+| `&2BA4`  | `intro_get_ready`          | Level-start: draws 7 lives icons + shutter_fade + sfx_explode + 75-frame loop blitting `gfx_text_get_ready` (split as two 8-col halves). |
+| `&2CCA`  | `draw_title_screen`        | Title screen: 4th Dimension logo + `&` + `GPR '90` + `PRESS SPACE`. Called from `main_init`. |
+| `&2E83`  | `sfx_score_tick`           | Medium beep (ch &12 pitch &64 dur 3) — used both during BONUS roll-up and as the missile-launch confirmation. |
+| `&2E94`  | `play_death_sequence`      | Shutter-fade + explosion sound + state clear. Used on death and on game-over reset. |
+| `&2EED`  | `sfx_level_start`          | Long high-pitched fanfare on ch 1 (pitch &FF, duration &0F). |
+| `&2EFF`  | `intro_or_scoreboard`      | Branch: if `data_2051 == 6` (fresh game) → ship intro; else → final scoreboard. |
+| `&2F09`  | `ship_intro_anim`          | Four-frame slide-in of the player ship from the right edge, columns 5→2. |
+| `&2F20..&2F47` | `ship_intro_frame_5..2` | The four ship-arrival animation frames, each blitting a successively wider slice of `lev_player_sprite`. |
+| `&2F54`  | `ship_intro_blit_setup`    | wait_one_frame → calc_screen_addr (0, &C8) → sprite_src_hi=&4E. |
+| `&2F66`  | `wait_one_frame`           | starfield_update + busy-loop delay + OSBYTE &13. |
+| `&30F8`  | `save_score_to_loader`     | Copy score / hi-score / lives to the loader persistence area at `&0CF3..&0CFF` (read back by the BASIC chain). |
+| `&3115`  | `restore_score_from_loader`| Reverse of the above — called by `main_init` at game start. |
+| `&3170`  | `pause_game`               | Plot `gfx_text_pause` at col &10 row &D0, wait for SPACE, erase with `lev_erase_brush + &80`. |
+| `&31B1`  | `draw_final_scoreboard`    | shutter_fade + 4 ship-tween helpers + 6-iteration plot loop — the end-of-game high-score screen. |
+
+### Sound-effect param blocks
+
+Each `LDA #&07 / LDX #lo / LDY #hi / JMP|JSR OSWORD` is paired with
+an 8-byte SOUND parameter block, now declared as explicit
+`width: 8` data regions:
+
+| Routine            | Params at  | ch    | amp     | pitch | dur  |
+|--------------------|------------|-------|---------|-------|------|
+| `sfx_fire`         | `&2809`    | &0013 | 2       | &4B   | 1    |
+| `sfx_hit_lo`       | `&281A`    | &0012 | 2       | &28   | 1    |
+| `sfx_explode` (A)  | `&283B`    | &0010 | &00F1   | 7     | &28  |
+| `sfx_explode` (B)  | `&2843`    | &0011 | 3       | &FF   | 1    |
+| `sfx_score_tick`   | `&2E8C`    | &0012 | 4       | &64   | 3    |
+| `sfx_level_start`  | `&2EF6`    | &0011 | 4       | &FF   | &0F  |
+
+### Tooling
+
+Switched CODE2.cfg from legacy region mode to entries-mode tracing
+with explicit entry points. The tracer now correctly carves the
+sound-param blocks as data (since `JMP &FFF1` tail-calls exit the
+trace) rather than mis-decoding them as nonsense `EQUB &13 BRK ORA`
+soup. Same fix applied for the 9-byte starfield-state region split.
+
+Master `Nevryon.6502` ZP equates expanded so per-binary cfgs can
+reference any named slot (`zp_player_x`, `zp_player_y`, `zp_test_x`,
+`zp_test_y`, …) without forward-reference. Cross-file refs in
+`CODE.cfg` and `CODE3.cfg` updated to the new names so all four
+binaries continue to build byte-identical.
+
+### Holdouts in CODE2
+
+Some routines still carry their auto-generated `L<addr>` names —
+the call patterns aren't clear enough for confident naming:
+
+  - `L28A9`, `L2975`, `L2998`, `L2FF0`, `L3058` — entry points
+    from CODE / CODE3 but their purposes need more context tracing.
+  - The various `tbl_2BXX` slots (missile state) — named-by-address
+    but their meanings (other than X/Y/dir) need more decoding.
+
+### Next
+
+  - Trace the remaining `L<addr>` entry points in CODE2 — most likely
+    candidates for naming: the title-screen state machine and the
+    bullet-fire path.
+  - Inspect the four offset-into-named sprite call sites
+    (CODE2 &2C0B, &2D5F, &2D8F, &2FAE) to confirm the
+    "wide-text split blit" hypothesis.
+  - Label LEVD1 decoration sprite slots so CODE &1C25/&1C36 can
+    use explicit names.
+  - The 91 B of trailing data at `&49A5-&49FF` after `irq_install`
+    — undecoded.
+
+---
+
+## 2026-05-15 — Session 6: CODE3 fully decoded (string table + doubled font)
+
+CODE3 turned out to be the inter-stage / game-over / GET READY!
+overlay binary. Five top-level routines, one shared text engine, one
+shared OSWORD param block, and a 112-byte ASCII string table at the
+tail (the previous disasm decoded those bytes as 6502 instructions,
+which is what made the file look obscure).
+
+### Named routines (CODE3 entry points)
+
+| Addr     | Name                       | Purpose |
+|----------|----------------------------|---------|
+| `&3300`  | `stage_loading_screen`     | "LOADING" / "PLEASE WAIT" then `JMP &30F8` (level-load handoff in CODE2). |
+| `&3325`  | `stage_clear_screen`       | "WOW!" / "LEVEL X COMPLETED" / "BONUS X000" with a score roll-up (carries through `score_d0..d3` = `&2A05..&2A02`), then optional "+ EXTRA SHIP!" if the threshold at `&2051` triggers. Returns RTS. |
+| `&3432`  | `game_over_or_continue`    | If `&91` (continues left) is non-zero, decrement and run the "PRESS SPACE TO / CONTINUE PLAY!" `10..0` countdown via INKEY (`OSBYTE &81`); times out to game-over. Resets score on continue and re-enters via `stage_loading_screen`. |
+| `&3513`  | `get_ready_overlay`        | In-game overlay during the `&E2..&EC` window of the per-frame scroll counter `&80`. Plots `gfx_text_get_ready` (or `lev_erase_brush`) at col 13, row `&C0` via the standard sprite blitter. |
+| `&3560`  | `print_doubled_string`     | The shared text renderer all the above call into (see below). |
+| `&350A`  | `osword_read_char_def`     | `LDA #&0A / LDX #&01 / LDY #&35 / JMP OSWORD` — wraps OSWORD &0A. The 9 "NOP" bytes immediately preceding it (`&3501..&3509`) are not padding: they're the `chardef_buf` / `chardef_r0..r6` OS-overwritten parameter block. |
+
+### `print_doubled_string` — the text engine
+
+The five routines all funnel through `&3560`, which renders a
+zero-page-pointed (`&95/&96`) CR-terminated string at colour `A`,
+position `(X,Y)`, with a scanline-stretched two-cell-tall version of
+the BBC OS font:
+
+  - VDU 17,A sets foreground colour; VDU 31,X,Y positions the cursor.
+  - `(&95/&96)` is patched into a self-modified `LDA &XXXX,X` at
+    `&3587` (operand bytes at `&3588/&3589` — now labelled
+    `print_str_src_lo / print_str_src_hi`).
+  - Per character: `OSWORD &0A` reads the 8-row source font bitmap
+    into `chardef_r0..r6`; VDU 23 redefines char 225 as
+    `[0, r0, r0|r1, 0, r2, 0, r3, 0]` (top half) and char 226 as
+    `[r4, r4, 0, r5, r5|r6, r6, 0, 0]` (bottom half) — i.e. each
+    source row gets doubled, with blank rows interleaved for the
+    classic "scanline" look. Then `PRINT 225, BACK, DOWN, 226, UP`
+    renders the two stretched cells stacked.
+  - CR (`&0D`) terminates and jumps to the shared `.L355F` RTS.
+
+### String table — `&3620..&368F`, ten entries
+
+| Addr     | Label                       | Text                  | Used by |
+|----------|-----------------------------|-----------------------|---------|
+| `&3620`  | `str_loading`               | `"LOADING"`           | `stage_loading_screen` |
+| `&3628`  | `str_please_wait`           | `"PLEASE WAIT"`       | `stage_loading_screen` |
+| `&3634`  | `str_wow`                   | `"WOW!"`              | `stage_clear_screen` |
+| `&3639`  | `str_level_x_completed`     | `"LEVEL X COMPLETED"` | `stage_clear_screen`. The `'X'` at `&363F` is overwritten with the level digit. |
+| `&364B`  | `str_bonus_xnnn`            | `"BONUS X000"`        | `stage_clear_screen`. `'X'` at `&3651` becomes the level digit; the `"000"` at `&3652..&3654` is animated to mirror `score_d0..d3` during the roll-up. |
+| `&3656`  | `str_extra_ship`            | `"+ EXTRA SHIP!"`     | `stage_clear_screen` (only when `&2051` < 6, i.e. fewer than 6 lives in reserve). |
+| `&3664`  | `str_press_space_to`        | `"PRESS SPACE TO"`    | `game_over_or_continue` |
+| `&3673`  | `str_continue_play`         | `"CONTINUE PLAY!"`    | `game_over_or_continue` |
+| `&3682`  | `str_two_digits`            | `"10"`                | `game_over_or_continue` — first char displays the tens digit, second rolls `'0'..'9'` during the per-second countdown. |
+| `&3685`  | `str_credits_nn`            | `"CREDITS:00"`        | `game_over_or_continue` — the trailing `"00"` is the credit count. |
+
+### Disassembler — EQUS / string regions
+
+Added a `kind: "string"` data-region type. The data emitter now
+greedily packs printable ASCII into `EQUS "..."` literals, breaks at
+the next label, and emits non-printable bytes (e.g. the `&0D`
+terminator) as `, &XX` continuations on the same line. This lets the
+CODE3 string table roundtrip as readable BeebAsm source instead of
+the previous nonsense mis-decoded as opcodes.
+
+Bonus fix in the same pass: `synthesise_regions` was using
+`r.kind` to decide forced-data vs forced-code as "data → data, else
+code". With the new `string` kind that mis-routed strings into the
+code partition. Flipped to "code → code, else data" and made the
+forced-region restoration preserve the cfg's original `kind`.
+
+### Shared externs hardening
+
+The build failed with a spurious "Trying to assemble over existing
+code" at GRAPHIX once CODE3 started using named ZP labels
+(`zp_string_ptr_lo`, `zp_print_idx`, `zp_continues`, `zp_scroll_col`,
+`zp_get_ready_erase`) that weren't declared anywhere. BeebAsm's
+multi-pass sizing diverged between passes when those symbols stayed
+unresolved, leaving a leftover byte at `&3690` that then collided
+with the start of `GRAPHIX`. Adding the missing equates to the master
+`Nevryon.6502` (plus `data_2051` and `score_d0..d3`) restored a clean
+byte-identical build for all four binaries.
+
+Lesson logged: any per-binary cfg that names an out-of-range
+address (ZP, hardware, cross-file) **must** have a matching equate
+in `Nevryon.6502`, otherwise pass divergence corrupts the layout
+without flagging an obvious error.
+
+### Next
+
+  - Inspect the four offset-into-named sprite call sites
+    (CODE2 &2C0B, &2D5F, &2D8F, &2FAE) to confirm/refute the
+    "wide-text split blit" hypothesis.
+  - Label LEVD1 decoration sprite slots so CODE &1C25/&1C36 can
+    use explicit names.
+  - Trace `&2E83` / `&29E7` / `&2E94` / `&30F8` in CODE2 (called
+    from CODE3) — these are the actual level/score state managers.
+  - The 91 B of trailing data at `&49A5-&49FF` after `irq_install`
+    — undecoded.
+
+---
+
+## 2026-05-15 — Session 5: `&4500..&474F` declared orphaned
+
+Detokenised every BASIC file on the disk (`NEVRYON`, `Loader2`,
+`LOADER3`, `Loader4`, `options`, `GmOv`, `Runner`) and grepped each
+for the 592-byte range:
+
+  - All `&4500`..`&47FF` hex literals — none.
+  - Decimal forms (17664..18431) — none.
+  - All `?&` / `!&` / `$&` POKEs — touch only zp, palette_top (`&493F`),
+    score area (`&CF3+`), VDU regs, Runner filename buffer (`&7B00`),
+    and small VDU char defs at `&7E00`. None hit `&4500..&47FF`.
+  - All `FOR..TO` loops — none traverse the range.
+
+Combined with the previous CODE/CODE2/CODE3 scan finding zero code
+refs, the block is genuinely **dead**. Renamed `gfx_unknown_table` →
+`gfx_orphan_4500` in cfgs/docs. Block content is `00 03 00 03 …`
+(MODE 5 pixel pattern `....X` in column-major form), so the bytes
+look like leftover sprite data from the build — possibly a cut
+graphic that the linker kept emitting.
+
+Manifest confirms only GRAPHIX (`&3680..&4A00`) lands in that range.
+LEVD1 loads to `&4A00` (Loader2 forces this via explicit `LOAD x.LEVD1 4A00`
+in line 1030, overriding the `&6000` catalog claim on 3/4.LEVD1), so
+no in-game file ever overwrites these bytes either.
+
+### Next
+
+  - Inspect the four offset-into-named sprite call sites
+    (CODE2 &2C0B, &2D5F, &2D8F, &2FAE) to confirm/refute the
+    "wide-text split blit" hypothesis.
+  - Label LEVD1 decoration sprite slots so CODE &1C25/&1C36 can
+    use explicit names.
+  - The 91 B of trailing data at `&49A5-&49FF` after `irq_install`
+    — undecoded.
+
+---
+
 ## 2026-05-15 — Session 4: unified build + gfx_ prefix + sprite-source overrides
 
 ### Starfield engine identified

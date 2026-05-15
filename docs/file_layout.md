@@ -218,11 +218,11 @@ in parentheses. Renders of every sprite are in `graphix/`.
 | `&38C0`  |  8×12 (24)     | `gfx_ball_frame4`                                                       |
 | `&38D8`  |  8×12 (24)     | `gfx_ball_frame5`                                                       |
 | `&38F0`  | — (16)         | Alignment pad — pushes the next sprite onto a page boundary         |
-| `&3900`  | 12×24 (72)     | `gfx_enemy_saucer_frame0` — rotating saucer, frame 0                    |
-| `&3948`  | — (24)         | Blank separator column (1×24)                                       |
-| `&3960`  | 12×24 (72)     | `gfx_enemy_saucer_frame1`                                               |
+| `&3900`  | 12×24 (72)     | `gfx_pod_frame0` — player force-pod (rotating saucer) frame 0. Plotted as 4×24 by `draw_player_pod`; the 4th byte-col is the blank pad below. (Originally mis-labelled `gfx_enemy_saucer_*` — no enemy ptr-table slot references these, only `draw_player_pod` does.) |
+| `&3948`  | — (24)         | Blank separator column (1×24), absorbed into the 4-col pod blit     |
+| `&3960`  | 12×24 (72)     | `gfx_pod_frame1`                                                    |
 | `&39A8`  | — (24)         | Blank separator                                                     |
-| `&39C0`  | 12×24 (72)     | `gfx_enemy_saucer_frame2`                                               |
+| `&39C0`  | 12×24 (72)     | `gfx_pod_frame2`                                                    |
 | `&3A08`  | — (24)         | Trailing blank                                                      |
 | `&3A20`  |  4×8 (8) ×8    | `icon_00..icon_07` — 8 small 4×8 glyphs (small-char bank, first 8)  |
 | `&3A60`  |  4×8 (8) ×10   | `digit_0..digit_9` — 10 small 4×8 digits                            |
@@ -255,7 +255,7 @@ in parentheses. Renders of every sprite are in `graphix/`.
 | `&4488`  | 20×8 (40)      | `gfx_missile_3`                                                         |
 | `&44B0`  | 20×8 (40)      | `gfx_missile_4`                                                         |
 | `&44D8`  | — (40)         | Post-missile pad                                                    |
-| `&4500`  | — (592)        | `gfx_unknown_table` — 592 B data block, purpose TBD (no code ref yet)   |
+| `&4500`  | — (592)        | `gfx_orphan_4500` — 592 B of sprite-like bytes (`00 03 00 03 …` MODE 5 pattern). No references in CODE/CODE2/CODE3 or any BASIC loader; treated as dead data left over from build. |
 | `&4750`  |  8×16 (32)     | `gfx_pickup_white` — 4th pickup variant                                 |
 | `&4770`  | — (16)         | Pad                                                                 |
 | `&4780`  | 36×14 (126)    | `gfx_text_pause` — "PAUSE"                                              |
@@ -299,24 +299,44 @@ The main game binary. Annotated in `disasm/CODE.beebasm` (driven by
 
 | Address  | Label                       | Notes                                                                                                             |
 |----------|-----------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `&1100`  | `main_init`                 | Entry. `JSR &3115` (init in CODE3), `JSR L1F8E` (level init), `JSR &2CCA` (in CODE2), fall through to `main_loop`. |
-| `&1109`  | `main_loop`                 | Per-frame top: calls `L13D1`, polls quit key, falls through.                                                       |
-| `&1141`  | `lfsr_random`               | 16-bit LFSR; results in `&116B..&116E`. Called by force-field renderer + a couple of spawn paths.                  |
+| `&1100`  | `main_init`                 | Entry. `JSR restore_score_from_loader` (CODE2), `JSR init`, `JSR draw_title_screen` (CODE2), fall through to `main_loop`. Called as `CALL &1100` from BASIC Runner/Loader4 on each level start. |
+| `&1109`  | `main_loop`                 | Per-frame top: calls `L13D1`, polls `KEY_QUIT` via `check_key_pressed`, branches to `game_over_or_continue` (CODE3) on game-over or to the stage transition on level complete. |
+| `&1141`  | `lfsr_random`               | 40-bit Galois LFSR over `zp_0D..zp_11`; four outputs at `rndval256` / `rndval64` / `rndval32` / `rndval16` (raw, raw>>2, raw>>3, raw>>4). Called by force-field renderer + a couple of spawn paths. |
 | `&116F`  | `sprite_plot_default`       | Plot with X=1, Y=32. Falls through to `sprite_plot_xy`.                                                            |
-| `&1173`  | `sprite_plot_xy`            | The main sprite blitter. Takes X=width-in-byte-cols, Y=height-in-scanlines, src in `&1194`/`&1195` (self-mod).     |
+| `&1173`  | `sprite_plot_xy`            | The main sprite blitter. Takes X=width-in-byte-cols, Y=height-in-scanlines, src in `sprite_src_lo/hi` (`&1194`/`&1195`, self-mod). |
 | `&1184`  | `sprite_plot_inner`         | The inner loop. Reads `zp_sprite_dir_flag` (`&79`) to pick forward (=1, normal) or backward (=0, **vertical flip**) traversal of the column-major source. |
-| `&1193`  | `sprite_plot_lda_sm`        | The `LDA &FFFF,X` byte at `&1194`/`&1195` is *self-modified* — callers write the sprite source there before JSR.   |
+| `&1193`  | `sprite_plot_lda_sm`        | The `LDA &FFFF,X` byte at `sprite_src_lo`/`_hi` is *self-modified* — callers write the sprite source there before JSR. |
 | `&1209`  | `screen_row_lo_lut`         | 22 bytes, low byte of char-row start address for MODE 5 (base &5800, stride &140).                                 |
 | `&121F`  | `screen_row_hi_lut`         | Paired high bytes.                                                                                                 |
 | `&1236`  | `calc_screen_addr`          | Compute screen address from X (char-col) and Y (scanline). Result in `&76`/`&77`.                                  |
-| `&127B`  | (tile draw, unnamed)        | Draws the new column on the right edge of the playfield: upper tile mirrored at char rows 0-3, lower tile normal at rows 16-19. |
-| `&13D1`  | (per-frame, unnamed)        | Reads upper/lower tile IDs from `&7F10,X` / `&7E10,X`, advances `sprite_src` pointers by `(tile_id+1)*&80`, scrolls. |
-| `&1F8E`  | (level init, unnamed)       | Zeros most state, sets player pos `&81=5, &82=&C8`, scroll counter `&80=0`, sprite pointers to `&7D80` (the erase brush). |
-| `&208A`  | `spawn_check_step`          | Matches `&80` (scroll col) against `&7B00,&7B`; on hit, fills an object slot from the attribute byte at `&7B80,X` (type → `&2065,X`, Y-row → `&205C,X`, v-flip → `&206E,X`). |
-| `&22B2`  | `enemy_type_dispatch`       | Switch on `&2065,X` (the type field): 4/&13 → multi-shot, 6 → CODE2 `&2A20`, 7 → `forcefield_render`, 8 → `L2464`, &10 → high-HP boss path, others → default sprite plot from `&7A80/&7AC0[type]`. |
+| `&127B`  | (tile draw, unnamed)        | Draws the new column on the right edge of the playfield: upper tile mirrored at char rows 0-3 (src = `zp_tile_upper_lo/hi`), lower tile normal at rows 16-19 (src = `zp_tile_lower_lo/hi`). |
+| `&13BC`  | `frame_delay`               | Frame-rate regulator (busy-wait). Loops until `(zp_frame_progress)` budget is exhausted; reset to `zp_game_speed` for the next frame. See routine comment in `CODE.cfg.json` for the math. |
+| `&13D1`  | (per-frame, unnamed)        | Reads tile IDs from `&7E10,X` / `&7F10,X`, advances the two `zp_tile_upper_lo/hi` and `zp_tile_lower_lo/hi` pointers by `(tile_id+1)*&80`, scrolls. (See [open Q] below on which table is upper vs lower.) |
+| `&1478`  | `draw_player`               | Plot `lev_player_sprite` (6×22, from `&4E80` in LEVD1) at `(zp_player_x, zp_player_y)`. If `data_25A3 == 1` (force-pod power-up active), also call `draw_player_pod` at `(player_x+5, player_y+1)`. JSR `check_player_collisions`, JMP `update_bullets`. |
+| `&14B5`  | `draw_player_pod`           | Plot the player's force-pod (rotating saucer that orbits the ship after a power-up). Selects one of three frames at `gfx_pod_frame0/1/2` (`&3900/&3960/&39C0`) based on `pod_anim_frame` (cycles 1↔2↔3 with each player vertical move). |
+| `&14D9`  | `read_input`                | If joystick mode (`zp_9F == 1`) → `read_joystick`; else scan `KEY_RIGHT / KEY_LEFT / KEY_DOWN / KEY_UP / KEY_FIRE` in turn via `check_key_pressed`. |
+| `&1517`  | `read_joystick`             | OSBYTE &80 reads analog joystick 1 X/Y axes (low/high thresholds `&40` / `&C8`) and the fire button bit, dispatching the same `move_player_*` / `on_fire_pressed` routines as the keyboard path. |
+| `&155B`  | `check_key_pressed`         | Wraps OSBYTE &81 (negative INKEY scan). Z=1 → not pressed, Z=0 → pressed. Pre-defined `KEY_*` constants for the 7 keys the game polls. |
+| `&1565`  | `move_player_left`          | `DEC zp_player_x`, clamped at min `&02`.                                                                           |
+| `&16A6`  | `move_player_right`         | `INC zp_player_x`, clamped at max `&14`.                                                                           |
+| `&16B0`  | `move_player_down`          | `zp_player_y += 4`, clamped at max `&DC`. Also `INC pod_anim_frame` (wraps 4→1).                                   |
+| `&16CC`  | `move_player_up`            | `zp_player_y -= 4`, clamped at min `&98`. Also `DEC pod_anim_frame` (wraps 0→3).                                   |
+| `&17B9`  | `on_fire_pressed`           | If `zp_8A` cooldown elapsed, find an empty `player_bullet_x` slot, store player position there, reload cooldown from `fire_cooldown_reload`, play `sfx_fire`. |
+| `&17E7`  | `update_bullets`            | Per-frame: iterate the 6 player_bullet slots; for each active one move +2 px/frame to the right; erase + clear off-screen; else replot the 3×2 bullet sprite and run `check_bullet_hits`. Finally decrement `zp_8A`. |
+| `&1847`  | `check_bullet_hits`         | Two collision loops over the current bullet's position: (a) X=8..1 over `hazard_x/y/state` — INC `hazard_state`, milestones at 3/5/7 play OSWRCH 7 + INC `data_25A0`; (b) X=0..7 over the enemy slots — DEC `enemy_hp`, on kill play explode. Bullet erases itself either way. |
+| `&198B`  | `check_player_collisions`   | Per-frame player collision check. Two 6×&18 bounding-box loops: (a) hazard slots, (b) enemy slots. Hit → OSWRCH 7 (the Loader2-redefined bell, used as a short blip) + `lose_a_life`. |
+| `&1AEB`  | `update_hazards`            | Per-frame hazard mover. Iterates 8 hazard slots, moves each ±1 X / ±4 Y per direction flags, erases + redraws the 4×24 sprite. Deactivates on `hazard_state == 0`. |
+| `&1DEE`  | `lose_a_life`               | Plays OSWRCH 7; toggles `data_1E46`, decrements `data_2050` every other call; redraws the lives icon. |
+| `&1F8E`  | `init`                      | Per-level init. Player pos `&05, &C8`, scroll counter `&80=0`, zero-fills the six 9-slot enemy state tables (`enemy_x/y/type/hp/step/flip`), bullet slots, force-pod registers; sets `fire_cooldown_reload=6` and `hazard_state` markers to `&FF`. |
+| `&208A`  | `spawn_check_step`          | Matches `zp_scroll_col` against `&7B00[&7B]`; on hit, fills an enemy slot from the attribute byte at `&7B80[X]` (type → `enemy_type`, Y-row → `enemy_y`, v-flip → `enemy_flip`). |
+| `&22B2`  | `enemy_type_dispatch`       | Switch on `enemy_type[X]`: 4/&13 → multi-shot, 6 → CODE2 `spawn_enemy_missile`, 7 → `forcefield_render`, 8 → `L2464`, &10 → high-HP boss path, others → default sprite plot from `&7A80/&7AC0[type]`. |
 | `&232C`  | `forcefield_render`         | Procedural vertical strip. Calls `lfsr_random`, uses the result as the **low byte of `&80XX`** (i.e. reads from whatever sideways ROM is paged in at `&8000+`) as the sprite source, then plots 2 bytes × 32 lines. |
 | `&234D`  | `forcefield_draw_or_erase`  | The draw path within `forcefield_render`.                                                                          |
 | `&23A8`  | `forcefield_erase`          | The "blank out" path — plots 2 × 32 from `&7D80` (= zero-fill region = transparent erase).                          |
+| `&2656`  | `starfield_init`            | One-shot at level start: walks the three 60-entry starfield arrays and plants each star's initial pixel byte at its starting screen address. Called from `L126C` when scroll counter hits `&F0`. |
+| `&1309`  | `starfield_update`          | Per-frame: walk all 60 stars, erase, move left by 8 px (with row-wrap from left edge back to row 16 on right), re-plot. |
+
+**[open Q] Tile-table upper/lower assignment.** Direct trace of `L13D1` / `L127B` says `tbl_7E10` is the table whose value drives `zp_tile_upper` (drawn mirrored at row 0), and `tbl_7F10` drives `zp_tile_lower` (drawn normally at row 16). The older docs / `render_map.py` had it the other way around. Since the rendered maps look right with the renderer's current labelling, this is either (a) an accident of the test cases being symmetric or (b) my assembly trace is missing something. Needs visual A/B against a live game capture to settle — for now the disassembly uses the names derived from the code trace.
 
 ### In-code data tables
 

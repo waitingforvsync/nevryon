@@ -21,6 +21,9 @@
 \   OSBYTE = &FFF4
 \   OSCLI = &FFF7
 
+\ Auto-promoted externs (zp/data outside this binary):
+zp_FC            = &FC
+
 ORG &3680
 
 
@@ -118,7 +121,7 @@ ORG &3680
 .gfx_pad_38F0
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
-.gfx_enemy_saucer_frame0
+.gfx_pod_frame0
     EQUB &00, &00, &00, &00, &00, &43, &00, &10
     EQUB &10, &A0, &89, &1E, &0F, &81, &A0, &10
     EQUB &01, &00, &43, &00, &00, &00, &00, &00
@@ -132,7 +135,7 @@ ORG &3680
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
-.gfx_enemy_saucer_frame1
+.gfx_pod_frame1
     EQUB &00, &00, &00, &00, &00, &00, &43, &00
     EQUB &01, &1E, &0F, &03, &C0, &B0, &B0, &00
     EQUB &01, &43, &00, &00, &00, &00, &00, &00
@@ -146,7 +149,7 @@ ORG &3680
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
-.gfx_enemy_saucer_frame2
+.gfx_pod_frame2
     EQUB &00, &00, &00, &00, &00, &00, &00, &43
     EQUB &03, &80, &B9, &B0, &B0, &80, &03, &43
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
@@ -556,7 +559,7 @@ ORG &3680
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
-.gfx_unknown_table
+.gfx_orphan_4500
     EQUB &00, &03, &00, &03, &00, &03, &00, &03
     EQUB &00, &03, &00, &03, &00, &03, &00, &03
     EQUB &00, &03, &00, &03, &00, &03, &00, &03
@@ -707,7 +710,7 @@ ORG &3680
 
 \ ----- code &4900..&493F -----
 .irq_palette_split
-    LDA &FC  \ Common prologue saves A/X/Y. Tests User VIA IFR bit 7 (T1 IRQ pending) → if so, jumps to irq_palette_split_b for the bottom palette. Otherwise tests sysVIA IFR bit 7 (vsync); if not vsync, chains immediately. Vsync path re-primes UVIA T1 (BC34 cycles ≈ mid-frame), then writes palette_top[0..11] → &FE21.
+    LDA zp_FC  \ Common prologue saves A/X/Y. Tests User VIA IFR bit 7 (T1 IRQ pending) → if so, jumps to irq_palette_split_b for the bottom palette. Otherwise tests sysVIA IFR bit 7 (vsync); if not vsync, chains immediately. Vsync path re-primes UVIA T1 (BC34 cycles ≈ mid-frame), then writes palette_top[0..11] → &FE21.
     PHA
     TXA
     PHA
@@ -736,13 +739,14 @@ ORG &3680
     INX
     CPX #&0C
     BNE L492A
+
 .irq_chain_old
     PLA
     TAY
     PLA
     TAX
     PLA
-    STA &FC
+    STA zp_FC
     JMP (zp_old_irq_vec_lo)
 
 \ ----- data &493F..&495F -----
@@ -770,6 +774,7 @@ ORG &3680
     STA irq1v_hi
     BNE irq_chain_old
     BEQ irq_chain_old
+
 .irq_install
     SEI  \ Called by Loader2 line 1000 (CALL&497E). Saves the prior IRQ1V at zp_old_irq_vec_lo/hi, installs irq_palette_split as the handler, primes UVIA T1L-H + IER + ACR for the mid-frame timer.
     LDA irq1v_lo
