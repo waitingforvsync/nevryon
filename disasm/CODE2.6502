@@ -2,14 +2,6 @@
 \ Auto-disassembly — base &2800
 \ ============================================================
 
-\ Mid-instruction labels (referenced by branches/jumps):
-data_28D8        = &28D8
-score_d3         = &2A02
-score_d2         = &2A03
-score_d1         = &2A04
-score_d0         = &2A05
-L2FF0            = &2FF0
-
 \ Extern labels defined in master Nevryon.6502 wrapper:
 \   zp_screen_ptr_lo = &0070
 \   zp_screen_ptr_hi = &0071
@@ -237,6 +229,7 @@ ORG &2800
 
 \ ----- code &28D7..&2973 -----
 .force_pod_anim
+data_28D8        = * + 1
     LDA force_pod_state  \ Per-frame: if &25A5 == 1, animate the force-pod (chomping ball at &2972/&2973). Steps a 6-frame cycle (&3860..&38D8) and watches for a key to dismiss.
     CMP #&01
     BEQ L28DF
@@ -402,9 +395,13 @@ ORG &2800
     CPX #&06
     BNE L29F0
     RTS
+.score_d3
     BRK
+.score_d2
     BRK
+.score_d1
     BRK
+.score_d0
     BRK
     BRK
     BRK
@@ -1151,6 +1148,7 @@ ORG &2800
 .L2FEB
     LDA zp_print_idx
     CMP #&19
+L2FF0            = * + 1
     BNE L2F7C
     LDA zp_print_idx
     SEC

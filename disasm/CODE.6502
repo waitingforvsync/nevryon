@@ -2,21 +2,6 @@
 \ Auto-disassembly — base &1100
 \ ============================================================
 
-\ Mid-instruction labels (referenced by branches/jumps):
-sprite_src_lo    = &1194
-sprite_src_hi    = &1195
-data_12BF        = &12BF
-data_12C0        = &12C0
-data_12C2        = &12C2
-data_12C3        = &12C3
-data_12C5        = &12C5
-data_12C6        = &12C6
-data_12C8        = &12C8
-data_12C9        = &12C9
-L1C21            = &1C21
-L2016            = &2016
-data_2051        = &2051
-
 \ Extern labels defined in master Nevryon.6502 wrapper:
 \   zp_screen_ptr_lo = &0070
 \   zp_screen_ptr_hi = &0071
@@ -114,7 +99,6 @@ data_7AD7        = &7AD7
 data_7AD8        = &7AD8
 data_7AD9        = &7AD9
 data_7ADA        = &7ADA
-tbl_FFFF         = &FFFF
 
 ORG &1100
 
@@ -214,7 +198,9 @@ ORG &1100
     TAY
 
 .sprite_plot_lda_sm
-    LDA tbl_FFFF,X
+sprite_src_lo    = * + 1
+sprite_src_hi    = * + 2
+    LDA &FFFF,X
     STA (zp_screen_ptr_lo),Y
     LDA zp_sprite_dir_flag
     BEQ L11D5
@@ -331,23 +317,24 @@ ORG &1100
 .L126B
     RTS
 
-.L126C
-    LDA zp_scroll_col
+.scroll_step
+    LDA zp_scroll_col  \ Per-frame scroll entry. If zp_scroll_col has reached &F0 (the wrap point — last 240 columns of the map loop forever), restart the starfield and jump straight to update_enemies, skipping the scroll. Otherwise fall through to scroll_playfield.
     CMP #&F0
-    BNE L127B
+    BNE scroll_playfield
     JSR starfield_init
-    JMP L210A
-    JMP L210A
-.L127B
-    JSR starfield_update
-    JSR L210A
+    JMP update_enemies
+    JMP update_enemies
+
+.scroll_playfield
+    JSR starfield_update  \ Soft-scroll the playfield's upper and lower tile bands left by 8 pixels (one BBC char cell = 2 byte-cols), then plot the new column at the right edge (col 39). The inner copy loop is unrolled into two parallel pairs of self-modified `LDA &XXXX / STA &XXXX` instructions — one pair for the upper band (HI = &58 → screen row 0), one for the lower band (HI = &6C → screen row 16). The eight self-modified operand bytes are named `scroll_{upper,lower}_{src,dst}_{lo,hi}` and are incremented in tandem by the loop. Outer counter X=5 + inner loop runs 256 iterations each ⇒ 5×256 = 1280 bytes per band copied (= 4 char rows × 320 B/row, the full band). On exit, plot the freshly-scrolled-in column at (col &27, row 0) mirrored from zp_tile_upper, then (col &27, row 16) normal from zp_tile_lower.
+    JSR update_enemies
     JSR get_ready_overlay
     LDX #&27
     LDY #&FF
     JSR calc_screen_addr
     LDA #&00
-    STA data_12C8
-    STA data_12C2
+    STA scroll_upper_dst_lo
+    STA scroll_lower_dst_lo
     STA zp_sprite_dir_flag
     LDA zp_tile_upper_lo
     STA sprite_src_lo
@@ -357,33 +344,43 @@ ORG &1100
     LDA zp_tile_upper_hi
     STA sprite_src_hi
     LDA #&58
-    STA data_12C6
-    STA data_12C9
+    STA scroll_upper_src_hi
+    STA scroll_upper_dst_hi
     LDA #&6C
-    STA data_12C0
-    STA data_12C3
+    STA scroll_lower_src_hi
+    STA scroll_lower_dst_hi
     LDX #&05
     LDA #&08
-    STA data_12BF
-    STA data_12C5
-.L12BE
-    LDA tbl_FFFF
-    STA tbl_FFFF
-    LDA tbl_FFFF
-    STA tbl_FFFF
-    INC data_12BF
-    INC data_12C5
-    BNE L12D8
-    INC data_12C0
-    INC data_12C6
-.L12D8
-    INC data_12C2
-    INC data_12C8
-    BNE L12BE
-    INC data_12C3
-    INC data_12C9
+    STA scroll_lower_src_lo
+    STA scroll_upper_src_lo
+
+.scroll_inner_loop
+scroll_lower_src_lo = * + 1
+scroll_lower_src_hi = * + 2
+    LDA &FFFF  \ Inner body of scroll_playfield's copy loop. The four `LDA &FFFF / STA &FFFF` instructions use the literal &FFFF only as a placeholder — at runtime each instruction's operand bytes (the `scroll_{upper,lower}_{src,dst}_{lo,hi}` equates defined immediately above each LDA/STA via `* + 1` / `* + 2`) have been pre-set to a real screen address, then INC'd at the bottom of the loop. Each iteration's `LDA` reads one byte further right and the matching `STA` writes one byte further left, sliding the band leftward.
+scroll_lower_dst_lo = * + 1
+scroll_lower_dst_hi = * + 2
+    STA &FFFF
+scroll_upper_src_lo = * + 1
+scroll_upper_src_hi = * + 2
+    LDA &FFFF
+scroll_upper_dst_lo = * + 1
+scroll_upper_dst_hi = * + 2
+    STA &FFFF
+    INC scroll_lower_src_lo
+    INC scroll_upper_src_lo
+    BNE scroll_inner_advance
+    INC scroll_lower_src_hi
+    INC scroll_upper_src_hi
+
+.scroll_inner_advance
+    INC scroll_lower_dst_lo
+    INC scroll_upper_dst_lo
+    BNE scroll_inner_loop
+    INC scroll_lower_dst_hi
+    INC scroll_upper_dst_hi
     DEX
-    BNE L12BE
+    BNE scroll_inner_loop
     JSR sprite_plot_default
     LDX #&27
     LDY #&7F
@@ -578,7 +575,7 @@ ORG &1100
     INC zp_get_ready_erase
     JSR frame_delay
     JSR update_hazards
-    JSR L126C
+    JSR scroll_step
     LDX #&00
     STX data_70FF
     INX
@@ -1699,6 +1696,7 @@ ORG &1100
     INY
     TYA
     STA hazard_state,X
+L1C21            = * + 1
     LDA #&4C
     STA sprite_src_hi
     LDA #&20
@@ -2175,6 +2173,7 @@ ORG &1100
     STA data_25A0
     STA tbl_25A1
     STA data_25A3
+L2016            = * + 1
     STA force_pod_state
     STA data_25A7
     STA data_25A9
@@ -2192,12 +2191,13 @@ ORG &1100
     LDA zp_9A
     STA data_2050
     LDA #&00
-    STA data_249C
+    STA flame_state
     STA force_pod_x
     LDA #&C8
     STA force_pod_y
     RTS
 .data_2050
+data_2051        = * + 1
     ASL zp_06
 
 .enemy_x
@@ -2323,12 +2323,12 @@ ORG &1100
     STA enemy_hp,X
     JMP spawn_check_step
 
-.L210A
-    LDA data_23C7
+.update_enemies
+    LDA forcefield_active  \ Per-frame enemy + force-field update + plot. First clears the force-field strip if forcefield_active=1 (erases a 2×&20 rectangle at (forcefield_x, forcefield_y) and clears the flag — the strip is procedural noise re-drawn every frame, so it has to be wiped before forcefield_render generates a fresh one). Then iterates the 8 enemy slots: for each active enemy (enemy_type != 0), DEC enemy_x to scroll it left, redraw, and dispatch any per-type behaviour via enemy_type_dispatch.
     CMP #&01
     BNE L2130
-    LDX data_23C5
-    LDY data_23C6
+    LDX forcefield_x
+    LDY forcefield_y
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
@@ -2338,11 +2338,11 @@ ORG &1100
     LDY #&20
     JSR sprite_plot_xy
     LDA #&00
-    STA data_23C7
+    STA forcefield_active
 .L2130
-    LDA data_249C
+    LDA flame_state
     BEQ L2138
-    JSR L249D
+    JSR update_flame
 .L2138
     LDX #&FF
 .L213A
@@ -2557,7 +2557,7 @@ ORG &1100
 .L22DD
     CMP #&08
     BNE L22E4
-    JMP L2464
+    JMP spawn_flame
 .L22E4
     RTS
 .L22E5
@@ -2598,13 +2598,13 @@ ORG &1100
     RTS
 
 .forcefield_render
-    LDA data_23C7
+    LDA forcefield_active
     CMP #&01
     BNE L2334
     RTS
 .L2334
     LDA #&01
-    STA data_23C7
+    STA forcefield_active
     LDX data_16F5
     LDA enemy_y,X
     LDY enemy_flip,X
@@ -2617,11 +2617,11 @@ ORG &1100
     ADC #&20
 
 .forcefield_draw_or_erase
-    STA data_23C6
+    STA forcefield_y
     LDA enemy_x,X
     STX data_16F8
-    STA data_23C5
-    LDY data_23C6
+    STA forcefield_x
+    LDY forcefield_y
     TAX
     CPX #&02
     BCC forcefield_erase
@@ -2637,15 +2637,15 @@ ORG &1100
     LDY #&20
     JSR sprite_plot_xy
     LDA zp_player_x
-    CMP data_23C5
+    CMP forcefield_x
     BCS L23A1
     ADC #&04
-    CMP data_23C5
+    CMP forcefield_x
     BCC L23A1
     LDA zp_player_y
     SBC #&0C
     STA zp_test_x
-    LDA data_23C6
+    LDA forcefield_y
     CMP zp_test_x
     BCC L23A1
     SBC #&20
@@ -2667,16 +2667,19 @@ ORG &1100
     LDY #&20
     JSR sprite_plot_xy
     LDA #&00
-    STA data_23C7
+    STA forcefield_active
     LDX data_16F5
     RTS
 
 \ ----- data &23C5..&23C8 -----
-.data_23C5
+.forcefield_x
+    \ Force-field current X — last column it was drawn at; used by L210A to erase before forcefield_render redraws a fresh strip.
     EQUB &FF
-.data_23C6
+.forcefield_y
+    \ Force-field current Y — paired with forcefield_x.
     EQUB &FF
-.data_23C7
+.forcefield_active
+    \ Force-field active flag: 1 = a force-field was drawn last frame and needs erasing this frame, 0 = clean. Set by forcefield_draw_or_erase, cleared by L210A's early erase branch (and by forcefield_erase if the field went off-screen).
     EQUB &00
 
 \ ----- code &23C8..&2554 -----
@@ -2763,8 +2766,9 @@ ORG &1100
     STA enemy_type,X
     LDX data_16F5
     RTS
-.L2464
-    LDA data_249C
+
+.spawn_flame
+    LDA flame_state  \ Spawn the flame projectile. Called from enemy_type_dispatch when an enemy of type 8 wants to fire. Refuses if `flame_state != 0` (only one flame at a time) or if the firing enemy's `enemy_x < &0C` (it has already scrolled too far left to spawn from). On success: mutates the firing enemy to type 9 (the post-fire idle state), copies its position into `flame_x` / `flame_y` (with a per-flip Y offset), and sets `flame_state = 1` to start the 6-frame animation.
     BEQ L246A
     RTS
 .L246A
@@ -2785,23 +2789,26 @@ ORG &1100
 .L2487
     SBC #&10
 .L2489
-    STA data_249B
+    STA flame_y
     LDA enemy_x,X
     SBC #&09
-    STA data_249A
+    STA flame_x
     LDA #&01
-    STA data_249C
+    STA flame_state
     RTS
-.data_249A
-    NOP
-.data_249B
-    NOP
-.data_249C
-    BRK
 
-.L249D
-    LDX data_249A
-    LDY data_249B
+.flame_x
+    NOP  \ Flame projectile X coord — column. DEC'd by 1 per call to update_flame so the flame drifts left through the playfield as the scenery scrolls. When it falls below &02 the flame deactivates (off-screen left).
+
+.flame_y
+    NOP  \ Flame projectile Y coord (in scanlines).
+
+.flame_state
+    BRK  \ Flame state machine: 0 = inactive (slot free for a new spawn); 1..6 = animation frames (1=&3B00, 2=&3B40, 3=&3B80, then ping-pongs back 4=&3B80, 5=&3B40, 6=&3B00); 7 = deactivate next call. Each call to update_flame INCs the state (via advance_flame_state) or jumps straight to 7 if the player has been hit.
+
+.update_flame
+    LDX flame_x  \ Per-frame flame update (called from update_enemies when `flame_state != 0`). Erases the previous 32×8 frame, shifts the flame left by 1 px (DEC flame_x), then either re-plots the next animation frame from `gfx_flame_frame0..2` (states 1..6) or deactivates (state 7 / off-screen). Each frame is 8 byte-cols × 8 lines = 32×8 px. There is only ever one flame on screen — `spawn_flame` checks `flame_state` and refuses to start a new one until this slot is free.
+    LDY flame_y
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
@@ -2810,82 +2817,89 @@ ORG &1100
     LDX #&08
     LDY #&08
     JSR sprite_plot_xy
-    DEC data_249A
-    LDA data_249A
+    DEC flame_x
+    LDA flame_x
     CMP #&02
-    BCS L24C4
-    JMP L2517
-.L24C4
-    TAX
-    LDY data_249B
+    BCS plot_flame
+    JMP deactivate_flame
+
+.plot_flame
+    TAX  \ Plot the flame at its updated position. Dispatches by `flame_state` to one of three frame plotters: state 1/6 → `plot_flame_frame_0` (`gfx_flame_frame0` at &3B00), state 2/5 → `plot_flame_frame_1` (`gfx_flame_frame1` at &3B40), state 3/4 → `plot_flame_frame_2` (`gfx_flame_frame2` at &3B80). State 7 → `deactivate_flame`.
+    LDY flame_y
     JSR calc_screen_addr
     LDX #&08
     LDY #&08
-    LDA #&3B
+    LDA #HI(gfx_flame_frame0)
     STA sprite_src_hi
-    LDA data_249C
+    LDA flame_state
     CMP #&01
-    BEQ L24F6
+    BEQ plot_flame_frame_0
     CMP #&02
-    BEQ L2501
+    BEQ plot_flame_frame_1
     CMP #&03
-    BEQ L250C
+    BEQ plot_flame_frame_2
     CMP #&04
-    BEQ L250C
+    BEQ plot_flame_frame_2
     CMP #&05
-    BEQ L2501
+    BEQ plot_flame_frame_1
     CMP #&06
-    BEQ L24F6
+    BEQ plot_flame_frame_0
     CMP #&07
-    BEQ L2517
-    BNE L24F6
+    BEQ deactivate_flame
+    BNE plot_flame_frame_0
     RTS
-.L24F6
-    LDA #&00
+
+.plot_flame_frame_0
+    LDA #LO(gfx_flame_frame0)
     STA sprite_src_lo
     JSR sprite_plot_xy
-    JMP L2520
-.L2501
-    LDA #&40
+    JMP flame_collide_player
+
+.plot_flame_frame_1
+    LDA #LO(gfx_flame_frame1)
     STA sprite_src_lo
     JSR sprite_plot_xy
-    JMP L2520
-.L250C
-    LDA #&80
+    JMP flame_collide_player
+
+.plot_flame_frame_2
+    LDA #LO(gfx_flame_frame2)
     STA sprite_src_lo
     JSR sprite_plot_xy
-    JMP L2520
-.L2517
-    LDA #&00
-    STA data_249C
+    JMP flame_collide_player
+
+.deactivate_flame
+    LDA #&00  \ Deactivate the flame — `flame_state = 0`. Reached when the flame has reached its final animation frame, drifts off the left edge, or has hit the player.
+    STA flame_state
     LDX data_16F5
     RTS
-.L2520
-    LDA data_249A
+
+.flame_collide_player
+    LDA flame_x  \ Box-test the flame against the player. Collision box is offset (+4, -4) from the plotted position, 6 px wide × &18 (24) lines tall. On hit: set `flame_state = 7` (so the next call deactivates) and JMP `lose_a_life`.
     CLC
     ADC #&04
     STA zp_test_x
-    LDA data_249B
+    LDA flame_y
     SEC
     SBC #&04
     STA zp_test_y
     LDA zp_player_x
     CMP zp_test_x
-    BCS L2550
+    BCS advance_flame_state
     ADC #&06
     CMP zp_test_x
-    BCC L2550
+    BCC advance_flame_state
     LDA zp_player_y
     CMP zp_test_y
-    BCC L2550
+    BCC advance_flame_state
     SBC #&18
     CMP zp_test_y
-    BCS L2550
+    BCS advance_flame_state
     LDA #&07
-    STA data_249C
+    STA flame_state
     JMP lose_a_life
-.L2550
-    INC data_249C
+
+.advance_flame_state
+    INC flame_state  \ Tail of `flame_collide_player` for the no-hit case — INC `flame_state` so the next frame plots the next animation step (1→2→3→4→5→6→7→deactivate).
     RTS
 
 \ ----- data &2554..&2555 -----

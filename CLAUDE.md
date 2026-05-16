@@ -92,10 +92,30 @@ or removes externs (auto-promoted mid-instruction labels, new
 cross-file refs), the master's preamble must be kept in sync.
 
 ### Self-modifying code
-The sprite engine self-modifies its `LDA &XXXX,X` source operand at
-`L1194/L1195`. When disassembling, treat the two operand bytes as
-data (declare them in `.cfg.json`) rather than letting them be decoded
-as part of the LDA instruction.
+Several routines patch their own operand bytes at runtime — the
+sprite engine's `LDA &XXXX,X` source operand at `L1194/L1195`, and
+the playfield's soft-scroll inner loop at `&12BE..&12CB` (four
+`LDA/STA` pairs, all 8 operand bytes patched per call).
+
+Convention: declare each self-modified operand byte as an entry in
+the cfg's `extern_labels` block (e.g. `"0x12BF":
+"scroll_lower_src_lo"`). The disassembler emits these inline,
+**directly above** the instruction whose operand they patch, as
+`name = * + N` (BeebAsm PC-relative):
+
+```
+.scroll_inner_loop
+scroll_lower_src_lo = * + 1
+scroll_lower_src_hi = * + 2
+    LDA &FFFF
+scroll_lower_dst_lo = * + 1
+scroll_lower_dst_hi = * + 2
+    STA &FFFF
+```
+
+The runtime placeholder operand value `&FFFF` is intentionally not
+auto-promoted to a synthetic label — it renders as the literal hex
+so it's clear at a glance that the instruction is patched.
 
 
 

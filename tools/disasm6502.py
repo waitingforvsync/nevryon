@@ -280,10 +280,19 @@ def disasm_code_region(data: bytes, base: int, region: Region,
                        comments: dict[int, str], lines: list[str],
                        immediate_overrides: dict[int, str] | None = None,
                        auto_extern_labels: dict[int, str] | None = None,
-                       jsr_targets: set[int] | None = None):
+                       jsr_targets: set[int] | None = None,
+                       sm_operand_labels: dict[int, str] | None = None):
+    """Emit one code region. `sm_operand_labels` is a dict of
+    (addr → name) for symbols whose address falls *inside* an
+    instruction's operand bytes (i.e. self-modified-operand bytes).
+    The matching `name = &addr` equate is emitted on the line
+    immediately above the instruction whose operand it patches —
+    not in a global block at the file head — so each self-mod
+    callsite carries its own annotation."""
     immediate_overrides = immediate_overrides or {}
     auto_extern_labels = auto_extern_labels or {}
     jsr_targets = jsr_targets or set()
+    sm_operand_labels = sm_operand_labels or {}
     def lookup(addr: int):
         return (labels.get(addr) or extern_labels.get(addr)
                 or auto_extern_labels.get(addr))
@@ -299,6 +308,20 @@ def disasm_code_region(data: bytes, base: int, region: Region,
         off = pc - base
         if off < 0 or off >= len(data):
             break
+        # Look ahead at this instruction's length so we can check for
+        # any self-mod-operand labels falling inside its operand bytes.
+        # If found, emit the equate(s) right above the instruction —
+        # defined relative to BeebAsm's current PC (`*`) so the equate
+        # tracks the instruction even if the surrounding code shifts.
+        _info = OPCODES.get(data[off])
+        _instr_len = _info[2] if _info else 1
+        if _instr_len + off > len(data):
+            _instr_len = 1
+        for byte_pc in range(pc + 1, pc + _instr_len):
+            if byte_pc in sm_operand_labels:
+                name = sm_operand_labels[byte_pc]
+                offset = byte_pc - pc
+                lines.append(f"{name:16} = * + {offset}")
         opcode = data[off]
         info = OPCODES.get(opcode)
         if info is None:
@@ -708,15 +731,20 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
                 cfg.extern_labels.setdefault(addr, cfg.master_externs[addr])
             else:
                 cfg.auto_extern_labels[addr] = fallback
+        # &FFFF is the canonical "unused, will be self-modified at
+        # runtime" placeholder — leave the disassembly showing the
+        # raw literal `&FFFF` rather than autopromoting it to a
+        # symbol that pretends to reference real memory.
+        SM_PLACEHOLDER = 0xFFFF
         for addr in sorted(indexed_addrs):
-            if known(addr):
+            if known(addr) or addr == SM_PLACEHOLDER:
                 continue
             if cfg.base <= addr < end_addr_now:
                 cfg.labels[addr] = f"tbl_{addr:04X}"
             else:
                 adopt_extern(addr, f"tbl_{addr:04X}")
         for addr in sorted(plain_addrs):
-            if known(addr):
+            if known(addr) or addr == SM_PLACEHOLDER:
                 continue
             if cfg.base <= addr < end_addr_now:
                 cfg.labels[addr] = f"data_{addr:04X}"
@@ -788,6 +816,18 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
             # somehow isn't covered) — emit as extern constant.
             cfg.extern_labels.setdefault(addr, cfg.labels.pop(addr))
 
+    # Symmetric cleanup: in-range extern_labels that happen to point
+    # at an instruction-start or data byte are NOT self-mod operand
+    # bytes (they're just normal labels the user happened to put in
+    # the cfg's `extern_labels` block). Demote them back to cfg.labels
+    # so they're emitted as `.label` lines at the byte position rather
+    # than as `name = * + N` inline equates.
+    for addr in list(cfg.extern_labels):
+        if not (cfg.base <= addr < end_addr):
+            continue
+        if addr in code_emit_points or addr in data_byte_addrs:
+            cfg.labels.setdefault(addr, cfg.extern_labels.pop(addr))
+
     # Build output
     lines: list[str] = []
     lines.append("\\ ============================================================")
@@ -795,20 +835,19 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
     lines.append("\\ ============================================================")
     lines.append("")
     # Split extern_labels into in-range (mid-instruction equates for
-    # labels that fall inside this binary) and out-of-range (OS, HW,
-    # cross-file refs). In-range equates are always emitted because
-    # they're file-local. Out-of-range ones are gated by emit_externs.
+    # labels that fall inside this binary's own operand bytes — i.e.
+    # self-modified operand bytes) and out-of-range (OS, HW, cross-
+    # file refs). The in-range "SM operand" labels are emitted by
+    # disasm_code_region directly above the instruction whose operand
+    # they patch, as `name = * + N` (PC-relative) so they track the
+    # instruction regardless of where it ends up at assembly time.
+    # Out-of-range externs go in the file header, gated by emit_externs.
     end_addr_for_split = cfg.base + len(data)
-    in_range_ext = {a: n for a, n in cfg.extern_labels.items()
-                    if cfg.base <= a < end_addr_for_split}
+    sm_operand_labels = {a: n for a, n in cfg.extern_labels.items()
+                         if cfg.base <= a < end_addr_for_split}
     out_range_ext = {a: n for a, n in cfg.extern_labels.items()
                      if not (cfg.base <= a < end_addr_for_split)}
 
-    if in_range_ext:
-        lines.append("\\ Mid-instruction labels (referenced by branches/jumps):")
-        for addr, name in sorted(in_range_ext.items()):
-            lines.append(f"{name:16} = {fmt_hex(addr, 4)}")
-        lines.append("")
     if out_range_ext and cfg.emit_externs:
         lines.append("\\ External / OS addresses:")
         for addr, name in sorted(out_range_ext.items()):
@@ -852,7 +891,8 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
         if r.kind == "code":
             disasm_code_region(data, cfg.base, r, cfg.labels, cfg.extern_labels,
                                cfg.comments, lines, cfg.immediate_overrides,
-                               cfg.auto_extern_labels, jsr_targets)
+                               cfg.auto_extern_labels, jsr_targets,
+                               sm_operand_labels)
         else:
             disasm_data_region(data, cfg.base, r, cfg.labels, cfg.comments, lines)
         cursor = r.end

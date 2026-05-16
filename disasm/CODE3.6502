@@ -2,10 +2,6 @@
 \ Auto-disassembly — base &3300
 \ ============================================================
 
-\ Mid-instruction labels (referenced by branches/jumps):
-print_str_src_lo = &3588
-print_str_src_hi = &3589
-
 \ Extern labels defined in master Nevryon.6502 wrapper:
 \   zp_sprite_dir_flag = &0079
 \   zp_scroll_col = &0080
@@ -36,7 +32,6 @@ print_str_src_hi = &3589
 \   OSWRCH = &FFEE
 \   OSWORD = &FFF1
 \   OSBYTE = &FFF4
-\   tbl_FFFF = &FFFF
 
 \ Auto-promoted externs (zp/data outside this binary):
 zp_98            = &98
@@ -390,7 +385,9 @@ ORG &3300
     LDX zp_print_idx  \ Top of per-character print loop in print_doubled_string.
 
 .print_str_lda_sm
-    LDA tbl_FFFF,X  \ Self-modified LDA &XXXX,X — the operand bytes at print_str_src_lo / print_str_src_hi were patched from (&95/&96) at routine entry to point at the source string.
+print_str_src_lo = * + 1
+print_str_src_hi = * + 2
+    LDA &FFFF,X  \ Self-modified LDA &XXXX,X — the operand bytes at print_str_src_lo / print_str_src_hi were patched from (&95/&96) at routine entry to point at the source string.
     CMP #&0D
     BEQ L355F
     STA chardef_buf

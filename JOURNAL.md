@@ -4,6 +4,143 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-16 — Session 14: scroll engine, flame projectile, inline SM-operand syntax
+
+Three threads in one session, all interlocking around CODE's
+soft-scrolling and the type-8-enemy flame attack.
+
+### Soft-scroll routine carved out
+
+The mysterious `LDA tbl_FFFF / STA tbl_FFFF` quartet at `&12BE` was
+the inner copy loop of the playfield's soft-scroller. Named:
+
+| Was | Now | Role |
+|-----|-----|------|
+| `L126C` | `scroll_step` | Per-frame dispatcher; if `zp_scroll_col == &F0` (map wrap), restart starfield and skip; else fall into `scroll_playfield`. |
+| `L127B` | `scroll_playfield` | starfield_update → update_enemies → get_ready_overlay → soft-scroll both bands left by 8 px → plot the freshly-scrolled-in column at col 39 (mirrored upper, normal lower). |
+| `L12BE` | `scroll_inner_loop` | The inner copy body — 4 self-modified LDA/STA pairs, INC'd in tandem. |
+| `L12D8` | `scroll_inner_advance` | dst-LO advance / loop tail. |
+| `L210A` | `update_enemies` | Per-frame enemy mover + force-field clean-up. |
+
+The 8 self-modified operand bytes in the inner loop are named per
+band + role:
+
+```
+scroll_lower_src_lo/hi   (= &12BF/&12C0)
+scroll_lower_dst_lo/hi   (= &12C2/&12C3)
+scroll_upper_src_lo/hi   (= &12C5/&12C6)
+scroll_upper_dst_lo/hi   (= &12C8/&12C9)
+```
+
+Initial values: src LO = `&08`, dst LO = `&00` — i.e. `LDA &XX08 /
+STA &XX00` shifts the band left by 8 bytes per BBC char cell. Outer
+counter X = 5; inner loop runs 256 iterations; 5 × 256 = 1280 B per
+band copied — exactly the 4-char-row band.
+
+Force-field clean-up state in `update_enemies`:
+`data_23C5/_23C6/_23C7` → `forcefield_x/_y/_active`.
+
+### Flame projectile (the type-8 enemy attack)
+
+`L249D` and friends decode as a one-flame-at-a-time projectile
+fired by type-8 enemies:
+
+| Was | Now |
+|-----|-----|
+| `L2464` | `spawn_flame` (entry from `enemy_type_dispatch`; refuses if `flame_state != 0`) |
+| `data_249A` | `flame_x` (DEC'd per frame so the flame drifts left with the scenery) |
+| `data_249B` | `flame_y` |
+| `data_249C` | `flame_state` (0 inactive / 1..6 anim / 7 deactivate) |
+| `L249D` | `update_flame` (erase, shift, replot) |
+| `L24C4` | `plot_flame` (dispatch by state) |
+| `L24F6/L2501/L250C` | `plot_flame_frame_0/_1/_2` (= `gfx_flame_frame0..2` at `&3B00/&3B40/&3B80`) |
+| `L2517` | `deactivate_flame` |
+| `L2520` | `flame_collide_player` (6×&18 box; on hit → `lose_a_life`) |
+| `L2550` | `advance_flame_state` |
+
+Animation is a 6-frame ping-pong (1=frame0 → 2=frame1 → 3=frame2 →
+4=frame2 → 5=frame1 → 6=frame0 → 7=deactivate). Each frame is 32×8
+px. **Only one flame on screen at a time** — `spawn_flame` checks
+`flame_state` and refuses to start a new one while the slot is in
+use, which also gates how often a type-8 enemy can fire. Added the
+GRAPHIX `LO()/HI()` immediate overrides so the sprite source loads
+read as `LDA #HI(gfx_flame_frame0)` etc.
+
+### Disassembler: self-mod operand declarations are now PC-relative
+### and emitted inline above their instruction
+
+Previously the in-range cfg externs (= bytes inside the binary that
+fall inside an instruction's operand bytes — the "self-modified
+operand" symbols) were emitted as a `Mid-instruction labels:` block
+at the top of each per-binary `.6502` file, with absolute addresses
+like `sprite_src_lo = &1194`. That was hard to read once there were
+several self-mod sites and easy to miss when reading the routine.
+
+`tools/disasm6502.py` now emits each SM-operand equate on the line
+**directly above the instruction whose operand it patches**, and as
+`* + N` (BeebAsm current PC + offset) instead of an absolute address —
+so the equate tracks the instruction if the surrounding code shifts.
+
+Before:
+```
+\ Mid-instruction labels (referenced by branches/jumps):
+scroll_lower_src_lo = &12BF
+scroll_lower_src_hi = &12C0
+...
+.scroll_inner_loop
+    LDA tbl_FFFF
+    STA tbl_FFFF
+    LDA tbl_FFFF
+    STA tbl_FFFF
+```
+
+After:
+```
+.scroll_inner_loop
+scroll_lower_src_lo = * + 1
+scroll_lower_src_hi = * + 2
+    LDA &FFFF
+scroll_lower_dst_lo = * + 1
+scroll_lower_dst_hi = * + 2
+    STA &FFFF
+scroll_upper_src_lo = * + 1
+scroll_upper_src_hi = * + 2
+    LDA &FFFF
+scroll_upper_dst_lo = * + 1
+scroll_upper_dst_hi = * + 2
+    STA &FFFF
+```
+
+### `&FFFF` no longer auto-promoted
+
+The placeholder operand `&FFFF` (the canonical "will be overwritten
+at runtime") was being auto-promoted to a synthetic `tbl_FFFF`
+label, which made the four `LDA tbl_FFFF / STA tbl_FFFF` lines in
+the scroll inner loop look mysteriously like real memory accesses.
+Now `&FFFF` is explicitly excluded from the auto-promote pass; the
+operand renders as the literal `&FFFF`, with the SM-operand equates
+above it explaining what each one really targets at runtime.
+
+### Symmetric cfg cleanup
+
+Side-effect of the above: any in-range entry in `cfg.extern_labels`
+that points at an instruction-start or data-byte address (i.e. NOT
+mid-instruction) is now demoted back to `cfg.labels` so it emits as
+a normal `.label` at the byte position. This fixed a regression
+where `score_d0..d3` in CODE2 stopped emitting (they were stored in
+the cfg's `extern_labels` block but are data-byte labels, not
+SM-operand bytes).
+
+### Next
+
+  - Annotate `L249D`'s caller chain (the enemy_type_dispatch path
+    that reaches `spawn_flame`) so we can see all 14 enemy types and
+    their fire/dispatch behaviours in one view.
+  - The 91 B trailing data at `&49A5-&49FF` after `irq_install` is
+    still undecoded (mentioned as a holdout for a while now).
+
+---
+
 ## 2026-05-16 — Session 13: per-sprite carve + semantic rename + hazard schematic
 
 Iterated the per-level visualisations into something readable.
