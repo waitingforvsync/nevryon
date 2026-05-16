@@ -4,6 +4,103 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-17 — Session 15: enemy_type_dispatch path + multi-line cfg comments
+
+Walked the per-frame enemy update from `spawn_check_step` through
+`update_enemies` → `update_enemy_slot` → `enemy_type_dispatch` /
+`enemy_anim_advance`. Result: every type that an enemy can hold
+(0..&1B) now has a documented action.
+
+### The dispatch path
+
+```
+main_loop
+  ├─ spawn_check_step (&208A) — read lev_spawn_col / lev_spawn_attr,
+  │     decode bit-packed attr (type/flip/Y-row), drop into one of
+  │     the 8 enemy slots
+  └─ update_enemies (&210A) — per-frame; for each active slot:
+        ├─ update_enemy_slot (&2253)
+        │     ├─ enemy_type_dispatch (&22B2) — IMMEDIATE per-type action
+        │     │     ├─ type &04 → enqueue_enemy_bullet
+        │     │     ├─ type &06 → spawn_enemy_missile (CODE2)
+        │     │     ├─ type &07 → forcefield_render
+        │     │     ├─ type &08 → spawn_flame
+        │     │     └─ type &13 → enqueue_enemy_bullet
+        │     └─ (every 2nd frame, gated on zp_7F == 4)
+        │           enemy_anim_advance (&2267) — FRAME-advance
+        │             ├─ type 1..3 → anim_loop_1_to_3 (3-frame loop)
+        │             ├─ type 8/9  → anim_toggle_8_9 (pre-fire ↔ idle)
+        │             ├─ type &0F  → anim_set_type_10  ┐ 2-frame
+        │             ├─ type &10  → anim_set_type_F   ┘ ping-pong
+        │             ├─ type ≥&14 → enemy_death_step (8-frame
+        │             │              explosion, wraps slot at &1C)
+        │             └─ else      → enemy_anim_done  (RTS)
+        ├─ DEC enemy_x (scroll left)
+        ├─ plot sprite via lev_enemy_ptr_*[enemy_type]
+        └─ check_player_bullet_collisions (L23C8)
+```
+
+### spawn_attr bit packing — decoded
+
+`spawn_check_step` decodes the per-slot attr byte from
+`lev_spawn_attr` as:
+
+  - bits 0..4 → `enemy_type` (0..31)
+  - bit 7    → `enemy_flip` (**inverted**: 0 in attr = upright, 1 = v-flip)
+  - bits 5..6 → Y row 0..3, mapped through `LDA #&FF / SBC #&20 *N`
+    to one of `&DF / &BF / &9F / &7F`. `calc_screen_addr` inverts Y
+    (`TYA / EOR #&FF`) before indexing the LUT, so those Y values
+    land at char rows 4 / 8 / 12 / 16 from the top — **four evenly
+    spaced rows spanning the playfield gap** between the upper tile
+    band (rows 0..3) and the lower tile band (rows 16..19).
+
+Initial slot state at spawn: `enemy_x = &28` (off-screen right, col
+40), `enemy_step = 4`. `enemy_hp` defaults to &08, with three
+special cases: type &10 → &14 (tankier), type &07 → &06 (force-field
+takes 6 hits), types < &03 → &06 (small enemies cheaper to kill).
+
+### Enemy bullets — two distinct projectile pools
+
+There are TWO enemy-bullet systems sharing `enemy_type_dispatch`:
+
+  - **`enqueue_enemy_bullet`** (CODE, types &04 and &13) — drops into
+    a 6-slot ring at `tbl_1A8B`/`tbl_1A92` (X/Y arrays initialised
+    to `&FF` = free). Mover lives in `update_enemy_missiles` in
+    CODE2.
+  - **`spawn_enemy_missile`** (CODE2 &2A20, type &06) — a separate
+    missile-pool spawner. Different sprite, different motion.
+
+And a third one-shot:
+
+  - **`spawn_flame`** (CODE &2464, type &08) — single global flame
+    slot, gated by `flame_state`; spawning auto-mutates the firing
+    enemy to type &09 so it can't immediately re-fire.
+
+So a level designer picks the enemy's projectile behaviour by
+choosing its `enemy_type` value, and the dispatch table routes
+accordingly.
+
+### Multi-line comments in cfg.json
+
+Long per-routine docstrings (like the dispatch table for
+`enemy_type_dispatch`) used to render as a single overflowing line
+on the source instruction. The cfg.json comment value can now
+contain the two-char escape `\n` (which `json.load` decodes to two
+characters: `\` + `n`); the disassembler splits on either that or
+a real newline and emits each line as its own `\ ...` block ABOVE
+the instruction, leaving the instruction line clean. Single-line
+comments still render inline as before.
+
+### Next
+
+  - Trace the `tbl_1A8B`/`_1A92` bullet pool through
+    `update_enemy_missiles` (CODE2 &2AA2) to confirm motion and to
+    name the two missile-sprite sources.
+  - The 91 B trailing data at `&49A5-&49FF` after `irq_install` is
+    still undecoded.
+
+---
+
 ## 2026-05-16 — Session 14: scroll engine, flame projectile, inline SM-operand syntax
 
 Three threads in one session, all interlocking around CODE's

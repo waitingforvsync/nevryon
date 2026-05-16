@@ -368,7 +368,16 @@ def disasm_code_region(data: bytes, base: int, region: Region,
             operand_str = ""
 
         cmt = comments.get(pc, "")
-        cmt_str = f"  \\ {cmt}" if cmt else ""
+        # Multi-line comments (literal "\\n" two-char sequence OR real newline):
+        # emit the WHOLE comment as a block of `\ ...` lines above the
+        # instruction so long dispatch tables and bullet lists render
+        # readably. Single-line comments stay inline next to the mnemonic.
+        if cmt and ("\\n" in cmt or "\n" in cmt):
+            for line in cmt.replace("\\n", "\n").split("\n"):
+                lines.append(f"    \\ {line.lstrip()}")
+            cmt_str = ""
+        else:
+            cmt_str = f"  \\ {cmt}" if cmt else ""
         if operand_str:
             lines.append(f"    {mnem} {operand_str}{cmt_str}")
         else:
@@ -387,7 +396,8 @@ def disasm_data_region(data: bytes, base: int, region: Region,
         if off < 0 or off >= len(data):
             break
         if pc in comments:
-            lines.append(f"    \\ {comments[pc]}")
+            for line in comments[pc].replace("\\n", "\n").split("\n"):
+                lines.append(f"    \\ {line.lstrip()}")
 
         if region.kind == "string":
             # Emit ASCII as EQUS "...", &XX terminators; break each line
