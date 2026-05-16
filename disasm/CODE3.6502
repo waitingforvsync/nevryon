@@ -19,7 +19,7 @@
 \   sprite_src_lo = &1194
 \   sprite_src_hi = &1195
 \   calc_screen_addr = &1236
-\   data_2051 = &2051
+\   lives_left = &2051
 \   sfx_fire = &2800
 \   draw_score = &29E7
 \   score_d3 = &2A02
@@ -151,7 +151,7 @@ ORG &3300
     LDX zp_string_ptr_lo
     DEX
     BNE L33DC
-    LDA data_2051
+    LDA lives_left
     CMP #&06
     BEQ L341A
     LDA #LO(str_extra_ship)
@@ -162,7 +162,7 @@ ORG &3300
     LDX #&04
     LDY #&0E
     JSR print_doubled_string
-    INC data_2051
+    INC lives_left
     JSR sfx_fire
     LDX #&20
     LDY #&57
@@ -171,7 +171,7 @@ ORG &3300
     STA sprite_src_lo
     LDA #HI(gfx_icon_11)
     STA sprite_src_hi
-    LDX data_2051
+    LDX lives_left
     LDY #&08
     JSR sprite_plot_xy
 .L341A

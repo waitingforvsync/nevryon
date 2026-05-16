@@ -113,7 +113,7 @@
     "0x30F8": "Save current score (score_d0..d3) and high score (&2E5A..) to the loader persistence area at page &0CF3+. Called when handing off to the BASIC loader.",
     "0x3115": "Restore score / high-score from loader area &0CF3+ back into &2051 / &2A02..&2A07 / &2E5A..&2E5F. Called by main_init at game start.",
     "0x3170": "PAUSE: plot gfx_text_pause (&4780) at col 16 row &D0, then loop waiting for SPACE (key code &C9). Erase the sprite using lev_erase_brush (&7D80).",
-    "0x31B1": "End-of-game / scoreboard display. Calls shutter_fade then a sequence of ship/text plot helpers; followed by a 6-iteration plot loop. Triggered when data_2051 != 6 in intro_or_scoreboard."
+    "0x31B1": "End-of-game / scoreboard display. Calls shutter_fade then a sequence of ship/text plot helpers; followed by a 6-iteration plot loop. Triggered when lives_left != 6 in intro_or_scoreboard."
   },
   "extern_labels": {
     "0xFFE0": "OSRDCH",
@@ -166,7 +166,7 @@
     "0x16ED": "player_bullet_y",
     "0x1DEE": "lose_a_life",
     "0x2016": "L2016",
-    "0x2051": "data_2051",
+    "0x2051": "lives_left",
     "0x2052": "enemy_x",
     "0x205C": "enemy_y",
     "0x206E": "enemy_flip",

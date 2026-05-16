@@ -48,7 +48,7 @@
 \   player_bullet_y = &16ED
 \   lose_a_life = &1DEE
 \   L2016 = &2016
-\   data_2051 = &2051
+\   lives_left = &2051
 \   enemy_x = &2052
 \   enemy_y = &205C
 \   enemy_flip = &206E
@@ -1024,7 +1024,7 @@ data_28D8        = * + 1
 
 \ ----- code &2EFF..&3041 -----
 .intro_or_scoreboard
-    LDA data_2051  \ Branch: if &2051==6 (fresh game, full lives) → ship_intro_anim; otherwise → draw_final_scoreboard.
+    LDA lives_left  \ Branch: if &2051==6 (fresh game, full lives) → ship_intro_anim; otherwise → draw_final_scoreboard.
     CMP #&06
     BEQ ship_intro_anim
     JMP draw_final_scoreboard
@@ -1228,7 +1228,7 @@ L2FF0            = * + 1
     INX
     CPX #&06
     BNE L30FD
-    LDA data_2051
+    LDA lives_left
     STA loader_lives_save
     RTS
 
@@ -1243,7 +1243,7 @@ L2FF0            = * + 1
     CPX #&06
     BNE L3117
     LDA loader_lives_save
-    STA data_2051
+    STA lives_left
     LDA #&20
     STA scratch_28D3
 .L3133
@@ -1264,7 +1264,7 @@ L2FF0            = * + 1
     LDX #&20
     LDY #&57
     JSR calc_screen_addr
-    LDX data_2051
+    LDX lives_left
     LDY #&08
     LDA #LO(gfx_icon_11)
     STA sprite_src_lo
@@ -1306,7 +1306,7 @@ L2FF0            = * + 1
     JMP sprite_plot_xy
 
 .draw_final_scoreboard
-    JSR shutter_fade  \ End-of-game / scoreboard display. Calls shutter_fade then a sequence of ship/text plot helpers; followed by a 6-iteration plot loop. Triggered when data_2051 != 6 in intro_or_scoreboard.
+    JSR shutter_fade  \ End-of-game / scoreboard display. Calls shutter_fade then a sequence of ship/text plot helpers; followed by a 6-iteration plot loop. Triggered when lives_left != 6 in intro_or_scoreboard.
     JSR ship_intro_frame_5
     JSR ship_intro_frame_4
     JSR ship_intro_frame_3

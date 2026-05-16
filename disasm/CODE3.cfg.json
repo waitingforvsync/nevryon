@@ -95,7 +95,7 @@
     "0x2E83": "sfx_score_tick",
     "0x2E94": "play_death_sequence",
     "0x30F8": "save_score_to_loader",
-    "0x2051": "data_2051",
+    "0x2051": "lives_left",
     "0x91": "zp_continues",
     "0x95": "zp_string_ptr_lo",
     "0x96": "zp_string_ptr_hi",

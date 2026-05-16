@@ -111,7 +111,7 @@ ORG &1100
 
 .main_loop
     JSR game_step
-    LDA data_2051
+    LDA lives_left
     BNE L1114
     JMP game_over_or_continue
 .L1114
@@ -119,7 +119,7 @@ ORG &1100
     JSR check_key_pressed
     BNE L1130
     LDA #&01
-    STA data_2051
+    STA lives_left
     JSR death_anim
     LDA #&00
     STA zp_level_num
@@ -507,7 +507,7 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .game_step
-    JSR try_spawn_pickup  \ ONE COLUMN of game progress — called once per main_loop iteration. Does the per-tile-column setup (try_spawn_pickup, spawn_periodic_hazard, spawn_check_step, then computes the new right-edge tile sprite pointers `zp_tile_lower_hi/lo` and `zp_tile_upper_hi/lo` by indexing `lev_map_lower[zp_scroll_col]` / `lev_map_upper[zp_scroll_col]` into the tile catalog at &4E80, multiply-by-&80 via repeated ADC), bumps `zp_scroll_col` by 1 (with wrap from &F0+ back to &F0 = the end-of-map loop), checks the PAUSE key, then runs 4 sub-frames (`play_subframe` loop, gated on `zp_get_ready_erase` going 0→1→2→3→4). Each subframe scrolls the playfield by 4 px (so 4×4 = 16 px = one tile-cell per game_step call), updates enemies / hazards / missiles / pickups, draws score, reads input, and on even columns also bumps `zp_frame_progress` + draws the get_ready overlay. Returns early once `data_2051` (= lives left) drops to 0, which the caller `main_loop` immediately tests to go to game_over_or_continue.
+    JSR try_spawn_pickup  \ ONE COLUMN of game progress — called once per main_loop iteration. Does the per-tile-column setup (try_spawn_pickup, spawn_periodic_hazard, spawn_check_step, then computes the new right-edge tile sprite pointers `zp_tile_lower_hi/lo` and `zp_tile_upper_hi/lo` by indexing `lev_map_lower[zp_scroll_col]` / `lev_map_upper[zp_scroll_col]` into the tile catalog at &4E80, multiply-by-&80 via repeated ADC), bumps `zp_scroll_col` by 1 (with wrap from &F0+ back to &F0 = the end-of-map loop), checks the PAUSE key, then runs 4 sub-frames (`play_subframe` loop, gated on `zp_get_ready_erase` going 0→1→2→3→4). Each subframe scrolls the playfield by 4 px (so 4×4 = 16 px = one tile-cell per game_step call), updates enemies / hazards / missiles / pickups, draws score, reads input, and on even columns also bumps `zp_frame_progress` + draws the get_ready overlay. Returns early once `lives_left` drops to 0, which the caller `main_loop` immediately tests to go to game_over_or_continue.
     JSR spawn_periodic_hazard
     JSR spawn_check_step
     LDX zp_scroll_col
@@ -572,7 +572,7 @@ scroll_upper_dst_hi = * + 2
     STA zp_get_ready_erase
 
 .play_subframe
-    LDA data_2051  \ Body of game_step's per-subframe inner loop. Runs once per BBC display frame (gated by frame_delay). 4 iterations are run per game_step (= per tile-column of horizontal scroll), producing the 4-frame soft-scroll animation between successive columns.
+    LDA lives_left  \ Body of game_step's per-subframe inner loop. Runs once per BBC display frame (gated by frame_delay). 4 iterations are run per game_step (= per tile-column of horizontal scroll), producing the 4-frame soft-scroll animation between successive columns.
     BEQ game_step_done
     JSR update_enemy_missiles
     JSR draw_score
@@ -1934,17 +1934,17 @@ L1C21            = * + 1
     STA enemy_bullet_x,X
 
 .lose_a_life
-    STX data_16F5  \ Lose-a-life handler. Plays OSWRCH 7 (the redefined BBC bell — see check_player_collisions). Toggles data_1E46 (0↔1) and decrements data_2050 on every other call (the two-step decrement controls a two-tone blink effect on the lives icon). Redraws the current lives indicator at row &5F using gfx_icon_03 / &48B8 depending on data_1E46.
+    STX data_16F5  \ Per-hit handler — runs once each time the player ship is touched by a hazard / enemy / bullet (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F, using gfx_icon_03 (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0 AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).
     LDA #&07
     JSR OSWRCH
-    LDA data_1E46
+    LDA lives_blink_state
     EOR #&01
-    STA data_1E46
+    STA lives_blink_state
     CMP #&00
     BNE L1E05
-    DEC data_2050
+    DEC player_hp
 .L1E05
-    LDA data_2050
+    LDA player_hp
     ADC #&1F
     LDY #&5F
     TAX
@@ -1953,7 +1953,7 @@ L1C21            = * + 1
     STA sprite_src_hi
     LDA #LO(gfx_icon_03)
     STA sprite_src_lo
-    LDY data_1E46
+    LDY lives_blink_state
     CPY #&00
     BNE L1E2B
     LDA #HI(gfx_icon_03)
@@ -1964,24 +1964,25 @@ L1C21            = * + 1
     LDX #&01
     LDY #&08
     JSR sprite_plot_xy
-    LDA data_2050
+    LDA player_hp
     BEQ L1E3B
     LDX data_16F5
     RTS
 .L1E3B
-    LDA data_1E46
+    LDA lives_blink_state
     CMP #&01
     BEQ death_anim
     LDX data_16F5
     RTS
 
 \ ----- data &1E46..&1E47 -----
-.data_1E46
+.lives_blink_state
+    \ Lives-icon blink-state — 0/1 toggle stepped by lose_a_life. Used both to swap the lives-icon sprite (gfx_icon_03 vs &48B8) and to halve the rate at which player_hp drops (DEC only on alternate calls).
     EQUB &EA
 
-\ ----- code &1E47..&206E -----
+\ ----- code &1E47..&2050 -----
 .death_anim
-    LDA #&01  \ Player death animation. Plays sfx_explode then plots 6 frames of a 4×32 explosion sprite (`lev_explosion_0..5`) at the player position with `frame_delay` between frames. The source pointer pairs live in slots 21..26 of `lev_enemy_ptr_*` (aliased as `lev_explosion_ptr_lo` / `_hi` at &7A95 / &7AD5). Frames 0..3 are in LEVD1 (`lev_explosion_0..3` at &4A00 / &4A80 / &4B00 / &4B80); frames 4..5 are in LEVD2 (`lev_explosion_4..5` at &7C00 / &7C80). After the last frame, DEC `data_2051` (= lose a ship — value `main_loop` polls for game-over) and redraw the lives indicator.
+    LDA #&01  \ Player death animation. Plays sfx_explode then plots 6 frames of a 4×32 explosion sprite (`lev_explosion_0..5`) at the player position with `frame_delay` between frames. The source pointer pairs live in slots 21..26 of `lev_enemy_ptr_*` (aliased as `lev_explosion_ptr_lo` / `_hi` at &7A95 / &7AD5). Frames 0..3 are in LEVD1 (`lev_explosion_0..3` at &4A00 / &4A80 / &4B00 / &4B80); frames 4..5 are in LEVD2 (`lev_explosion_4..5` at &7C00 / &7C80). After the last frame, DEC `lives_left` and redraw the lives-remaining indicator at row &57; if any lives are left, also plays intro_get_ready and re-runs init to start the next ship.
     STA zp_sprite_dir_flag
     LDX zp_player_x
     LDA zp_player_y
@@ -2067,8 +2068,8 @@ L1C21            = * + 1
     JSR frame_delay
     JSR frame_delay
     JSR frame_delay
-    DEC data_2051
-    LDA data_2051
+    DEC lives_left
+    LDA lives_left
     ADC #&1F
     LDY #&57
     TAX
@@ -2080,7 +2081,7 @@ L1C21            = * + 1
     LDA #&00
     STA sprite_src_lo
     JSR sprite_plot_xy
-    LDA data_2051
+    LDA lives_left
     BEQ L1F50
     JSR intro_get_ready
 .L1F50
@@ -2094,7 +2095,7 @@ L1C21            = * + 1
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR init
-    LDA data_2051
+    LDA lives_left
     BEQ L1F72
     LDX data_16F5
     RTS
@@ -2114,7 +2115,7 @@ L1C21            = * + 1
 
 .init
     LDA #&01  \ Per-level init. Sets player start position (&05, &C8), zero-fills the six 9-slot enemy state tables (enemy_x, enemy_y, enemy_type, enemy_hp, enemy_step, hazard_state), clears single-byte state (player bullets, force-pod registers), sets fire_cooldown_reload=6, and marks all 7 enemy_bullet_x slots inactive (&FF).
-    STA data_1E46
+    STA lives_blink_state
     LDA #&05
     STA zp_player_x
     LDA #&C8
@@ -2186,17 +2187,24 @@ L2016            = * + 1
     STA enemy_bullet_x + 6
     STA enemy_bullet_x + 4
     LDA zp_9A
-    STA data_2050
+    STA player_hp
     LDA #&00
     STA flame_state
     STA force_pod_x
     LDA #&C8
     STA force_pod_y
     RTS
-.data_2050
-data_2051        = * + 1
-    ASL zp_06
 
+\ ----- data &2050..&2052 -----
+\ Two single-byte counters that the tracer otherwise mis-decodes as `ASL zp_06`: player_hp (= per-life HP) and lives_left (= remaining ships).
+.player_hp
+    \ Per-life HP — how many lose_a_life calls the current ship can absorb before it explodes. Reset to zp_9A by init (= zp_9A default 6, configurable from options.BAS as `?&9A = X%`). DEC'd in pairs by lose_a_life (every other call); when it hits 0 the next lose_a_life jumps to death_anim. Also used as the X-position of the lives icon in the bottom-status row (col player_hp + &1F).
+    EQUB &06
+.lives_left
+    \ Lives counter — number of ships remaining BEFORE the current one (i.e. continues / extra lives). Initialised by restore_score_from_loader from loader_lives_save (= 3 at game start; preserved across levels). DEC'd by death_anim after the explosion plays. main_loop polls this each game_step: when it reaches 0 → JMP game_over_or_continue.
+    EQUB &06
+
+\ ----- code &2052..&206E -----
 .enemy_x
     BRK
     BRK
