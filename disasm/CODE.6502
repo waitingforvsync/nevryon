@@ -2195,51 +2195,22 @@ L2016            = * + 1
     STA force_pod_y
     RTS
 
-\ ----- data &2050..&2052 -----
-\ Two single-byte counters that the tracer otherwise mis-decodes as `ASL zp_06`: player_hp (= per-life HP) and lives_left (= remaining ships).
+\ ----- data &2050..&208A -----
 .player_hp
     \ Per-life HP — how many lose_a_life calls the current ship can absorb before it explodes. Reset to zp_9A by init (= zp_9A default 6, configurable from options.BAS as `?&9A = X%`). DEC'd in pairs by lose_a_life (every other call); when it hits 0 the next lose_a_life jumps to death_anim. Also used as the X-position of the lives icon in the bottom-status row (col player_hp + &1F).
     EQUB &06
 .lives_left
     \ Lives counter — number of ships remaining BEFORE the current one (i.e. continues / extra lives). Initialised by restore_score_from_loader from loader_lives_save (= 3 at game start; preserved across levels). DEC'd by death_anim after the explosion plays. main_loop polls this each game_step: when it reaches 0 → JMP game_over_or_continue.
     EQUB &06
-
-\ ----- code &2052..&206E -----
 .enemy_x
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    NOP
-
+    EQUB &00, &00, &00, &00, &00, &00, &00, &00
+    EQUB &00, &EA
 .enemy_y
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA
 .enemy_type
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-
-\ ----- data &206E..&208A -----
+    EQUB &00, &00, &00, &00, &00, &00, &00, &00
+    EQUB &00
 .enemy_flip
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA

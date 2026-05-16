@@ -21,10 +21,10 @@
     },
     {
       "start": "0x2050",
-      "end": "0x2052",
+      "end": "0x206E",
       "kind": "data",
       "width": 1,
-      "comment": "Two single-byte counters that the tracer otherwise mis-decodes as `ASL zp_06`: player_hp (= per-life HP) and lives_left (= remaining ships)."
+      "comment": "Lives counters (player_hp, lives_left) + first three of the six per-enemy-slot state arrays (enemy_x[10], enemy_y[9], enemy_type[9]). All are pure data — the tracer otherwise mis-decodes them as `ASL zp_06` / BRK / NOP because the initial bytes happen to be valid opcodes. The remaining three arrays (enemy_flip / _hp / _step) are already in the synthesised data region at &206E..&208A."
     }
   ],
   "labels": {
