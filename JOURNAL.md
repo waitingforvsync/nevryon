@@ -4,14 +4,151 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-16 — Session 13: per-sprite carve + semantic rename + hazard schematic
+
+Iterated the per-level visualisations into something readable.
+Started with one PNG per non-empty `lev_enemy_ptr_*` slot + the
+tile catalog; ended with one PNG per UNIQUE LEVD-resident byte
+range, named after what the bytes actually are.
+
+### Six sprite categories (final naming)
+
+| Category         | Files                  | What it is                                                              |
+|------------------|------------------------|-------------------------------------------------------------------------|
+| `explosion_NN`   | `explosion_00..05`     | 6 frames of the player-death explosion. Frames 0..3 in LEVD1, 4..5 in LEVD2 (the same six byte-pairs also occupy `lev_enemy_ptr_*[21..26]` — aliased as `lev_explosion_ptr_lo/hi`). |
+| `enemy_NN`       | `enemy_00..03`         | 4 frames of the per-scenario small flying enemy. 4×24 (96 B). State-machine states 1..4 in `L1BE3`. |
+| `enemy_hit_NN`   | `enemy_hit_01..03`     | 3 frames of that enemy's hit / destruction cycle. 4×24 (96 B). State-machine states `&0A..&0C`. |
+| `player_sprite`  | `player_sprite`        | 6×22 (132 B) player ship at `&4E80`. |
+| `tile_NN`        | `tile_00..17`          | 18-slot per-scenario map tile catalog. 4×32 (128 B each). |
+| `hazard_NN`      | `hazard_00..13`        | 14 per-stage stationary hazard sprites (gun towers, tanks, structures). 4×32. Reached via `lev_enemy_ptr_*[1..14]`. |
+
+The same naming is now the lev_* constants in `disasm/Nevryon.6502`:
+`lev_explosion_0..5`, `lev_enemy_0..3`, `lev_enemy_hit_1..3`,
+`lev_player_sprite`, `lev_tile_catalog`, `lev_hazard_0..13`.
+Dropped the old umbrella labels (`lev_decor_sprites`,
+`lev_enemy_sprites`, `lev_death_anim_*`, `lev_hazard_sprite_a/b`)
+— they were obscuring the per-frame structure. The
+`lev_explosion_ptr_lo/hi` alias for `lev_enemy_ptr_*[21..26]` is
+kept so `death_anim` (CODE `&1E47`) reads naturally.
+
+### `&4C00..&4E80` finally carved correctly
+
+Earlier I'd been rendering this 640-byte block as 5 × 128-byte
+4×32 sprites — visibly wrong (the resulting sprites were stretched
+nonsense). Tracing the `L1BE3` state machine in CODE shows the
+caller plots these with `LDX #&04 / LDY #&18`, i.e. **4 byte-cols
+× &18 lines = 96 bytes per frame**, not 128.
+
+There are 7 frames in the region, plus three zero-pad gaps:
+
+```
+&4C00..&4C1F     32 B zero pad
+&4C20..&4C7F     enemy_hit_1   (state &0A)
+&4C68..&4CC7     enemy_hit_2   (state &0B)   ← shares col 0 with prev
+&4CB0..&4D0F     enemy_hit_3   (state &0C)   ← shares col 0 with prev
+&4D00..&4D5F     enemy_0       (state 1)     ← shares col 0 with prev
+&4D48..&4DA7     enemy_1       (state 2)     ← shares col 0 with prev
+&4DA8..&4DAF     8 B zero pad
+&4DB0..&4E0F     enemy_2       (state 3)
+&4E10..&4E6F     enemy_3       (state 4)
+&4E70..&4E7F     16 B zero pad
+```
+
+Adjacent frames overlap by exactly one column (24 B) — the level
+designer slides a 4-col plot window 3 columns at a time over a
+longer pixel strip, packing 7 distinct frames into less than the
+full 7×96 = 672 B you'd otherwise need.
+
+### Bug fix on the spawn-pin overlay
+
+The existing spawn-pin overlay placed pins at `SPRITE_H_LINES +
+y_row * 24`. Should have been `y_row * 32` — the four `y_rows` map
+to char rows 4 / 8 / 12 / 16 in the playfield gap, which are 32 px
+apart (each char row is 8 px tall). Fixed in both the old
+spawn-pin overlay and the new hazard overlay.
+
+### Single `map_strip.png` per level
+
+Verified by `cmp` that `lev_map_upper` / `lev_map_lower` are
+identical between stage 1 (LEVD2) and stage 2 (LEVD3-spliced) for
+every scenario. So `map_strip_stage1.png` / `_stage2.png` were
+duplicate output. Now a single `map_strip.png` per level.
+
+### New `map_with_hazards_{1,2}.png` per stage
+
+The existing `map_with_spawns_*.png` overlays just plot coloured
+crosses at each spawn position — a density snapshot. The new
+`map_with_hazards_*.png` plots the **actual sprite** at every
+spawn position, **vertically mirrored** where attribute bit 7 is
+set, so the output reads like a level-design schematic.
+
+  - Sprite source resolved from `lev_enemy_ptr_*[type]` against
+    LEVD1 / LEVD2 / GRAPHIX as appropriate. GRAPHIX-resident
+    slots (15 / 16 / 19) draw their actual bytes through the
+    per-level palette — same shape across scenarios, different
+    colours.
+  - `type == 7` (force-field) draws a 16×32 yellow placeholder
+    rectangle — the real version is a procedural noise strip from
+    `forcefield_render` (uses `lfsr_random` to read whatever
+    sideways ROM is paged in as cheap pixel noise).
+  - Pixels matching palette[0] (black) blit as transparent so the
+    underlying tile strip shows through.
+
+### Per-level output (final shape)
+
+```
+levels/<n>/
+  explosion_00..05.png         6 frames of the player explosion
+  enemy_00..03.png             4 frames of the small flying enemy
+  enemy_hit_01..03.png         3 frames of its hit/destruction
+  player_sprite.png            24×22 player ship
+  tile_00..17.png              18-slot map tile catalog
+  hazard_00..13.png            14 stationary hazards
+  map_strip.png                Full 240-col playfield strip (both stages)
+  map_with_spawns_{1,2}.png    + spawn-pin overlay (per stage)
+  map_with_hazards_{1,2}.png   + actual hazard sprites at spawn positions
+  spawn_table_stage{1,2}.md    Decoded spawn schedule
+  data/*.bin                   Raw 128/240-byte tables per stage
+  README.md                    Byte-by-byte memory map + index→sprite
+```
+
+46 sprite PNGs per level, all byte-unique (`md5sum` confirmed).
+Native pixel size — no scaling.
+
+### New root README.md + LICENSE
+
+Project intro at the repo root crediting Graeme Richardson (author)
+and The Fourth Dimension (publisher) immediately. MIT license for
+the disassembly / tools / docs / visualisations, with an explicit
+scope note that the original game's bytes remain Copyright © 1990
+Graeme Richardson / The Fourth Dimension.
+
+### Next
+
+  - Visually compare `levels/1/map_with_hazards_1.png` against an
+    in-game capture to confirm the upper/lower tile-table reading
+    (a long-standing open question — see Session 11).
+  - `render_map.py` and its older `work/map_lev*.png` outputs are
+    now stale relative to the corrected upper/lower mapping;
+    either regenerate or retire them.
+  - The 16-byte gap at `&7F00..&7F0F` between the two map-id
+    streams might be a wrap-around safety strip — worth a closer
+    look at how `L13D1` handles the column-wrap from `&F0` back.
+
+---
+
 ## 2026-05-16 — Session 12: per-level data constants + visualisations
 
-### `lev_*` constants in the master
+(First pass at the per-level data; superseded by Session 13's
+rename. Captured here verbatim because the analysis steps are
+still useful — the constants and PNG filenames it lists have all
+been renamed since.)
+
+### `lev_*` constants in the master (first naming, since revised)
 
 Catalogued the LEVD1 / LEVD2 / LEVD3 byte map as named equates in
 `disasm/Nevryon.6502` so the disassembly stops scattering raw `&7Axx`
-addresses. The naming follows the convention "per-level data lives
-under `lev_*` and is reloaded each stage":
+addresses. The first pass used these umbrella labels:
 
   - **LEVD1** (`&4A00..&57FF`): `lev_decor_sprites` (`&4A00`),
     `lev_player_sprite` (`&4E80`), `lev_tile_catalog` (`&4F00`,
@@ -27,6 +164,11 @@ under `lev_*` and is reloaded each stage":
     lower half of LEVD2 — tile streams inherit), 3200 B for
     scenario 4 (full overlay).
 
+(Most of these were later replaced by per-frame names — see
+Session 13. The umbrella labels were dropped because they hid the
+fact that the bytes break down into discrete explosion / enemy /
+enemy_hit / tile / hazard frames.)
+
 The cumulative-master parse in the disassembler automatically
 adopted all these names; previously-raw `tbl_7A80,X` etc. now read
 as `lev_enemy_ptr_lo,X`, etc.
@@ -37,11 +179,10 @@ Confirmed by trace: the 6-frame explosion played at player death.
 Each frame is a 4×32 sprite plotted at the player's position via the
 sprite engine, with `frame_delay` calls between frames. The source
 pointers live in slots 21..26 of `lev_enemy_ptr_*` — same memory,
-reused by the disasm as `lev_death_anim_lo / _hi`. So each
-scenario's explosion automatically picks up that scenario's
-scenery palette. After the last frame: `DEC data_2051` (lose a
-ship — value `main_loop` polls to decide game-over) and redraw the
-lives indicator.
+aliased as `lev_explosion_ptr_lo/hi` (renamed from
+`lev_death_anim_*` in Session 13). After the last frame:
+`DEC data_2051` (lose a ship — value `main_loop` polls to decide
+game-over) and redraw the lives indicator.
 
 ### Tile-table upper/lower question — settled
 
@@ -57,31 +198,9 @@ unambiguously:
 
 The old `render_map.py` (and an earlier journal entry) had these
 swapped. The newly-added `tools/render_level.py` uses the correct
-mapping; if the new `map_strip_*.png` outputs look upside-down
-relative to in-game capture, that confirms my trace and we should
-fix `render_map.py` accordingly.
-
-### `tools/render_level.py` + per-level outputs
-
-New driver builds a complete per-level visualisation set into
-`levels/1/` .. `levels/4/`:
-
-| Per-level file              | Source                                       |
-|-----------------------------|----------------------------------------------|
-| `tile_catalog.png`          | All 18 `lev_tile_catalog` slots               |
-| `player_ship.png`           | `lev_player_sprite` (6×22)                    |
-| `death_anim.png`            | 6 frames via `lev_death_anim_lo/hi`           |
-| `enemy_atlas.png`           | All 32 slots of `lev_enemy_ptr_*`             |
-| `hazard_a.png` / `_b.png`   | `lev_hazard_sprite_a/b` (4×32 each)           |
-| `map_strip_stage1.png`      | Stage-1 upper+lower tile bands (with gap)     |
-| `map_strip_stage2.png`      | Same for stage 2 (LEVD3-spliced for 1-3)      |
-| `map_with_spawns_1/2.png`   | Strip + spawn-pin overlay (per-attribute colour)|
-| `spawn_table_stage{1,2}.md` | Full spawn schedule decoded                    |
-| `data/*.bin`                | Raw binary dumps of all four per-stage tables  |
-| `README.md`                 | What's in each file + spawn attribute decoding |
-
-All sprites render with `palette_for_level(N)` so each scenario's
-visualisation uses its real in-game palette.
+mapping; if the new map output looks upside-down relative to
+in-game capture, that confirms my trace and we should fix
+`render_map.py` accordingly.
 
 ### What the spawn data actually says
 
@@ -99,23 +218,9 @@ The attribute byte is bit-packed:
 | 5..6 | Y-row | 0..3 → screen-Y `&DF` / `&BF` / `&9F` / `&7F` — one of the 4 rows inside the 12-row playfield gap between the upper and lower tile bands. |
 | 7    | v-flip | 0 = normal, 1 = vertical mirror. Often paired with a non-flipped spawn at the same column to create symmetric ceiling/floor decoration (e.g. lev 1 cols 11/12: tile-shaped flames mirrored at row 0 + normal at row 2 to bracket a passageway). |
 
-Spawn counts by stage (after the `&FF` terminator):
-
-| Level | Stage 1 | Stage 2 |
-|------:|--------:|--------:|
-| 1     | 61      | 74      |
-| 2     | (see `levels/2/spawn_table_stage*.md`) | |
-| 3     | (same)  |         |
-| 4     | (same)  |         |
-
-### Next
-
-  - Visually compare `levels/1/map_strip_stage1.png` against an
-    in-game capture to confirm the upper/lower fix.
-  - Once confirmed, fix `render_map.py` to swap the table assignment
-    and regenerate the older `work/map_lev*.png` outputs.
-  - The 6-byte gap at `&7F00..&7F0F` between the two map-id streams
-    might be a wrap-around safety strip — worth a closer look.
+Stage-1 spawn count for lev 1 = 61 events before `&FF`; stage 2
+of lev 1 = 74. See `levels/<n>/spawn_table_stage{1,2}.md` for the
+full breakdown per scenario.
 
 ---
 

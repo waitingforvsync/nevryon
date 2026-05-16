@@ -1,9 +1,9 @@
 # Nevryon Reverse-Engineering Project
 
-Reverse-engineering the BBC Micro game **Nevryon** (4th Dimension, 1991) — a
-MODE 5 sideways-scrolling R-Type clone — with the aim of recovering sprites
-and level maps, and (stretch) producing a full BeebAsm disassembly toward a
-remake.
+Reverse-engineering the BBC Micro game **Nevryon** (The Fourth Dimension,
+1990) — a MODE 5 sideways-scrolling R-Type clone — with the aim of
+recovering sprites and level maps, and (stretch) producing a full BeebAsm
+disassembly toward a remake.
 
 The source disk image was downloaded from
 <https://stairwaytohell.com/bbc/archive/diskimages/4thDimension/Nevryon.zip>.
@@ -11,28 +11,52 @@ The source disk image was downloaded from
 ## Repository layout
 
 ```
+README.md                    # public-facing intro; credits Graeme Richardson + The Fourth Dimension
+LICENSE                      # MIT for project artefacts (with explicit scope note re: the original game)
+
 4thDimension/Nevryon.ssd     # full 80-track DFS disk image (do not modify)
 extracted/                   # files unpacked from the disk image
   _manifest.tsv              # per-file load/exec/length/start-sector
   $.<NAME> / N.<NAME>        # extracted file payloads (dir letter prefix)
+
 tools/                       # Python utilities (DFS, sprite, map decode)
   dfs_extract.py             # parses SSD catalog, extracts files (Watford-DFS variant)
   bbcbasic_detoken.py        # BBC BASIC II/IV detokeniser (handles junk preamble)
-  render_screen.py           # MODE 1 / MODE 5 raw bitmap → PNG
+  disasm6502.py              # 6502 → BeebAsm disassembler with annotations
+  render_screen.py           # MODE 1 / 2 / 5 raw bitmap → PNG
   render_strip.py            # linear strip view of arbitrary bytes
   render_sprite.py           # column-major sprite + grid viewer
-  disasm6502.py              # 6502 → BeebAsm disassembler with annotations
-work/                        # PNG previews, scratch
-disasm/                      # BeebAsm-format reconstruction in progress
-  Nevryon.6502               # master — INCLUDEs all four per-binary sources
+  render_graphix_sprites.py  # GRAPHIX atlas renderer
+  render_map.py              # LEVD1 tiles + LEVD2/3 column streams → strip
+  render_level_summary.py    # composite map + enemies + spawn pins
+  render_level.py            # per-level full output: sprite PNGs + maps + spawn tables
+
+disasm/                      # BeebAsm-format reconstruction (byte-identical roundtrip)
+  Nevryon.6502               # master — INCLUDEs all four per-binary sources + shared equates
   CODE.6502 + CODE.cfg.json  # annotated disassembly of $.CODE
   CODE2.6502 + CODE2.cfg.json
   CODE3.6502 + CODE3.cfg.json
   GRAPHIX.6502 + GRAPHIX.cfg.json
+
 build/                       # output of build.sh — byte-identical to $.CODE etc.
-build.sh / build.bat         # invoke BeebAsm on Nevryon.6502 + verify byte-identity
+build.sh / build.bat         # regen disasm sources + invoke BeebAsm + verify byte-identity
+
+levels/1/ levels/2/ ...      # per-scenario reverse-engineered data + visualisations
+  explosion_NN.png           # see "Per-level naming convention" below
+  enemy_NN.png  enemy_hit_NN.png  player_sprite.png  tile_NN.png  hazard_NN.png
+  map_strip.png              # full 240-col playfield strip (both stages share)
+  map_with_spawns_{1,2}.png  # strip + spawn-pin overlay (per stage)
+  map_with_hazards_{1,2}.png # strip with actual hazard sprites at spawn positions
+  spawn_table_stage{1,2}.md  # decoded spawn schedule per stage
+  data/                      # raw 128/240-byte binary dumps
+  README.md                  # byte-by-byte memory map + index→sprite
+
+graphix/                     # per-sprite atlas dumps from $.GRAPHIX
+work/                        # PNG previews, scratch
+
 docs/
-  file_layout.md             # per-file content reference (load addrs, byte maps)
+  file_layout.md             # per-file content reference (load addrs, byte maps, routine names)
+  memory_map.md              # single-page CPU memory layout (zp, each binary, LEVD data, ...)
 CLAUDE.md                    # this file — workflow & conventions
 JOURNAL.md                   # running log of discoveries & decisions
 ```
@@ -158,6 +182,30 @@ takes over): Loader2 line 990 sets `VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` →
 - Upper tile at screen char rows 0-3 (top of playfield), lower tile at
   rows 16-19 (bottom). 12-row (96 px) gap between is shared with
   player ship, enemies, force-fields, and starfield.
+
+### Per-level data — naming convention
+Every byte the engine reads from the LEVD files falls into one of six
+sprite categories. Use these names consistently in cfgs, comments,
+docs and PNG filenames; **don't** reintroduce older umbrella names
+like `lev_decor_sprites`, `lev_enemy_sprites`, `lev_death_anim_*`,
+`lev_hazard_sprite_a/b` (those were dropped in Session 13 because
+they hid the per-frame structure).
+
+| Category         | `lev_*` constant(s)         | PNG filename(s)       | Shape  | Bytes |
+|------------------|-----------------------------|-----------------------|--------|------:|
+| Player explosion | `lev_explosion_0..5`        | `explosion_00..05`    | 4×32   | 128 each, 6 frames; frames 0..3 in LEVD1, 4..5 in LEVD2 |
+| Small enemy      | `lev_enemy_0..3`            | `enemy_00..03`        | 4×24   | 96 each, 4 frames in LEVD1 (column-shared) |
+| Enemy hit        | `lev_enemy_hit_1..3`        | `enemy_hit_01..03`    | 4×24   | 96 each, 3 frames in LEVD1 (column-shared) |
+| Player ship      | `lev_player_sprite`         | `player_sprite`       | 6×22   | 132, LEVD1 |
+| Tile catalog     | `lev_tile_catalog + N*&80`  | `tile_00..17`         | 4×32   | 128 each, 18 slots in LEVD1 |
+| Hazards          | `lev_hazard_0..13`          | `hazard_00..13`       | 4×32   | 128 each, 14 in LEVD2 |
+
+The 32-entry `lev_enemy_ptr_lo/hi` table also has fixed aliasing:
+slots 21..26 are the explosion-frame source pointers
+(`lev_explosion_ptr_lo/hi` = `lev_enemy_ptr_*[21..26]`); slots
+17/18 reuse `lev_tile_catalog` tile 5/4 bytes; slots 15/16/19 point
+into `$.GRAPHIX`. See `docs/memory_map.md` and
+`levels/<n>/README.md` for the full index-to-sprite tables.
 
 ### Sprite format (column-major)
 - Stored as W byte-columns × H scanlines.
