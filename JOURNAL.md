@@ -4,6 +4,121 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-16 — Session 12: per-level data constants + visualisations
+
+### `lev_*` constants in the master
+
+Catalogued the LEVD1 / LEVD2 / LEVD3 byte map as named equates in
+`disasm/Nevryon.6502` so the disassembly stops scattering raw `&7Axx`
+addresses. The naming follows the convention "per-level data lives
+under `lev_*` and is reloaded each stage":
+
+  - **LEVD1** (`&4A00..&57FF`): `lev_decor_sprites` (`&4A00`),
+    `lev_player_sprite` (`&4E80`), `lev_tile_catalog` (`&4F00`,
+    18 slots × 128 B).
+  - **LEVD2** (`&7380..&7FFF`): `lev_enemy_sprites` (`&7380`),
+    `lev_enemy_ptr_lo` / `_hi` (`&7A80` / `&7AC0`),
+    `lev_death_anim_lo` / `_hi` (= ptr-table slots 21..26 at
+    `&7A95` / `&7AD5`), `lev_spawn_col` (`&7B00`), `lev_spawn_attr`
+    (`&7B80`), `lev_hazard_sprite_a` / `_b` (`&7C00` / `&7C80`),
+    `lev_erase_brush` (`&7D00`), `lev_map_upper` (`&7E10`),
+    `lev_map_lower` (`&7F10`).
+  - **LEVD3** notes: 2176 B for scenarios 1-3 (overwrites only the
+    lower half of LEVD2 — tile streams inherit), 3200 B for
+    scenario 4 (full overlay).
+
+The cumulative-master parse in the disassembler automatically
+adopted all these names; previously-raw `tbl_7A80,X` etc. now read
+as `lev_enemy_ptr_lo,X`, etc.
+
+### `L1E47` → `death_anim`
+
+Confirmed by trace: the 6-frame explosion played at player death.
+Each frame is a 4×32 sprite plotted at the player's position via the
+sprite engine, with `frame_delay` calls between frames. The source
+pointers live in slots 21..26 of `lev_enemy_ptr_*` — same memory,
+reused by the disasm as `lev_death_anim_lo / _hi`. So each
+scenario's explosion automatically picks up that scenario's
+scenery palette. After the last frame: `DEC data_2051` (lose a
+ship — value `main_loop` polls to decide game-over) and redraw the
+lives indicator.
+
+### Tile-table upper/lower question — settled
+
+Direct byte-for-byte trace of `L13D1` → `L127B` confirms
+unambiguously:
+
+  - `tbl_7E10` (= `lev_map_upper`) drives `zp_tile_upper`, which
+    `L127B` reads at Y=&FF (char row 0, dir_flag=0 → vertically
+    mirrored) — i.e. the upper / ceiling band.
+  - `tbl_7F10` (= `lev_map_lower`) drives `zp_tile_lower`, which
+    `L127B` reads at Y=&7F (char row 16, dir_flag=1 → normal) —
+    the lower / floor band.
+
+The old `render_map.py` (and an earlier journal entry) had these
+swapped. The newly-added `tools/render_level.py` uses the correct
+mapping; if the new `map_strip_*.png` outputs look upside-down
+relative to in-game capture, that confirms my trace and we should
+fix `render_map.py` accordingly.
+
+### `tools/render_level.py` + per-level outputs
+
+New driver builds a complete per-level visualisation set into
+`levels/1/` .. `levels/4/`:
+
+| Per-level file              | Source                                       |
+|-----------------------------|----------------------------------------------|
+| `tile_catalog.png`          | All 18 `lev_tile_catalog` slots               |
+| `player_ship.png`           | `lev_player_sprite` (6×22)                    |
+| `death_anim.png`            | 6 frames via `lev_death_anim_lo/hi`           |
+| `enemy_atlas.png`           | All 32 slots of `lev_enemy_ptr_*`             |
+| `hazard_a.png` / `_b.png`   | `lev_hazard_sprite_a/b` (4×32 each)           |
+| `map_strip_stage1.png`      | Stage-1 upper+lower tile bands (with gap)     |
+| `map_strip_stage2.png`      | Same for stage 2 (LEVD3-spliced for 1-3)      |
+| `map_with_spawns_1/2.png`   | Strip + spawn-pin overlay (per-attribute colour)|
+| `spawn_table_stage{1,2}.md` | Full spawn schedule decoded                    |
+| `data/*.bin`                | Raw binary dumps of all four per-stage tables  |
+| `README.md`                 | What's in each file + spawn attribute decoding |
+
+All sprites render with `palette_for_level(N)` so each scenario's
+visualisation uses its real in-game palette.
+
+### What the spawn data actually says
+
+`lev_spawn_col` and `lev_spawn_attr` are two parallel 128-byte
+arrays, sorted ascending by column, terminated by `&FF`.
+`spawn_check_step` (CODE `&208A`) walks them every frame the
+playfield advances; matching columns install into the next free
+active-enemy slot.
+
+The attribute byte is bit-packed:
+
+| Bits | Field | Meaning |
+|------|-------|---------|
+| 0..4 | type  | 0..31 — sprite index into `lev_enemy_ptr_*` AND dispatch path in `enemy_type_dispatch` (4/&13 = multi-shot, 6 = enemy missile spawn via CODE2, 7 = force-field (procedural via lfsr_random), 8 = high-HP variant, &10 = boss/heavy). |
+| 5..6 | Y-row | 0..3 → screen-Y `&DF` / `&BF` / `&9F` / `&7F` — one of the 4 rows inside the 12-row playfield gap between the upper and lower tile bands. |
+| 7    | v-flip | 0 = normal, 1 = vertical mirror. Often paired with a non-flipped spawn at the same column to create symmetric ceiling/floor decoration (e.g. lev 1 cols 11/12: tile-shaped flames mirrored at row 0 + normal at row 2 to bracket a passageway). |
+
+Spawn counts by stage (after the `&FF` terminator):
+
+| Level | Stage 1 | Stage 2 |
+|------:|--------:|--------:|
+| 1     | 61      | 74      |
+| 2     | (see `levels/2/spawn_table_stage*.md`) | |
+| 3     | (same)  |         |
+| 4     | (same)  |         |
+
+### Next
+
+  - Visually compare `levels/1/map_strip_stage1.png` against an
+    in-game capture to confirm the upper/lower fix.
+  - Once confirmed, fix `render_map.py` to swap the table assignment
+    and regenerate the older `work/map_lev*.png` outputs.
+  - The 6-byte gap at `&7F00..&7F0F` between the two map-id streams
+    might be a wrap-around safety strip — worth a closer look.
+
+---
+
 ## 2026-05-15 — Session 11: bullets / hazards / tile-pointer pair
 
 ### `L17E7` is the real `update_bullets`

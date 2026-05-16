@@ -192,6 +192,14 @@ For a per-file content reference (load addresses, byte-map of LEVD1/
 LEVD2/LEVD3/GRAPHIX, boot chain summary, named routines in CODE),
 see `docs/file_layout.md`.
 
+For a single-page picture of the whole CPU memory map (zero page,
+each binary's window, screen RAM, per-level data sub-blocks, and
+the spawn-attribute encoding), see `docs/memory_map.md`.
+
+For per-level visualisations (tile catalog, enemies, hazards, the
+map strip with and without spawn pins, raw binary table dumps, and
+a decoded spawn-table per stage), see `levels/<n>/README.md`.
+
 ## How to update these docs
 
 - **CLAUDE.md** changes when the workflow/conventions change — keep stable.

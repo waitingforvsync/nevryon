@@ -69,6 +69,14 @@ data_2051        = &2051
 \   stage_clear_screen = &3325
 \   game_over_or_continue = &3432
 \   get_ready_overlay = &3513
+\   lev_enemy_ptr_lo = &7A80
+\   lev_explosion_ptr_lo = &7A95
+\   lev_enemy_ptr_hi = &7AC0
+\   lev_explosion_ptr_hi = &7AD5
+\   lev_spawn_col = &7B00
+\   lev_spawn_attr = &7B80
+\   lev_map_upper = &7E10
+\   lev_map_lower = &7F10
 \   OSRDCH = &FFE0
 \   OSWRCH = &FFEE
 \   OSWORD = &FFF1
@@ -96,24 +104,16 @@ zp_9B            = &9B
 zp_9F            = &9F
 data_2A06        = &2A06
 data_70FF        = &70FF
-tbl_7A80         = &7A80
-data_7A95        = &7A95
 data_7A96        = &7A96
 data_7A97        = &7A97
 data_7A98        = &7A98
 data_7A99        = &7A99
 data_7A9A        = &7A9A
-tbl_7AC0         = &7AC0
-data_7AD5        = &7AD5
 data_7AD6        = &7AD6
 data_7AD7        = &7AD7
 data_7AD8        = &7AD8
 data_7AD9        = &7AD9
 data_7ADA        = &7ADA
-tbl_7B00         = &7B00
-tbl_7B80         = &7B80
-tbl_7E10         = &7E10
-tbl_7F10         = &7F10
 tbl_FFFF         = &FFFF
 
 ORG &1100
@@ -136,7 +136,7 @@ ORG &1100
     BNE L1130
     LDA #&01
     STA data_2051
-    JSR L1E47
+    JSR death_anim
     LDA #&00
     STA zp_level_num
     JSR save_score_to_loader
@@ -514,7 +514,7 @@ ORG &1100
     JSR L1712
     JSR spawn_check_step
     LDX zp_scroll_col
-    LDA tbl_7F10,X
+    LDA lev_map_lower,X
     TAX
     INX
     LDA #&4E
@@ -535,7 +535,7 @@ ORG &1100
     CPX zp_dest_x_lo
     BNE L13ED
     LDX zp_scroll_col
-    LDA tbl_7E10,X
+    LDA lev_map_upper,X
     TAX
     INX
     LDA #&4E
@@ -1976,7 +1976,7 @@ ORG &1100
 .L1E3B
     LDA data_1E46
     CMP #&01
-    BEQ L1E47
+    BEQ death_anim
     LDX data_16F5
     RTS
 
@@ -1985,8 +1985,8 @@ ORG &1100
     EQUB &EA
 
 \ ----- code &1E47..&206E -----
-.L1E47
-    LDA #&01
+.death_anim
+    LDA #&01  \ Player death animation. Plays sfx_explode then plots 6 frames of a 4×32 explosion sprite (`lev_explosion_0..5`) at the player position with `frame_delay` between frames. The source pointer pairs live in slots 21..26 of `lev_enemy_ptr_*` (aliased as `lev_explosion_ptr_lo` / `_hi` at &7A95 / &7AD5). Frames 0..3 are in LEVD1 (`lev_explosion_0..3` at &4A00 / &4A80 / &4B00 / &4B80); frames 4..5 are in LEVD2 (`lev_explosion_4..5` at &7C00 / &7C80). After the last frame, DEC `data_2051` (= lose a ship — value `main_loop` polls for game-over) and redraw the lives indicator.
     STA zp_sprite_dir_flag
     LDX zp_player_x
     LDA zp_player_y
@@ -1998,9 +1998,9 @@ ORG &1100
     JSR sfx_explode
     LDX #&04
     LDY #&20
-    LDA data_7A95
+    LDA lev_explosion_ptr_lo
     STA sprite_src_lo
-    LDA data_7AD5
+    LDA lev_explosion_ptr_hi
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR frame_delay
@@ -2248,12 +2248,12 @@ ORG &1100
 \ ----- code &208A..&23C5 -----
 .spawn_check_step
     LDX zp_7B
-    LDA tbl_7B00,X
+    LDA lev_spawn_col,X
     CMP zp_scroll_col
     BEQ L2094
     RTS
 .L2094
-    LDA tbl_7B80
+    LDA lev_spawn_attr
     BNE L209A
     RTS
 .L209A
@@ -2267,7 +2267,7 @@ ORG &1100
     STA zp_7C
 .L20A6
     INC zp_7B
-    LDA tbl_7B80,X
+    LDA lev_spawn_attr,X
     TAY
     LDX zp_7C
     AND #&1F
@@ -2383,10 +2383,10 @@ ORG &1100
     STA zp_sprite_dir_flag
     LDA enemy_type,X
     TAX
-    LDA tbl_7A80,X
+    LDA lev_enemy_ptr_lo,X
     CLC
     STA sprite_src_lo
-    LDA tbl_7AC0,X
+    LDA lev_enemy_ptr_hi,X
     STA sprite_src_hi
     LDX data_16F5
     LDA enemy_x,X
@@ -2454,9 +2454,9 @@ ORG &1100
     STA sprite_src_lo
     LDA enemy_type,X
     TAX
-    LDA tbl_7AC0,X
+    LDA lev_enemy_ptr_hi,X
     STA sprite_src_hi
-    LDA tbl_7A80,X
+    LDA lev_enemy_ptr_lo,X
     ADC sprite_src_lo
     STA sprite_src_lo
     LDX data_16F5

@@ -67,12 +67,91 @@ zp_level_num              = &009D
 irq1v_lo                  = &0204
 irq1v_hi                  = &0205
 
-\ Per-level data referenced from CODE/CODE2/CODE3 sprite-source
-\ self-mod patterns. The player ship sits in LEVD1 at &4E80, and
-\ the LEVD2 zero region from &7D00..&7E0F doubles as the universal
-\ "erase brush" — overlays touch it at +&80, +&B0, +&100, +&102.
-lev_player_sprite         = &4E80
-lev_erase_brush           = &7D00
+\ ---- Per-level data (LEVD1 / LEVD2 / LEVD3) ----------------
+\ Each scenario (and per stage) reloads these three files into
+\ fixed CPU regions. LEVD1 is per-scenario only; LEVD2 / LEVD3
+\ also vary per stage within a scenario.
+\
+\ The level files contain six categories of sprite data, all in
+\ column-major 4-bit MODE-5 form, with the per-scenario palette
+\ supplying colour. Categories (and the lev_* names used below):
+\
+\   explosion_N (N=0..5)     6 frames of player death animation,
+\                            split LEVD1 (frames 0..3) + LEVD2
+\                            (frames 4..5). Played by death_anim
+\                            (CODE &1E47). Frame size 4×32 (128 B).
+\   enemy_N     (N=0..3)     4 frames of the per-scenario small
+\                            flying enemy. 4×24 (96 B), with
+\                            column sharing — adjacent frames
+\                            overlap by 24 B (= 1 col).
+\   enemy_hit_N (N=1..3)     3 frames of the same enemy's damage /
+\                            destruction cycle. 4×24 (96 B).
+\   tile_NN     (N=0..17)    18 slots of the per-scenario map tile
+\                            catalog. 4×32 (128 B); indexed by
+\                            lev_map_upper / lev_map_lower.
+\   hazard_NN   (N=0..13)    14 per-stage hazard sprites — the
+\                            larger stationary threats (gun towers,
+\                            tanks, etc.). 4×32 (128 B); indexed
+\                            via lev_enemy_ptr_* slots 1..14.
+\   player_sprite            6×22 (132 B) — the player ship.
+
+\ LEVD1 — per-scenario explosion + enemy + player + tile catalog
+\ (loaded at &4A00, length &E00, fills &4A00..&57FF)
+lev_explosion_0           = &4A00     \ 4×32 (128 B) — frame 0 of the 6-frame explosion played by death_anim
+lev_explosion_1           = &4A80
+lev_explosion_2           = &4B00
+lev_explosion_3           = &4B80
+\ &4C00..&4C1F            \ 32 B zero pad
+lev_enemy_hit_1           = &4C20     \ 4×24 (96 B) — first of 3 enemy hit/destruction frames (state machine in L1BE3)
+lev_enemy_hit_2           = &4C68
+lev_enemy_hit_3           = &4CB0
+lev_enemy_0               = &4D00     \ 4×24 (96 B) — first of 4 normal enemy frames (state machine in L1BE3)
+lev_enemy_1               = &4D48
+\ &4DA8..&4DAF            \ 8 B zero pad
+lev_enemy_2               = &4DB0
+lev_enemy_3               = &4E10
+\ &4E70..&4E7F            \ 16 B zero pad
+lev_player_sprite         = &4E80     \ 6×22 (132 B) — player ship; last 4 bytes overlap tile_0's first 4 bytes
+lev_tile_catalog          = &4F00     \ 18 tile slots × 4×32 (128 B each); tile N at lev_tile_catalog + N*&80
+
+\ LEVD2 / LEVD3 — per-stage hazards, spawns, explosion-tail, map tile-id streams
+\ (loaded at &7380, length &C80 = 3200 B for LEVD2 and 4.LEVD3; &880 = 2176 B for 1-3.LEVD3 which overwrites only the lower half)
+lev_hazard_0              = &7380     \ 4×32 (128 B) — first of 14 hazard sprites (gun towers, tanks, etc.). Accessible via lev_enemy_ptr_lo/hi[1..14].
+lev_hazard_1              = &7400
+lev_hazard_2              = &7480
+lev_hazard_3              = &7500
+lev_hazard_4              = &7580
+lev_hazard_5              = &7600
+lev_hazard_6              = &7680
+lev_hazard_7              = &7700
+lev_hazard_8              = &7780
+lev_hazard_9              = &7800
+lev_hazard_10             = &7880
+lev_hazard_11             = &7900
+lev_hazard_12             = &7980
+lev_hazard_13             = &7A00
+lev_enemy_ptr_lo          = &7A80     \ 32-slot enemy sprite-pointer table (LO byte). Indexed by enemy attribute's "type" field (bits 0..4). Slots 1..14 point at lev_hazard_0..13; slots 15/16/19 point into $.GRAPHIX (shared cross-scenario); slots 17/18 point into lev_tile_catalog (reused tile bytes as enemy sprites); slots 21..26 are the 6 explosion-frame source pointers (see lev_explosion_ptr_lo below); slots 0/27 = lev_erase_brush; 20, 28..31 unused (&0000).
+lev_enemy_ptr_hi          = &7AC0     \ 32-slot enemy sprite-pointer table (HI byte). Paired with lev_enemy_ptr_lo.
+\ Slots 21..26 of the enemy pointer table double as the 6 source
+\ pointers for the explosion animation. The two names refer to the
+\ same physical bytes — lev_explosion_ptr_* is just an alias of the
+\ tail of lev_enemy_ptr_*.
+lev_explosion_ptr_lo      = &7A95     \ = lev_enemy_ptr_lo + &15 (slots 21..26)
+lev_explosion_ptr_hi      = &7AD5     \ = lev_enemy_ptr_hi + &15
+lev_spawn_col             = &7B00     \ 128-byte spawn-column schedule (sorted ascending; &FF = end-of-list)
+lev_spawn_attr            = &7B80     \ 128-byte spawn attribute table, parallel with lev_spawn_col. Bits 0..4 = enemy type / dispatch (→ enemy_type_dispatch), bits 5..6 = Y row (0 = &DF, 1 = &BF, 2 = &9F, 3 = &7F), bit 7 = vertical-flip flag (mirrors the sprite, used to pair ceiling-hanging and floor-rising decoration enemies).
+lev_explosion_4           = &7C00     \ 4×32 (128 B) — frame 4 of the 6-frame explosion. Same bytes accessible via lev_enemy_ptr_*[25].
+lev_explosion_5           = &7C80     \ 4×32 (128 B) — frame 5 of the 6-frame explosion. Same bytes accessible via lev_enemy_ptr_*[26].
+lev_erase_brush           = &7D00     \ 272 B of zeroes; sprite_plot from here erases a screen rectangle. Engine touches it at +&80, +&B0, +&100, +&102 for different brush dimensions.
+\ Map tile-id streams. Each is 240 entries, one byte per scroll
+\ column, indexing into lev_tile_catalog. The upper band is
+\ rendered at char-row 0 with dir_flag = 0 (vertically mirrored,
+\ so the same floor-shaped tile data appears as a ceiling), the
+\ lower band at char-row 16 with dir_flag = 1 (normal). Read by
+\ L13D1 which writes the resolved pointers into zp_tile_upper /
+\ zp_tile_lower.
+lev_map_upper             = &7E10     \ 240-byte upper tile-id stream (drives zp_tile_upper; drawn mirrored at row 0)
+lev_map_lower             = &7F10     \ 240-byte lower tile-id stream (drives zp_tile_lower; drawn normal at row 16)
 
 \ Internal BBC key scan codes (OSBYTE &81 with Y=&FF, X=&XX). These
 \ map to BASIC's `INKEY -N` values. The byte stored in X is the two's
