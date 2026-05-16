@@ -97,10 +97,10 @@
     "0x28D7": "Per-frame: if &25A5 == 1, animate the force-pod (chomping ball at &2972/&2973). Steps a 6-frame cycle (&3860..&38D8) and watches for a key to dismiss.",
     "0x29E7": "Draw 6-digit score at char-col 9 row &5F. Loops X=0..5 reading score_d* (&2A02..&2A07) and calls draw_score_digit per digit.",
     "0x2A08": "Draw one score digit. A=digit value (0..9), X=column offset; selects gfx_digit_N (= &3A60 + 8*N) and plots a 4x8 sprite.",
-    "0x2A20": "Try to spawn a new enemy missile in one of the two slots (tbl_2B9A[0..1]). Validates enemy X position, copies enemy XY into the missile slot, sets direction (up if player_x >= enemy_x else down), and beeps via sfx_score_tick to mark launch.",
-    "0x2AA2": "Per-frame: step each of the two enemy missiles (at slots 0 and 1) then collision-check against the player. Slots with X=&FF are inactive.",
-    "0x2AC4": "Move one enemy missile by 2 px (up or down per tbl_2BA2[X]) and redraw. Erases old position with lev_erase_brush, plots gfx_icon_08 at new position. Deactivates the slot when the missile leaves the playfield.",
-    "0x2B48": "Box-collision check between missile X (slot scratch_28D3) and player_x/player_y (rough &83/&84 bounds). On hit, jumps to the player-death path.",
+    "0x2A20": "Try to spawn a new enemy missile in one of the two slots (enemy_missile_x[0..1] == &FF = free). Called from CODE's enemy_type_dispatch for enemy_type &06. Validates the firer's enemy_x is in [&08, &25] (on-screen), copies enemy_x+2 / enemy_y into the missile slot, mirrors enemy_flip into enemy_missile_flip (controls vertical direction in step_enemy_missile), and sets enemy_missile_homing_dir from a player-X comparison: 1 if player_x+3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise (home leftward). Plays sfx_score_tick to mark the launch. The missile sprite is gfx_icon_08, a 4×6-px yellow-and-red rocket pointing vertically.",
+    "0x2AA2": "Per-frame: step each of the 2 enemy missiles (slots 0 and 1) then collision-check each against the player. Inactive slots (enemy_missile_x == &FF) are skipped.",
+    "0x2AC4": "Step one enemy missile (X = slot index 0..1). Erases the old 1×6 position with lev_erase_brush+&80, then advances: horizontally by enemy_missile_homing_dir (1 = INC X by 1 → home rightward, else DEC X by 2 → home leftward), vertically by enemy_missile_flip (1 = Y+=2, else Y-=2). Bounds-checks the new (X, Y) against the playfield; out-of-bounds → mark slot inactive. Plots gfx_icon_08 (4×6-px rocket) at the new position.",
+    "0x2B48": "Box-collision check between one enemy_missile slot and the player. On hit, jumps to the player-death path (lose_a_life via the CODE-side handler).",
     "0x2BA4": "Level-start GET READY!: draws the score, plots 7 icon_10 'lives' sprites at row &57 col 8..&F, shutter-fades to a black star field, plays sfx_explode for drama, then loops 75 frames updating starfield and blitting gfx_text_get_ready (split as two 8-col halves at cols 12 and 20) before erasing.",
     "0x2CCA": "Title screen renderer: shutter_fade + 7 icon_10 row + icon_11 indicator(s) + the 4th Dimension logo (gfx_logo_4thdim, 56x32 at col 7 row &FD) + ampersand + 'GPR 90' + 'PRESS SPACE' (two 10-col halves, cols 10 and 20, row &82). Called by main_init.",
     "0x2E83": "Beep that plays during the BONUS countdown roll-up (called from stage_clear_screen).",
@@ -191,6 +191,13 @@
     "0x2A03": "score_d2",
     "0x2A04": "score_d1",
     "0x2A05": "score_d0"
+  },
+  "array_labels": {
+    "0x2B9A": ["enemy_missile_x", 2],
+    "0x2B9C": ["enemy_missile_y", 2],
+    "0x2B9E": ["enemy_missile_flip", 2],
+    "0x2BA0": ["enemy_missile_unused", 2],
+    "0x2BA2": ["enemy_missile_homing_dir", 2]
   },
   "immediate_overrides": {
     "0x28E8": "LO(lev_erase_brush + &80)",

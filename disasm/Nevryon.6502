@@ -142,7 +142,7 @@ lev_spawn_col             = &7B00     \ 128-byte spawn-column schedule (sorted a
 lev_spawn_attr            = &7B80     \ 128-byte spawn attribute table, parallel with lev_spawn_col. Bits 0..4 = enemy type / dispatch (→ enemy_type_dispatch), bits 5..6 = Y row (0 = &DF, 1 = &BF, 2 = &9F, 3 = &7F), bit 7 = vertical-flip flag (mirrors the sprite, used to pair ceiling-hanging and floor-rising decoration enemies).
 lev_explosion_4           = &7C00     \ 4×32 (128 B) — frame 4 of the 6-frame explosion. Same bytes accessible via lev_enemy_ptr_*[25].
 lev_explosion_5           = &7C80     \ 4×32 (128 B) — frame 5 of the 6-frame explosion. Same bytes accessible via lev_enemy_ptr_*[26].
-lev_erase_brush           = &7D00     \ 272 B of zeroes; sprite_plot from here erases a screen rectangle. Engine touches it at +&80, +&B0, +&100, +&102 for different brush dimensions.
+lev_erase_brush           = &7D00     \ Dual-purpose region. First &90 bytes are zeros — sprite_plot from `+0` or `+&80` reads inside the zero zone (e.g. W=4 H=&20 = 128 zero bytes) and erases a screen rect. Next &80 bytes (offsets &90..&10F) hold REAL sprite data: small projectile / dart sprites used by update_enemy_bullets. So `+&100` with W=3 H=2 isn't an erase — it draws the 12×2-px enemy bullet.
 \ Map tile-id streams. Each is 240 entries, one byte per scroll
 \ column, indexing into lev_tile_catalog. The upper band is
 \ rendered at char-row 0 with dir_flag = 0 (vertically mirrored,

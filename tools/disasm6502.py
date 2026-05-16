@@ -168,6 +168,12 @@ class DisasmConfig:
     # Value is a literal BeebAsm expression that replaces the raw value
     # (e.g. "LO(some_label)" / "HI(some_label)").
     immediate_overrides: dict[int, str] = field(default_factory=dict)
+    # Named arrays: a base address gets a label; references to bytes
+    # within `[base, base+length)` render as `<name> + N` in operands
+    # instead of getting separate auto-generated `data_XXXX` labels.
+    # Lets the source make clear that several STAs at consecutive
+    # addresses are all touching slots of one logical array.
+    array_labels: dict[int, tuple[str, int]] = field(default_factory=dict)
     # Reachability tracing entry points. When non-empty, the tool traces
     # code reachability from these addresses (following JMP/JSR/branches
     # until RTS/RTI/BRK) and synthesises code/data regions from the
@@ -201,6 +207,9 @@ class DisasmConfig:
             c.extern_labels[int(k, 0)] = v
         for k, v in j.get("immediate_overrides", {}).items():
             c.immediate_overrides[int(k, 0)] = v
+        for k, v in j.get("array_labels", {}).items():
+            # Each value is [name, length].
+            c.array_labels[int(k, 0)] = (v[0], int(v[1]))
         for e in j.get("entries", []):
             c.entries.append(int(e, 0) if isinstance(e, str) else e)
         c.emit_externs = j.get("emit_externs", True)
@@ -281,21 +290,32 @@ def disasm_code_region(data: bytes, base: int, region: Region,
                        immediate_overrides: dict[int, str] | None = None,
                        auto_extern_labels: dict[int, str] | None = None,
                        jsr_targets: set[int] | None = None,
-                       sm_operand_labels: dict[int, str] | None = None):
+                       sm_operand_labels: dict[int, str] | None = None,
+                       array_labels: dict[int, tuple[str, int]] | None = None):
     """Emit one code region. `sm_operand_labels` is a dict of
     (addr → name) for symbols whose address falls *inside* an
     instruction's operand bytes (i.e. self-modified-operand bytes).
     The matching `name = &addr` equate is emitted on the line
     immediately above the instruction whose operand it patches —
     not in a global block at the file head — so each self-mod
-    callsite carries its own annotation."""
+    callsite carries its own annotation.
+
+    `array_labels` is `{base_addr: (name, length)}`; references to
+    addresses inside any declared array render as `<name> + N`."""
     immediate_overrides = immediate_overrides or {}
     auto_extern_labels = auto_extern_labels or {}
     jsr_targets = jsr_targets or set()
     sm_operand_labels = sm_operand_labels or {}
+    array_labels = array_labels or {}
+    def array_lookup(addr: int) -> str | None:
+        for base_addr, (name, length) in array_labels.items():
+            if base_addr < addr < base_addr + length:
+                return f"{name} + {addr - base_addr}"
+        return None
     def lookup(addr: int):
         return (labels.get(addr) or extern_labels.get(addr)
-                or auto_extern_labels.get(addr))
+                or auto_extern_labels.get(addr)
+                or array_lookup(addr))
     pc = region.start
     while pc < region.end:
         # Emit pending label if this PC has one. Routine entries
@@ -700,9 +720,15 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
             auto_extern_labels=dict(cfg.auto_extern_labels),
             master_externs=dict(cfg.master_externs),
             immediate_overrides=dict(cfg.immediate_overrides),
+            array_labels=dict(cfg.array_labels),
             entries=cfg.entries,
             emit_externs=cfg.emit_externs,
         )
+        # Each array's base address gets the array name as its label
+        # (unless the user already named it). The disassembler will
+        # render references to interior bytes via array_lookup() below.
+        for base_addr, (name, _length) in cfg.array_labels.items():
+            cfg.labels.setdefault(base_addr, name)
 
         # Auto-label JMP/JSR/branch targets that fell inside reached code.
         # Track which labels are "routine entries" so the code emitter
@@ -746,15 +772,23 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
         # raw literal `&FFFF` rather than autopromoting it to a
         # symbol that pretends to reference real memory.
         SM_PLACEHOLDER = 0xFFFF
+        def in_array_interior(addr: int) -> bool:
+            """True if addr falls inside (but not at the base of) a
+            declared array. Such addresses resolve via array_lookup()
+            as `<name> + N` and must not get their own auto label."""
+            for base_addr, (_name, length) in cfg.array_labels.items():
+                if base_addr < addr < base_addr + length:
+                    return True
+            return False
         for addr in sorted(indexed_addrs):
-            if known(addr) or addr == SM_PLACEHOLDER:
+            if known(addr) or addr == SM_PLACEHOLDER or in_array_interior(addr):
                 continue
             if cfg.base <= addr < end_addr_now:
                 cfg.labels[addr] = f"tbl_{addr:04X}"
             else:
                 adopt_extern(addr, f"tbl_{addr:04X}")
         for addr in sorted(plain_addrs):
-            if known(addr) or addr == SM_PLACEHOLDER:
+            if known(addr) or addr == SM_PLACEHOLDER or in_array_interior(addr):
                 continue
             if cfg.base <= addr < end_addr_now:
                 cfg.labels[addr] = f"data_{addr:04X}"
@@ -902,7 +936,7 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
             disasm_code_region(data, cfg.base, r, cfg.labels, cfg.extern_labels,
                                cfg.comments, lines, cfg.immediate_overrides,
                                cfg.auto_extern_labels, jsr_targets,
-                               sm_operand_labels)
+                               sm_operand_labels, cfg.array_labels)
         else:
             disasm_data_region(data, cfg.base, r, cfg.labels, cfg.comments, lines)
         cursor = r.end

@@ -421,16 +421,16 @@ data_28D8        = * + 1
     JMP sprite_plot_xy
 
 .spawn_enemy_missile
-    LDA zp_get_ready_erase  \ Try to spawn a new enemy missile in one of the two slots (tbl_2B9A[0..1]). Validates enemy X position, copies enemy XY into the missile slot, sets direction (up if player_x >= enemy_x else down), and beeps via sfx_score_tick to mark launch.
+    LDA zp_get_ready_erase  \ Try to spawn a new enemy missile in one of the two slots (enemy_missile_x[0..1] == &FF = free). Called from CODE's enemy_type_dispatch for enemy_type &06. Validates the firer's enemy_x is in [&08, &25] (on-screen), copies enemy_x+2 / enemy_y into the missile slot, mirrors enemy_flip into enemy_missile_flip (controls vertical direction in step_enemy_missile), and sets enemy_missile_homing_dir from a player-X comparison: 1 if player_x+3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise (home leftward). Plays sfx_score_tick to mark the launch. The missile sprite is gfx_icon_08, a 4×6-px yellow-and-red rocket pointing vertically.
     CMP #&02
     BNE L2A3E
     STX scratch_28D4
     LDX #&00
-    LDA tbl_2B9A,X
+    LDA enemy_missile_x,X
     CMP #&FF
     BEQ L2A3F
     LDX #&01
-    LDA tbl_2B9A,X
+    LDA enemy_missile_x,X
     CMP #&FF
     BEQ L2A3F
     LDX scratch_28D4
@@ -447,36 +447,36 @@ data_28D8        = * + 1
     CLC
     ADC #&02
     LDX scratch_28D3
-    STA tbl_2B9A,X
+    STA enemy_missile_x,X
     LDX scratch_28D4
     LDA enemy_flip,X
     CMP #&01
     BEQ L2A6F
-    STA tbl_2B9E
+    STA enemy_missile_flip
     LDA enemy_y,X
     SEC
     SBC #&18
     JMP L2A7B
 .L2A6F
     LDX scratch_28D3
-    STA tbl_2B9E,X
+    STA enemy_missile_flip,X
     LDX scratch_28D4
     LDA enemy_y,X
 .L2A7B
     LDX scratch_28D3
-    STA tbl_2B9C,X
+    STA enemy_missile_y,X
     LDA #&00
-    STA tbl_2BA0,X
-    STA tbl_2BA2,X
+    STA enemy_missile_unused,X
+    STA enemy_missile_homing_dir,X
     LDA zp_player_x
     CLC
     ADC #&03
-    CMP tbl_2B9A,X
+    CMP enemy_missile_x,X
     BCS L2A96
     JMP L2A9B
 .L2A96
     LDA #&01
-    STA tbl_2BA2,X
+    STA enemy_missile_homing_dir,X
 .L2A9B
     JSR sfx_score_tick
 .L2A9E
@@ -484,14 +484,14 @@ data_28D8        = * + 1
     RTS
 
 .update_enemy_missiles
-    LDX #&00  \ Per-frame: step each of the two enemy missiles (at slots 0 and 1) then collision-check against the player. Slots with X=&FF are inactive.
-    LDA tbl_2B9A,X
+    LDX #&00  \ Per-frame: step each of the 2 enemy missiles (slots 0 and 1) then collision-check each against the player. Inactive slots (enemy_missile_x == &FF) are skipped.
+    LDA enemy_missile_x,X
     CMP #&FF
     BEQ L2AAE
     JSR step_enemy_missile
 .L2AAE
     LDX #&01
-    LDA tbl_2B9A,X
+    LDA enemy_missile_x,X
     CMP #&FF
     BEQ L2ABA
     JSR step_enemy_missile
@@ -502,9 +502,9 @@ data_28D8        = * + 1
     JMP missile_player_collide
 
 .step_enemy_missile
-    STX scratch_28D3  \ Move one enemy missile by 2 px (up or down per tbl_2BA2[X]) and redraw. Erases old position with lev_erase_brush, plots gfx_icon_08 at new position. Deactivates the slot when the missile leaves the playfield.
-    LDA tbl_2B9A,X
-    LDY tbl_2B9C,X
+    STX scratch_28D3  \ Step one enemy missile (X = slot index 0..1). Erases the old 1×6 position with lev_erase_brush+&80, then advances: horizontally by enemy_missile_homing_dir (1 = INC X by 1 → home rightward, else DEC X by 2 → home leftward), vertically by enemy_missile_flip (1 = Y+=2, else Y-=2). Bounds-checks the new (X, Y) against the playfield; out-of-bounds → mark slot inactive. Plots gfx_icon_08 (4×6-px rocket) at the new position.
+    LDA enemy_missile_x,X
+    LDY enemy_missile_y,X
     TAX
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
@@ -515,40 +515,40 @@ data_28D8        = * + 1
     LDY #&06
     JSR sprite_plot_xy
     LDX scratch_28D3
-    LDA tbl_2BA2,X
+    LDA enemy_missile_homing_dir,X
     CMP #&01
     BEQ L2AF5
-    DEC tbl_2B9A,X
-    DEC tbl_2B9A,X
+    DEC enemy_missile_x,X
+    DEC enemy_missile_x,X
     JMP L2AF8
 .L2AF5
-    INC tbl_2B9A,X
+    INC enemy_missile_x,X
 .L2AF8
-    LDA tbl_2B9A,X
+    LDA enemy_missile_x,X
     CMP #&03
     BCC L2B42
     CMP #&25
     BCS L2B42
-    LDA tbl_2B9E,X
+    LDA enemy_missile_flip,X
     CMP #&01
     BEQ L2B1A
     SEC
-    LDA tbl_2B9C,X
+    LDA enemy_missile_y,X
     SBC #&02
-    STA tbl_2B9C,X
+    STA enemy_missile_y,X
     CMP #&82
     BCC L2B42
     JMP L2B27
 .L2B1A
     CLC
-    LDA tbl_2B9C,X
+    LDA enemy_missile_y,X
     ADC #&02
-    STA tbl_2B9C,X
+    STA enemy_missile_y,X
     CMP #&C8
     BCS L2B42
 .L2B27
-    LDA tbl_2B9A,X
-    LDY tbl_2B9C,X
+    LDA enemy_missile_x,X
+    LDY enemy_missile_y,X
     TAX
     JSR calc_screen_addr
     LDA #LO(gfx_icon_08)
@@ -560,14 +560,14 @@ data_28D8        = * + 1
     JMP sprite_plot_xy
 .L2B42
     LDA #&FF
-    STA tbl_2B9A,X
+    STA enemy_missile_x,X
     RTS
 
 .missile_player_collide
-    STX scratch_28D3  \ Box-collision check between missile X (slot scratch_28D3) and player_x/player_y (rough &83/&84 bounds). On hit, jumps to the player-death path.
-    LDA tbl_2B9A,X
+    STX scratch_28D3  \ Box-collision check between one enemy_missile slot and the player. On hit, jumps to the player-death path (lose_a_life via the CODE-side handler).
+    LDA enemy_missile_x,X
     STA zp_test_x
-    LDA tbl_2B9C,X
+    LDA enemy_missile_y,X
     SEC
     SBC #&04
     STA zp_test_y
@@ -583,8 +583,8 @@ data_28D8        = * + 1
     SBC #&18
     CMP zp_test_y
     BCS L2B99
-    LDY tbl_2B9C,X
-    LDA tbl_2B9A,X
+    LDY enemy_missile_y,X
+    LDA enemy_missile_x,X
     TAX
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
@@ -596,24 +596,22 @@ data_28D8        = * + 1
     JSR sprite_plot_xy
     LDX scratch_28D3
     LDA #&FF
-    STA tbl_2B9A,X
+    STA enemy_missile_x,X
     JSR lose_a_life
     JSR sfx_explode
 .L2B99
     RTS
 
 \ ----- data &2B9A..&2BA4 -----
-.tbl_2B9A
-    EQUB &FF
-.data_2B9B
-    EQUB &FF
-.tbl_2B9C
+.enemy_missile_x
+    EQUB &FF, &FF
+.enemy_missile_y
     EQUB &EA, &EA
-.tbl_2B9E
+.enemy_missile_flip
     EQUB &EA, &EA
-.tbl_2BA0
+.enemy_missile_unused
     EQUB &EA, &EA
-.tbl_2BA2
+.enemy_missile_homing_dir
     EQUB &EA, &EA
 
 \ ----- code &2BA4..&2E8C -----
@@ -738,8 +736,8 @@ data_28D8        = * + 1
     JMP L2C72
 .L2CB8
     LDA #&FF
-    STA tbl_2B9A
-    STA data_2B9B
+    STA enemy_missile_x
+    STA enemy_missile_x + 1
     LDA #&03
     STA zp_get_ready_erase
     JSR intro_or_scoreboard

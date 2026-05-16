@@ -4,6 +4,108 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-17 — Session 16: enemy_bullet / enemy_missile pools, array_labels cfg
+
+Named the two enemy-projectile state arrays and the routines that
+spawn / move / collide them. Picked the bullet-vs-missile labels by
+looking at the actual sprite shapes:
+
+  - **bullet**: 3 byte-col × 2 line = 12 × 2 px. Mostly red, plain
+    dart shape, flies horizontally LEFTWARD at 2 px/frame. Sprite
+    bytes live INSIDE `lev_erase_brush` (which is partly zeros and
+    partly real sprite data — see below). Pool: 7 slots at
+    `enemy_bullet_x` / `enemy_bullet_y` (&1A8B / &1A92).
+  - **missile**: 1 byte-col × 6 lines = 4 × 6 px. Yellow body with
+    a red tail, recognisably rocket-shaped, flies VERTICALLY (±2
+    px/frame) and horizontally HOMES on the player. Sprite:
+    `gfx_icon_08` (GRAPHIX &3AB0). Pool: 2 slots at
+    `enemy_missile_x` / `enemy_missile_y` (&2B9A / &2B9C).
+
+So the two-pool naming is now:
+
+| Pool | Sprite | Motion | Pool size | Fired by enemy types |
+|-----:|--------|--------|----------:|---------------------|
+| `enemy_bullet` | 12×2 red dart | left, 2 px/frame | 7 | 4, 13 + hazards |
+| `enemy_missile` | 4×6 yellow-red rocket | ±2 py + ±1/2 px (player-homing) | 2 | 6 |
+
+Routines named:
+
+  - **enemy_bullet pool** (CODE):
+    `enqueue_enemy_bullet` (&22E5) — from `enemy_type_dispatch`.
+    `hazard_try_fire_bullet` (&1A99) — from `update_hazards`,
+    1/16 random chance with an 8-frame cooldown.
+    `enemy_bullet_alloc` (&1AB6) — shared 'find a free slot' tail.
+    `update_enemy_bullets` (&1D35) — per-frame mover.
+    `enemy_bullet_collide_player` (&1DA1) — per-bullet box-test.
+  - **enemy_missile pool** (CODE2, already named):
+    `spawn_enemy_missile` / `update_enemy_missiles` /
+    `step_enemy_missile` / `missile_player_collide`.
+
+### `lev_erase_brush` isn't entirely zeros
+
+While decoding the bullet sprite I noticed the brush is only zero
+for its first &90 bytes — the next 128 B (offsets &90..&10F) hold
+real sprite data: small projectile / dart sprites used by the
+bullet mover. Calls like `LDA #LO(lev_erase_brush + &100) / sprite_plot_xy
+W=3 H=2` are drawing the actual bullet, not erasing. Where the
+brush IS used for erasing (`+0` with W=4 H=&20 = 128 zeros), the
+read window stays inside the zero zone, so the existing erase calls
+weren't broken; only my understanding was. The Nevryon.6502
+preamble comment for `lev_erase_brush` should be updated to reflect
+this — TODO.
+
+### Disassembler: `array_labels` for "this is an N-byte array"
+
+Six explicit `STA data_1A8C` / `STA data_1A8D` / ... lines in the
+per-level init at `&1F8E` were getting auto-promoted to separate
+`data_XXXX` labels for each interior byte, hiding the fact that
+they were initialising slots 1..6 of one logical array. Added a
+cfg.json field `array_labels`:
+
+```json
+"array_labels": {
+  "0x1A8B": ["enemy_bullet_x", 7],
+  "0x1A92": ["enemy_bullet_y", 7]
+}
+```
+
+Effect:
+  - The base address `&1A8B` gets the label `enemy_bullet_x` (added
+    to `cfg.labels` if not already named).
+  - Addresses `&1A8C..&1A91` are no longer auto-promoted to
+    `data_XXXX` labels (the auto-promote pass skips array
+    interiors).
+  - Operands referring to those interior bytes render as
+    `enemy_bullet_x + 1` ... `+ 6` via a new `array_lookup()`
+    resolver in `disasm_code_region`.
+
+Result: the init that used to look like 6 unrelated STAs to
+`data_1A8C..data_1A91` now reads:
+
+```asm
+LDA #&FF
+STA enemy_bullet_x
+STA enemy_bullet_x + 1
+STA enemy_bullet_x + 2
+STA enemy_bullet_x + 3
+STA enemy_bullet_x + 5
+STA enemy_bullet_x + 6
+STA enemy_bullet_x + 4
+```
+
+Applied to both CODE (`enemy_bullet_x/_y`, 7 slots each) and CODE2
+(`enemy_missile_x/_y/_flip/_unused/_homing_dir`, 2 slots each).
+
+### Next
+
+  - Update Nevryon.6502 preamble comment for `lev_erase_brush` (the
+    "272 B of zeroes" claim is wrong — first &90 bytes are zero,
+    rest are bullet / dart sprite data).
+  - The 91 B trailing data at `&49A5-&49FF` after `irq_install` is
+    still undecoded.
+
+---
+
 ## 2026-05-17 — Session 15: enemy_type_dispatch path + multi-line cfg comments
 
 Walked the per-frame enemy update from `spawn_check_step` through

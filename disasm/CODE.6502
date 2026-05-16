@@ -1321,7 +1321,7 @@ scroll_upper_dst_hi = * + 2
     JMP OSWRCH
 
 .check_player_collisions
-    LDX #&09  \ Per-frame player collision check. Two loops: (a) X=8..1 over the dangerous-object slots at tbl_1A55/tbl_1A60/tbl_1A6B — for any slot whose tbl_1A6B value is in 1..9 (active), test the player against a 6×&18 bounding box; on hit, mark the slot &0A (expired) and JSR lose_a_life. (b) X=0..7 over the enemy slots (enemy_x, enemy_y, enemy_type < &14) — same test. Each hit triggers a `OSWRCH &07` (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be a short non-musical blip used as the in-game collision sound).
+    LDX #&09  \ Per-frame player collision check. Two loops: (a) X=8..1 over the hazard slots at hazard_x/_y/_state — for any slot whose hazard_state is in 1..9 (active), test the player against a 6×&18 bounding box; on hit, mark the slot &0A (expired) and JSR lose_a_life. (b) X=0..7 over the enemy slots (enemy_x, enemy_y, enemy_type < &14) — same test. Each hit triggers a `OSWRCH &07` (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be a short non-musical blip used as the in-game collision sound).
 .L198D
     DEX
     BNE L1993
@@ -1471,26 +1471,14 @@ scroll_upper_dst_hi = * + 2
 .tbl_1A81
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA
-.tbl_1A8B
-    EQUB &FF
-.data_1A8C
-    EQUB &FF
-.data_1A8D
-    EQUB &FF
-.data_1A8E
-    EQUB &FF
-.data_1A8F
-    EQUB &FF
-.data_1A90
-    EQUB &FF
-.data_1A91
-    EQUB &FF
-.tbl_1A92
+.enemy_bullet_x
+    EQUB &FF, &FF, &FF, &FF, &FF, &FF, &FF
+.enemy_bullet_y
     EQUB &00, &00, &00, &00, &00, &00, &00
 
 \ ----- code &1A99..&1C12 -----
-.L1A99
-    JSR lfsr_random
+.hazard_try_fire_bullet
+    JSR lfsr_random  \ Hazard 'try to fire a bullet' hook — called from update_hazards after plotting each active hazard slot. Random chance (rndval32 == 2 → 1/16) gates each call; further requires the hazard to be near the left edge (hazard_x < &10), the global cooldown zp_7E to be 0, and a free slot in enemy_bullet_x[4..1]. On success: stores hazard_x+2 / hazard_y-8 into the chosen slot, sets zp_7E = 8 (8-frame cooldown), plays sfx_hit_lo. Shares the enemy_bullet_x/_y pool with enqueue_enemy_bullet — hazards and enemies fire the same bullet sprite.
     LDA rndval32
     CMP #&02
     BEQ L1AA4
@@ -1505,12 +1493,13 @@ scroll_upper_dst_hi = * + 2
 .L1AAF
     LDA zp_7E
     CMP #&00
-    BEQ L1AB6
+    BEQ enemy_bullet_alloc
     RTS
-.L1AB6
+
+.enemy_bullet_alloc
     LDX #&04
 .L1AB8
-    LDA tbl_1A8B,X
+    LDA enemy_bullet_x,X
     CMP #&FF
     BEQ L1AC3
     DEX
@@ -1523,13 +1512,13 @@ scroll_upper_dst_hi = * + 2
     CLC
     ADC #&02
     LDX data_16F6
-    STA tbl_1A8B,X
+    STA enemy_bullet_x,X
     LDX data_16F5
     LDA hazard_y,X
     SEC
     SBC #&08
     LDX data_16F6
-    STA tbl_1A92,X
+    STA enemy_bullet_y,X
     LDA #&08
     STA zp_7E
     JMP sfx_hit_lo
@@ -1541,7 +1530,7 @@ scroll_upper_dst_hi = * + 2
     BNE L1AF8
     DEX
     BNE L1AED
-    JMP L1D35
+    JMP update_enemy_bullets
 .L1AF8
     INC zp_frame_progress
     INC zp_frame_progress
@@ -1602,13 +1591,13 @@ scroll_upper_dst_hi = * + 2
     LDX #&04
     LDY #&18
     JSR sprite_plot_xy
-    JSR L1A99
+    JSR hazard_try_fire_bullet
     LDX data_16F5
     DEX
     BEQ L1B84
     JMP L1AED
 .L1B84
-    JMP L1D35
+    JMP update_enemy_bullets
 
 .L1B87
     LDA tbl_1A81,X
@@ -1842,16 +1831,17 @@ L1C21            = * + 1
     JSR L25D7
     INC data_25A0
     RTS
-.L1D35
-    LDX #&06
+
+.update_enemy_bullets
+    LDX #&06  \ Per-frame mover for the 6-slot enemy_bullet pool. For each active slot (enemy_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00, or new X <= 1) or re-plot the 12×2-px red dart at the new position. Each active slot then runs enemy_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global hazard-fire cooldown zp_7E.
 .L1D37
-    LDA tbl_1A8B,X
+    LDA enemy_bullet_x,X
     CMP #&FF
     BEQ L1D94
-    LDY tbl_1A92,X
-    DEC tbl_1A8B,X
-    DEC tbl_1A8B,X
-    LDA tbl_1A8B,X
+    LDY enemy_bullet_y,X
+    DEC enemy_bullet_x,X
+    DEC enemy_bullet_x,X
+    LDA enemy_bullet_x,X
     STX data_16F5
     TAX
     CMP #&27
@@ -1861,7 +1851,7 @@ L1C21            = * + 1
     JSR calc_screen_addr
     LDX data_16F5
     LDA #&FF
-    STA tbl_1A8B,X
+    STA enemy_bullet_x,X
     LDX #&02
     LDY #&02
     LDA #LO(lev_erase_brush + &102)
@@ -1886,7 +1876,7 @@ L1C21            = * + 1
     JSR sprite_plot_xy
     LDX data_16F5
 .L1D94
-    JSR L1DA1
+    JSR enemy_bullet_collide_player
     DEX
     BNE L1D37
     LDA zp_7E
@@ -1895,10 +1885,10 @@ L1C21            = * + 1
 .L1DA0
     RTS
 
-.L1DA1
-    LDA tbl_1A8B,X
+.enemy_bullet_collide_player
+    LDA enemy_bullet_x,X  \ Box-collision test for one enemy_bullet against the player. Hit window: player_x in [bullet_x, bullet_x+5] AND player_y in [bullet_y, bullet_y+&10]. On hit: erase the 2×2 bullet trail with lev_erase_brush+&102, mark the slot inactive (&FF), and fall through into lose_a_life.
     STA zp_test_x
-    LDA tbl_1A92,X
+    LDA enemy_bullet_y,X
     STA zp_test_y
     LDA zp_player_x
     CMP zp_test_x
@@ -1921,8 +1911,8 @@ L1C21            = * + 1
     BCC L1DCB
     RTS
 .L1DCB
-    LDY tbl_1A92,X
-    LDA tbl_1A8B,X
+    LDY enemy_bullet_y,X
+    LDA enemy_bullet_x,X
     TAX
     JSR calc_screen_addr
     LDX #&02
@@ -1934,7 +1924,7 @@ L1C21            = * + 1
     JSR sprite_plot_xy
     LDX data_16F5
     LDA #&FF
-    STA tbl_1A8B,X
+    STA enemy_bullet_x,X
 
 .lose_a_life
     STX data_16F5  \ Lose-a-life handler. Plays OSWRCH 7 (the redefined BBC bell — see check_player_collisions). Toggles data_1E46 (0↔1) and decrements data_2050 on every other call (the two-step decrement controls a two-tone blink effect on the lives icon). Redraws the current lives indicator at row &5F using gfx_icon_03 / &48B8 depending on data_1E46.
@@ -2116,7 +2106,7 @@ L1C21            = * + 1
     RTS
 
 .init
-    LDA #&01  \ Per-level init. Sets player start position (&05, &C8), zero-fills the six 9-slot enemy state tables (enemy_x, enemy_y, enemy_type, enemy_hp, enemy_step, tbl_1A6B), clears single-byte state (player bullets, force-pod registers), sets fire_cooldown_reload=6 and the bullet-inactive markers at tbl_1A8B..&1A91=&FF.
+    LDA #&01  \ Per-level init. Sets player start position (&05, &C8), zero-fills the six 9-slot enemy state tables (enemy_x, enemy_y, enemy_type, enemy_hp, enemy_step, hazard_state), clears single-byte state (player bullets, force-pod registers), sets fire_cooldown_reload=6, and marks all 7 enemy_bullet_x slots inactive (&FF).
     STA data_1E46
     LDA #&05
     STA zp_player_x
@@ -2181,13 +2171,13 @@ L2016            = * + 1
     LDX data_16F5
     LDY #&00
     LDA #&FF
-    STA tbl_1A8B
-    STA data_1A8C
-    STA data_1A8D
-    STA data_1A8E
-    STA data_1A90
-    STA data_1A91
-    STA data_1A8F
+    STA enemy_bullet_x
+    STA enemy_bullet_x + 1
+    STA enemy_bullet_x + 2
+    STA enemy_bullet_x + 3
+    STA enemy_bullet_x + 5
+    STA enemy_bullet_x + 6
+    STA enemy_bullet_x + 4
     LDA zp_9A
     STA data_2050
     LDA #&00
@@ -2543,11 +2533,11 @@ data_2051        = * + 1
 
 .enemy_type_dispatch
     \ Enemy per-type IMMEDIATE action — called once per frame per active slot from update_enemy_slot, before frame-advance. Dispatch table by enemy_type[X]:
-    \ type &04 → enqueue_enemy_bullet (small enemy fires its bullet on every 4th-state-frame)
-    \ type &06 → spawn_enemy_missile (CODE2: drop a missile into the enemy-missile pool at &2C00)
+    \ type &04 → enqueue_enemy_bullet (small enemy fires a leftward 12×2-px red bullet; pool at enemy_bullet_x/_y, 7 slots)
+    \ type &06 → spawn_enemy_missile (CODE2: launch a vertical 4×6-px yellow-red rocket that horizontally homes on the player; pool at enemy_missile_x/_y, 2 slots)
     \ type &07 → forcefield_render (this slot IS a force-field — re-noise the strip every frame)
-    \ type &08 → spawn_flame (start the one-shot flame projectile; auto-mutates to type 9 on success)
-    \ type &13 → enqueue_enemy_bullet (same as type 4 — second enemy variant that fires)
+    \ type &08 → spawn_flame (start the one-shot 32×8-px flame projectile; auto-mutates to type 9 on success)
+    \ type &13 → enqueue_enemy_bullet (same as type 4 — second enemy variant that fires a bullet)
     \ else     → RTS (no per-frame action; the slot just gets drawn and frame-advanced).
     LDA enemy_type,X
     CMP #&04
@@ -2583,14 +2573,14 @@ data_2051        = * + 1
     RTS
 
 .enqueue_enemy_bullet
-    LDA zp_get_ready_erase  \ Enqueue an enemy bullet into the enemy-bullet pool — called from enemy_type_dispatch for enemy types &04 and &13. Scans tbl_1A8B[6..1] for a &FF (free) slot; on found, stores `enemy_x[firer] - 1` at tbl_1A8B[slot] (the bullet's X) and `enemy_y[firer] - &10` at tbl_1A92[slot] (the bullet's Y, lifted by 16 px). Plays sfx_fire. If the firer is already at enemy_x < &08 (almost off-screen left) the bullet is suppressed — there's not enough screen left for it to fly. The per-frame mover for these bullets is update_enemy_missiles in CODE2.
+    LDA zp_get_ready_erase  \ Enqueue an enemy bullet — called from enemy_type_dispatch for enemy types &04 and &13. Scans enemy_bullet_x[6..1] for a &FF (free) slot; on found, stores `enemy_x[firer] - 1` at enemy_bullet_x[slot] and `enemy_y[firer] - &10` at enemy_bullet_y[slot] (Y lifted by 16 px to fire from above the enemy). Plays sfx_fire. If the firer is already at enemy_x < &08 (almost off-screen left) the bullet is suppressed — there's not enough screen left for it to fly. Per-frame mover: update_enemy_bullets. The bullet sprite is a 12×2-px red dart (3-byte-col × 2-line block at lev_erase_brush+&100); the deactivation erase brush is at +&102.
     CMP #&02
     BEQ L22EC
     RTS
 .L22EC
     LDX #&06
 .L22EE
-    LDA tbl_1A8B,X
+    LDA enemy_bullet_x,X
     CMP #&FF
     BEQ L22FC
     DEX
@@ -2607,14 +2597,14 @@ data_2051        = * + 1
     RTS
 .L230D
     LDX data_16F6
-    STA tbl_1A8B,X
-    DEC tbl_1A8B,X
+    STA enemy_bullet_x,X
+    DEC enemy_bullet_x,X
     LDX data_16F5
     LDA enemy_y,X
     LDX data_16F6
     SEC
     SBC #&10
-    STA tbl_1A92,X
+    STA enemy_bullet_y,X
     JSR sfx_fire
     LDX data_16F5
     RTS
