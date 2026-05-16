@@ -110,7 +110,7 @@ ORG &1100
     JSR draw_title_screen
 
 .main_loop
-    JSR L13D1
+    JSR game_step
     LDA data_2051
     BNE L1114
     JMP game_over_or_continue
@@ -506,9 +506,9 @@ scroll_upper_dst_hi = * + 2
     STA zp_frame_progress
     RTS
 
-.L13D1
-    JSR L25AA
-    JSR L1712
+.game_step
+    JSR try_spawn_pickup  \ ONE COLUMN of game progress — called once per main_loop iteration. Does the per-tile-column setup (try_spawn_pickup, spawn_periodic_hazard, spawn_check_step, then computes the new right-edge tile sprite pointers `zp_tile_lower_hi/lo` and `zp_tile_upper_hi/lo` by indexing `lev_map_lower[zp_scroll_col]` / `lev_map_upper[zp_scroll_col]` into the tile catalog at &4E80, multiply-by-&80 via repeated ADC), bumps `zp_scroll_col` by 1 (with wrap from &F0+ back to &F0 = the end-of-map loop), checks the PAUSE key, then runs 4 sub-frames (`play_subframe` loop, gated on `zp_get_ready_erase` going 0→1→2→3→4). Each subframe scrolls the playfield by 4 px (so 4×4 = 16 px = one tile-cell per game_step call), updates enemies / hazards / missiles / pickups, draws score, reads input, and on even columns also bumps `zp_frame_progress` + draws the get_ready overlay. Returns early once `data_2051` (= lives left) drops to 0, which the caller `main_loop` immediately tests to go to game_over_or_continue.
+    JSR spawn_periodic_hazard
     JSR spawn_check_step
     LDX zp_scroll_col
     LDA lev_map_lower,X
@@ -520,17 +520,19 @@ scroll_upper_dst_hi = * + 2
     STA zp_tile_lower_lo
     LDA #&00
     STA zp_dest_x_lo
-.L13ED
+
+.tile_lower_ptr_calc
     INC zp_dest_x_lo
     LDA zp_tile_lower_lo
     CLC
     ADC #&80
     STA zp_tile_lower_lo
-    BNE L13FA
+    BNE tile_lower_ptr_advance
     INC zp_tile_lower_hi
-.L13FA
+
+.tile_lower_ptr_advance
     CPX zp_dest_x_lo
-    BNE L13ED
+    BNE tile_lower_ptr_calc
     LDX zp_scroll_col
     LDA lev_map_upper,X
     TAX
@@ -541,17 +543,19 @@ scroll_upper_dst_hi = * + 2
     STA zp_tile_upper_lo
     LDA #&00
     STA zp_dest_x_lo
-.L1411
+
+.tile_upper_ptr_calc
     INC zp_dest_x_lo
     LDA zp_tile_upper_lo
     CLC
     ADC #&80
     STA zp_tile_upper_lo
-    BNE L141E
+    BNE tile_upper_ptr_advance
     INC zp_tile_upper_hi
-.L141E
+
+.tile_upper_ptr_advance
     CPX zp_dest_x_lo
-    BNE L1411
+    BNE tile_upper_ptr_calc
     INC zp_scroll_col
     LDA zp_scroll_col
     CMP #&F1
@@ -566,9 +570,10 @@ scroll_upper_dst_hi = * + 2
 .L1438
     LDA #&00
     STA zp_get_ready_erase
-.L143C
-    LDA data_2051
-    BEQ L1477
+
+.play_subframe
+    LDA data_2051  \ Body of game_step's per-subframe inner loop. Runs once per BBC display frame (gated by frame_delay). 4 iterations are run per game_step (= per tile-column of horizontal scroll), producing the 4-frame soft-scroll animation between successive columns.
+    BEQ game_step_done
     JSR update_enemy_missiles
     JSR draw_score
     JSR force_pod_anim
@@ -580,19 +585,21 @@ scroll_upper_dst_hi = * + 2
     STX data_70FF
     INX
     STX zp_sprite_dir_flag
-    JSR L2693
+    JSR update_pickup
     JSR L15C4
     JSR read_input
     LDA zp_scroll_col
     AND #&01
-    BNE L1471
+    BNE play_subframe_tail
     INC zp_frame_progress
     JSR get_ready_overlay
-.L1471
+
+.play_subframe_tail
     LDA zp_get_ready_erase
     CMP #&04
-    BCC L143C
-.L1477
+    BCC play_subframe
+
+.game_step_done
     RTS
 
 .draw_player
@@ -992,8 +999,8 @@ scroll_upper_dst_hi = * + 2
     EQUB &EA, &EA
 
 \ ----- code &1712..&1A76 -----
-.L1712
-    LDA zp_scroll_col
+.spawn_periodic_hazard
+    LDA zp_scroll_col  \ Periodic background-hazard spawner — called once per game_step. Doesn't run after the map has wrapped (zp_scroll_col == &F0). Otherwise paces on zp_87 (sub-counter, 0..A): when zp_87 reaches &0A, wait for the hazard field to fully empty, then advance `zp_86` (pattern selector, cycles 1..6 wrapping back to 1 after 7) and pre-load the per-pattern parameters from the LUTs at tbl_16FB / tbl_1702 / tbl_1709. On the other 10 calls of each cycle, INC zp_87 and spawn one hazard into the first free slot: hazard_x = &25 (right edge), hazard_state and hazard_y set per pattern (patterns 5/6: state 3/5, Y random in [&97..&D7]; others: state 1, Y = &9A fixed).
     CMP #&F0
     BNE L1719
     RTS
@@ -2138,7 +2145,7 @@ L1C21            = * + 1
     BNE L1FB6
     STA tbl_1575
     STA data_1576
-    STA data_2692
+    STA pickup_state
     STA data_156F
     STA player_bullet_x
     STA data_16E7
@@ -2977,15 +2984,15 @@ data_2051        = * + 1
     EQUB &EA
 
 \ ----- code &25AA..&268F -----
-.L25AA
-    LDA data_25A0
+.try_spawn_pickup
+    LDA data_25A0  \ Try to start a power-up pickup. Triggered when data_25A0 (the kill-milestone counter — INC'd in check_bullet_hits at hazard-hit values 3/5/7) reaches &0A. Requires no pickup already active (pickup_state == 0) and `data_25A7 != 1` (some other gate, TODO). On success: stash player_y in pickup_y, set pickup_x = &27 (right edge col 39), pickup_state = 1 (animation start), play sfx_level_start.
     CMP #&0A
     BCS L25B2
     RTS
 .L25B2
     LDA #&00
     STA data_25A0
-    LDA data_2692
+    LDA pickup_state
     BEQ L25BD
     RTS
 .L25BD
@@ -2995,11 +3002,11 @@ data_2051        = * + 1
     RTS
 .L25C5
     LDA zp_player_y
-    STA data_2691
+    STA pickup_y
     LDA #&27
-    STA data_2690
+    STA pickup_x
     LDA #&01
-    STA data_2692
+    STA pickup_state
     JMP sfx_level_start
 
 .L25D7
@@ -3109,35 +3116,38 @@ data_2051        = * + 1
 \ ----- data &268F..&2693 -----
 .data_268F
     EQUB &EA
-.data_2690
+.pickup_x
+    \ Power-up pickup X coordinate (column). DEC'd by 1 each subframe of game_step (so the pickup drifts leftward 16 px/sec = 4 px per game_step). When it hits 0, update_pickup deactivates and erases. Initial value &27 (right edge) on spawn from try_spawn_pickup.
     EQUB &EA
-.data_2691
+.pickup_y
+    \ Power-up pickup Y coordinate (scanline) — captured from player_y at the moment try_spawn_pickup ran, then held constant for the lifetime of the pickup.
     EQUB &EA
-.data_2692
+.pickup_state
+    \ Power-up pickup state: 0 = inactive (slot free for a new spawn). Non-zero = active, with the value selecting the sprite frame for the flashing animation (2/6 → gfx_pickup_yellow, 3/5 → gfx_pickup_red, others → erase) — wraps at &0A back to 1.
     EQUB &EA
 
 \ ----- code &2693..&27E7 -----
-.L2693
-    LDA data_2692
+.update_pickup
+    LDA pickup_state  \ Per-subframe power-up pickup updater. Returns immediately if pickup_state == 0. Otherwise calls L275F (collision test?), conditionally advances state, DECs pickup_x (drifts the pickup leftward 1 px per subframe), and on pickup_x == 0 deactivates and erases. While alive, plots one of two sprites (`gfx_pickup_yellow` or `gfx_pickup_red`) keyed on the current pickup_state value (state 2/6 = yellow, 3/5 = red, 4 = ?, others = erase) — gives the pickup a flashing animation as it crosses the playfield.
     BNE L2699
     RTS
 .L2699
     JSR L275F
-    LDA data_2692
+    LDA pickup_state
     BNE L26A2
     RTS
 .L26A2
     LDA zp_7F
     CMP #&04
     BNE L26AB
-    INC data_2692
+    INC pickup_state
 .L26AB
-    DEC data_2690
-    LDA data_2690
+    DEC pickup_x
+    LDA pickup_x
     BNE L26CF
-    STA data_2692
+    STA pickup_state
     LDX #&00
-    LDY data_2691
+    LDY pickup_y
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
@@ -3147,12 +3157,12 @@ data_2051        = * + 1
     LDY #&10
     JMP sprite_plot_xy
 .L26CF
-    LDX data_2690
-    LDY data_2691
+    LDX pickup_x
+    LDY pickup_y
     JSR calc_screen_addr
     LDX #&03
     LDY #&10
-    LDA data_2692
+    LDA pickup_state
     CMP #&01
     BEQ L2737
     CMP #&02
@@ -3168,7 +3178,7 @@ data_2051        = * + 1
     CMP #&0A
     BCC L2737
     LDA #&01
-    STA data_2692
+    STA pickup_state
     JMP L2737
 .L2703
     LDA #LO(gfx_pickup_yellow)
@@ -3216,23 +3226,23 @@ data_2051        = * + 1
     LDX zp_player_x
     DEX
     TXA
-    CMP data_2690
+    CMP pickup_x
     BCS L275E
     ADC #&06
-    CMP data_2690
+    CMP pickup_x
     BCC L275E
     LDA zp_player_y
     CLC
     ADC #&04
-    CMP data_2691
+    CMP pickup_y
     BCC L275E
     SBC #&1C
-    CMP data_2691
+    CMP pickup_y
     BCS L275E
     LDA #&00
-    STA data_2692
-    LDX data_2690
-    LDY data_2691
+    STA pickup_state
+    LDX pickup_x
+    LDY pickup_y
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo

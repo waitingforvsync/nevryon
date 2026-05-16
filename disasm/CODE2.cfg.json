@@ -94,7 +94,7 @@
     "0x2800": "Single-tone shot/fire sound effect — tail-call into OSWORD &07 with param block at sfx_fire_params.",
     "0x2811": "Single-tone hit sound effect — tail-call into OSWORD &07 with param block at sfx_hit_lo_params.",
     "0x2822": "Explosion sound effect — plays two queued OSWORD &07 SOUNDs back-to-back (noise on ch 0 then tone on ch 1).",
-    "0x28D7": "Per-frame: if &25A5 == 1, animate the force-pod (chomping ball at &2972/&2973). Steps a 6-frame cycle (&3860..&38D8) and watches for a key to dismiss.",
+    "0x28D7": "Per-subframe (from game_step's play_subframe): if force_pod_state == 1, animate the floating force-pod power-up — a chomping ball drawn at (force_pod_x, force_pod_y). Erases the previous frame with lev_erase_brush+&80 (2 byte-col × &0C lines), then plots one of 6 frames at gfx_ball_frame0..5 (&3860..&38D8 in GRAPHIX, each 2×&0C = &18 bytes). Frame selection is a multiply-by-&18 unrolled inline: `LDA #LO(gfx_ball_frame0 - &18); CLC; LDX force_pod_frame; loop ADC #&18 / DEX / BNE` — so frame N=1 gives LO = &48 + &18 = &60 (= gfx_ball_frame0), frame N=2 gives &78 (= gfx_ball_frame1), ..., frame N=6 gives &D8 (= gfx_ball_frame5). HI is hard-wired to &38. After plot, force_pod_frame INCs (wraps 7→1). Also checks (a) OSBYTE &81 / -1 INKEY for any key press, and (b) a box-collision against the player ship — either condition dismisses the pod (jumps to L299F, presumably to collect or hide).",
     "0x29E7": "Draw 6-digit score at char-col 9 row &5F. Loops X=0..5 reading score_d* (&2A02..&2A07) and calls draw_score_digit per digit.",
     "0x2A08": "Draw one score digit. A=digit value (0..9), X=column offset; selects gfx_digit_N (= &3A60 + 8*N) and plots a 4x8 sprite.",
     "0x2A20": "Try to spawn a new enemy missile in one of the two slots (enemy_missile_x[0..1] == &FF = free). Called from CODE's enemy_type_dispatch for enemy_type &06. Validates the firer's enemy_x is in [&08, &25] (on-screen), copies enemy_x+2 / enemy_y into the missile slot, mirrors enemy_flip into enemy_missile_flip (controls vertical direction in step_enemy_missile), and sets enemy_missile_homing_dir from a player-X comparison: 1 if player_x+3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise (home leftward). Plays sfx_score_tick to mark the launch. The missile sprite is gfx_icon_08, a 4×6-px yellow-and-red rocket pointing vertically.",
@@ -202,6 +202,8 @@
   "immediate_overrides": {
     "0x28E8": "LO(lev_erase_brush + &80)",
     "0x28ED": "HI(lev_erase_brush + &80)",
+    "0x2948": "LO(gfx_ball_frame0 - &18)",
+    "0x2956": "HI(gfx_ball_frame0 - &18)",
     "0x2AD1": "LO(lev_erase_brush + &80)",
     "0x2AD6": "HI(lev_erase_brush + &80)",
     "0x2B31": "LO(gfx_icon_08)",

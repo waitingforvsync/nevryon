@@ -230,7 +230,7 @@ ORG &2800
 \ ----- code &28D7..&2973 -----
 .force_pod_anim
 data_28D8        = * + 1
-    LDA force_pod_state  \ Per-frame: if &25A5 == 1, animate the force-pod (chomping ball at &2972/&2973). Steps a 6-frame cycle (&3860..&38D8) and watches for a key to dismiss.
+    LDA force_pod_state  \ Per-subframe (from game_step's play_subframe): if force_pod_state == 1, animate the floating force-pod power-up — a chomping ball drawn at (force_pod_x, force_pod_y). Erases the previous frame with lev_erase_brush+&80 (2 byte-col × &0C lines), then plots one of 6 frames at gfx_ball_frame0..5 (&3860..&38D8 in GRAPHIX, each 2×&0C = &18 bytes). Frame selection is a multiply-by-&18 unrolled inline: `LDA #LO(gfx_ball_frame0 - &18); CLC; LDX force_pod_frame; loop ADC #&18 / DEX / BNE` — so frame N=1 gives LO = &48 + &18 = &60 (= gfx_ball_frame0), frame N=2 gives &78 (= gfx_ball_frame1), ..., frame N=6 gives &D8 (= gfx_ball_frame5). HI is hard-wired to &38. After plot, force_pod_frame INCs (wraps 7→1). Also checks (a) OSBYTE &81 / -1 INKEY for any key press, and (b) a box-collision against the player ship — either condition dismisses the pod (jumps to L299F, presumably to collect or hide).
     CMP #&01
     BEQ L28DF
     RTS
@@ -285,7 +285,7 @@ data_28D8        = * + 1
     LDX force_pod_x
     LDY force_pod_y
     JSR calc_screen_addr
-    LDA #&48
+    LDA #LO(gfx_ball_frame0 - &18)
     CLC
     LDX force_pod_frame
 .L294E
@@ -293,7 +293,7 @@ data_28D8        = * + 1
     DEX
     BNE L294E
     STA sprite_src_lo
-    LDA #&38
+    LDA #HI(gfx_ball_frame0 - &18)
     STA sprite_src_hi
     LDX #&02
     LDY #&0C

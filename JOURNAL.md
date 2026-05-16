@@ -4,6 +4,105 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-17 — Session 17: game_step decoded; force_pod_anim sprite ref fixed
+
+### `game_step` (was `L13D1`)
+
+The mystery routine called once per `main_loop` iteration turned out
+to be the per-tile-column game tick. Each call does:
+
+1. **Once-per-column setup**:
+   - `try_spawn_pickup` (was `L25AA`) — kill-milestone hook; when
+     `data_25A0` reaches &0A spawns a flying power-up at the right
+     edge at the player's current Y.
+   - `spawn_periodic_hazard` (was `L1712`) — drops one hazard per
+     call from the current of 6 cycling patterns (`zp_86`); patterns
+     5/6 use a random Y, others use Y = &9A.
+   - `spawn_check_step` — drain the spawn table for this column.
+   - Compute the right-edge tile sprite pointers: read
+     `lev_map_lower[zp_scroll_col]` / `lev_map_upper[zp_scroll_col]`,
+     multiply by &80 (via the new `tile_lower_ptr_calc` /
+     `tile_upper_ptr_calc` ADC loops), store in
+     `zp_tile_lower_hi/lo` / `zp_tile_upper_hi/lo`.
+   - INC `zp_scroll_col`; wrap &F1 → &F0 at end-of-map (so
+     post-wrap calls reuse the same scroll column forever).
+   - PAUSE key check (`pause_game` on press).
+
+2. **4-iteration `play_subframe` loop** (gated on
+   `zp_get_ready_erase < 4`): per subframe runs
+   `update_enemy_missiles` + `draw_score` + `force_pod_anim` +
+   `frame_delay` + `update_hazards` + `scroll_step` (= scroll the
+   playfield 4 px + `update_enemies`) + `update_pickup` + `L15C4`
+   (TODO) + `read_input`, and on even columns also
+   `INC zp_frame_progress` + `get_ready_overlay`.
+
+3. Returns when `data_2051` (lives) → 0 OR after 4 subframes.
+
+Net effect per call: 4 subframes × 4 px = 16 px of scroll (= one
+tile-cell width) AND `zp_scroll_col` advances by 1. 240 columns × 16
+px = 3840 px of horizontal scroll per scenario.
+
+Sub-labels named: `tile_lower_ptr_calc` / `_advance`,
+`tile_upper_ptr_calc` / `_advance`, `play_subframe`,
+`play_subframe_tail`, `game_step_done`.
+
+### Power-up pickup state at &2690..&2692
+
+Three previously-anonymous bytes turn out to be the pickup that
+`try_spawn_pickup` drops onto the playfield: `pickup_x` (&2690),
+`pickup_y` (&2691), `pickup_state` (&2692). `update_pickup` runs
+per subframe to drift it leftward 1 px/frame and flash through
+`gfx_pickup_yellow` / `gfx_pickup_red` sprites until it's caught
+or off-screen.
+
+### `force_pod_anim` sprite reference
+
+The two `LDA #&48` / `LDA #&38` immediates at &2948 / &2956 were
+just raw hex and the inline `ADC #&18 / DEX / BNE` next to them
+made it unclear what was being indexed. They're computing the
+sprite source via:
+
+```
+LDA #LO(gfx_ball_frame0 - &18)   ; = &48
+CLC
+LDX force_pod_frame              ; 1..6
+.L294E
+    ADC #&18                      ; A += &18
+    DEX
+    BNE L294E                     ; loop X times
+STA sprite_src_lo                 ; A = &60..&D8
+LDA #HI(gfx_ball_frame0 - &18)   ; = &38
+STA sprite_src_hi
+```
+
+So frame N=1..6 picks LO = `&60 + (N-1) * &18`, giving sprite
+addresses `&3860..&38D8` = `gfx_ball_frame0..5`. Added two
+`immediate_overrides` so the disasm reads `LDA #LO(gfx_ball_frame0
+- &18)` / `LDA #HI(gfx_ball_frame0 - &18)` — the magic numbers are
+gone and the math is self-documenting. The `- &18` makes clear that
+the base is one sprite before frame 0 (so the unrolled multiply
+indexes from 1).
+
+Also clarified the `force_pod_anim` comment: it's the chomping-ball
+**floating power-up** sprite (not the orbiting pod — that's
+`draw_player_pod` with `gfx_pod_frame0..2`). The routine erases the
+previous frame, plots the next, INCs `force_pod_frame` (wraps
+7→1), and dismisses if the player's box-collides with it OR any
+key is pressed.
+
+### Next
+
+  - `L15C4` (called from `play_subframe`) — looks like it animates
+    two player-side special-projectile slots tracked via
+    `data_156F`/`1570`/`1571`/`1572`/`tbl_1575`/`data_1576`. Needs
+    its own trace.
+  - Trace `L275F` (called from `update_pickup`) — probably the
+    player-pickup collision test.
+  - The 91 B trailing data at `&49A5-&49FF` after `irq_install` is
+    still undecoded.
+
+---
+
 ## 2026-05-17 — Session 16: enemy_bullet / enemy_missile pools, array_labels cfg
 
 Named the two enemy-projectile state arrays and the routines that
