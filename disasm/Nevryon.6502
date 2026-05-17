@@ -76,12 +76,12 @@ irq1v_hi                  = &0205
 \ ship, player explosion) are not given a constant — they're
 \ scalars with no slot index.
 
-n_enemies                 = 8     \ Enemy slots, indexed 0..n_enemies-1. update_enemies iterates 0..7 (CPX #n_enemies), spawn_check_step round-robins via zp_7C.
-n_hazards                 = 8     \ Hazard slots, indexed 1..n_hazards. Iterators are predec loops (LDX #n_hazards / DEX / BNE), so slot 0 is unused. Shares the enemy_x/_y/_type/_hp/_step backing arrays with the enemies — hazards live at indices 1..8, enemies at 0..7, union 0..8 = n_state_slots wide.
-n_state_slots             = 9     \ Width of the combined enemy+hazard backing arrays (enemy_x at &2052 through hazard_state at &208A, each 9 bytes). init clears the union of [0..n_enemies-1] ∪ [1..n_hazards] = [0..8].
-n_enemy_bullets           = 6     \ Enemy bullet slots scanned by update_enemy_bullets and enqueue_enemy_bullet — indexed 1..n_enemy_bullets (predec loop). The backing arrays enemy_bullet_x/_y at &1A8B/&1A92 are 7 bytes wide; slot 0 is initialised to &FF but never used by either routine.
-n_hazard_bullets          = 4     \ Hazards (via enemy_bullet_alloc) only fire into the first n_hazard_bullets slots of the shared enemy_bullet pool — indices 1..4. Enemy-type-&04/&13 fires can use the full 1..6 range, so slots 5..6 are effectively reserved for enemies.
-n_enemy_missiles          = 2     \ Enemy missile slots, indexed 0..n_enemy_missiles-1 (no loop — hard-coded LDX #&00 / LDX #&01 in update_enemy_missiles).
+n_hazards                 = 8     \ Hazard slots, indexed 0..n_hazards-1. update_hazards iterates 0..7 (CPX #n_hazards), spawn_check_step round-robins via zp_7C.
+n_enemies                 = 8     \ Enemy slots, indexed 1..n_enemies. Iterators are predec loops (LDX #n_enemies / DEX / BNE), so slot 0 is unused. Shares the hazard_x/_y/_type/_hp/_step backing arrays with the hazards — enemies live at indices 1..8, hazards at 0..7, union 0..8 = n_state_slots wide.
+n_state_slots             = 9     \ Width of the combined hazard+enemy backing arrays (hazard_x at &2052 through enemy_state at &208A, each 9 bytes). init clears the union of [0..n_hazards-1] ∪ [1..n_enemies] = [0..8].
+n_hazard_bullets           = 6     \ Hazard bullet slots scanned by update_hazard_bullets and enqueue_hazard_bullet — indexed 1..n_hazard_bullets (predec loop). The backing arrays hazard_bullet_x/_y at &1A8B/&1A92 are 7 bytes wide; slot 0 is initialised to &FF but never used by either routine.
+n_enemy_bullets          = 4     \ Enemies (via hazard_bullet_alloc) only fire into the first n_enemy_bullets slots of the shared hazard_bullet pool — indices 1..4. Hazard-type-&04/&13 fires can use the full 1..6 range, so slots 5..6 are effectively reserved for hazards.
+n_hazard_missiles          = 2     \ Hazard missile slots, indexed 0..n_hazard_missiles-1 (no loop — hard-coded LDX #&00 / LDX #&01 in update_hazard_missiles).
 n_player_bullets          = 6     \ Player bullet slots, indexed 1..n_player_bullets. update_bullets predec-loops over all 6; on_fire_pressed only scans 1..n_player_fire_slots so the upper 2 slots (5,6) are reserved for the force-pod's twin shot.
 n_player_fire_slots       = 4     \ Number of in-flight bullets the fire button can put on screen. on_fire_pressed scans player_bullet_x[n_player_fire_slots..1] for a free slot.
 
@@ -110,7 +110,7 @@ n_player_fire_slots       = 4     \ Number of in-flight bullets the fire button 
 \   hazard_NN   (N=0..13)    14 per-stage hazard sprites — the
 \                            larger stationary threats (gun towers,
 \                            tanks, etc.). 4×32 (128 B); indexed
-\                            via lev_enemy_ptr_* slots 1..14.
+\                            via lev_hazard_ptr_* slots 1..14.
 \   player_sprite            6×22 (132 B) — the player ship.
 
 \ LEVD1 — per-scenario explosion + enemy + player + tile catalog
@@ -120,10 +120,10 @@ lev_explosion_1           = &4A80
 lev_explosion_2           = &4B00
 lev_explosion_3           = &4B80
 \ &4C00..&4C1F            \ 32 B zero pad
-lev_enemy_hit_1           = &4C20     \ 4×24 (96 B) — first of 3 enemy hit/destruction frames (state machine in L1BE3)
+lev_enemy_hit_1           = &4C20     \ 4×24 (96 B) — first of 3 hazard hit/destruction frames (state machine in L1BE3)
 lev_enemy_hit_2           = &4C68
 lev_enemy_hit_3           = &4CB0
-lev_enemy_0               = &4D00     \ 4×24 (96 B) — first of 4 normal enemy frames (state machine in L1BE3)
+lev_enemy_0               = &4D00     \ 4×24 (96 B) — first of 4 normal hazard frames (state machine in L1BE3)
 lev_enemy_1               = &4D48
 \ &4DA8..&4DAF            \ 8 B zero pad
 lev_enemy_2               = &4DB0
@@ -132,9 +132,9 @@ lev_enemy_3               = &4E10
 lev_player_sprite         = &4E80     \ 6×22 (132 B) — player ship; last 4 bytes overlap tile_0's first 4 bytes
 lev_tile_catalog          = &4F00     \ 18 tile slots × 4×32 (128 B each); tile N at lev_tile_catalog + N*&80
 
-\ LEVD2 / LEVD3 — per-stage hazards, spawns, explosion-tail, map tile-id streams
+\ LEVD2 / LEVD3 — per-stage enemies, spawns, explosion-tail, map tile-id streams
 \ (loaded at &7380, length &C80 = 3200 B for LEVD2 and 4.LEVD3; &880 = 2176 B for 1-3.LEVD3 which overwrites only the lower half)
-lev_hazard_0              = &7380     \ 4×32 (128 B) — first of 14 hazard sprites (gun towers, tanks, etc.). Accessible via lev_enemy_ptr_lo/hi[1..14].
+lev_hazard_0              = &7380     \ 4×32 (128 B) — first of 14 hazard sprites (gun towers, tanks, etc.). Accessible via lev_hazard_ptr_lo/hi[1..14].
 lev_hazard_1              = &7400
 lev_hazard_2              = &7480
 lev_hazard_3              = &7500
@@ -148,18 +148,18 @@ lev_hazard_10             = &7880
 lev_hazard_11             = &7900
 lev_hazard_12             = &7980
 lev_hazard_13             = &7A00
-lev_enemy_ptr_lo          = &7A80     \ 32-slot enemy sprite-pointer table (LO byte). Indexed by enemy attribute's "type" field (bits 0..4). Slots 1..14 point at lev_hazard_0..13; slots 15/16/19 point into $.GRAPHIX (shared cross-scenario); slots 17/18 point into lev_tile_catalog (reused tile bytes as enemy sprites); slots 21..26 are the 6 explosion-frame source pointers (see lev_explosion_ptr_lo below); slots 0/27 = lev_erase_brush; 20, 28..31 unused (&0000).
-lev_enemy_ptr_hi          = &7AC0     \ 32-slot enemy sprite-pointer table (HI byte). Paired with lev_enemy_ptr_lo.
-\ Slots 21..26 of the enemy pointer table double as the 6 source
+lev_hazard_ptr_lo          = &7A80     \ 32-slot hazard sprite-pointer table (LO byte). Indexed by hazard attribute's "type" field (bits 0..4). Slots 1..14 point at lev_hazard_0..13; slots 15/16/19 point into $.GRAPHIX (shared cross-scenario); slots 17/18 point into lev_tile_catalog (reused tile bytes as hazard sprites); slots 21..26 are the 6 explosion-frame source pointers (see lev_explosion_ptr_lo below); slots 0/27 = lev_erase_brush; 20, 28..31 unused (&0000).
+lev_hazard_ptr_hi          = &7AC0     \ 32-slot hazard sprite-pointer table (HI byte). Paired with lev_hazard_ptr_lo.
+\ Slots 21..26 of the hazard pointer table double as the 6 source
 \ pointers for the explosion animation. The two names refer to the
 \ same physical bytes — lev_explosion_ptr_* is just an alias of the
-\ tail of lev_enemy_ptr_*.
-lev_explosion_ptr_lo      = &7A95     \ = lev_enemy_ptr_lo + &15 (slots 21..26)
-lev_explosion_ptr_hi      = &7AD5     \ = lev_enemy_ptr_hi + &15
+\ tail of lev_hazard_ptr_*.
+lev_explosion_ptr_lo      = &7A95     \ = lev_hazard_ptr_lo + &15 (slots 21..26)
+lev_explosion_ptr_hi      = &7AD5     \ = lev_hazard_ptr_hi + &15
 lev_spawn_col             = &7B00     \ 128-byte spawn-column schedule (sorted ascending; &FF = end-of-list)
-lev_spawn_attr            = &7B80     \ 128-byte spawn attribute table, parallel with lev_spawn_col. Bits 0..4 = enemy type / dispatch (→ enemy_type_dispatch), bits 5..6 = Y row (0 = &DF, 1 = &BF, 2 = &9F, 3 = &7F), bit 7 = vertical-flip flag (mirrors the sprite, used to pair ceiling-hanging and floor-rising decoration enemies).
-lev_explosion_4           = &7C00     \ 4×32 (128 B) — frame 4 of the 6-frame explosion. Same bytes accessible via lev_enemy_ptr_*[25].
-lev_explosion_5           = &7C80     \ 4×32 (128 B) — frame 5 of the 6-frame explosion. Same bytes accessible via lev_enemy_ptr_*[26].
+lev_spawn_attr            = &7B80     \ 128-byte spawn attribute table, parallel with lev_spawn_col. Bits 0..4 = hazard type / dispatch (→ hazard_type_dispatch), bits 5..6 = Y row (0 = &DF, 1 = &BF, 2 = &9F, 3 = &7F), bit 7 = vertical-flip flag (mirrors the sprite, used to pair ceiling-hanging and floor-rising decoration hazards).
+lev_explosion_4           = &7C00     \ 4×32 (128 B) — frame 4 of the 6-frame explosion. Same bytes accessible via lev_hazard_ptr_*[25].
+lev_explosion_5           = &7C80     \ 4×32 (128 B) — frame 5 of the 6-frame explosion. Same bytes accessible via lev_hazard_ptr_*[26].
 lev_erase_brush           = &7D00     \ 272 bytes of zeros (verified across all 4 LEVD2 files). Used as an erase brush by the sprite blitter: 29 call sites read W×H bytes column-major from `lev_erase_brush + offset` to plot a black (pixel 0) rectangle on screen. Observed offsets: 0, &80, &100, &102 — max W*H = 16 from offset &102, so reads end by &110 = exact end of the brush.
 \ Map tile-id streams. Each is 240 entries, one byte per scroll
 \ column, indexing into lev_tile_catalog. The upper band is

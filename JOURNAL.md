@@ -4,6 +4,172 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-18 — Session 22: wholesale enemy ↔ hazard pool rename + tooling
+
+### Why
+
+Across the prior sessions the runtime pool labels carried the
+"wrong" terminology relative to Rich's intuitive sprite-category
+distinction:
+
+  - **Enemy** = a moving autonomous baddie (small flying things).
+  - **Hazard** = a static destructible part of the scenery
+    (gun-towers, tanks, bunkers).
+
+Pre-swap, the runtime had a `hazard_*` pool (`hazard_x/_y/_state/
+_pattern_step/_pattern_id`) for the moving-spawned objects and an
+`enemy_*` pool (`enemy_x/_y/_type/_hp/_step/_flip`) for the
+scrolling-with-the-playfield destructible objects. Backwards from
+the intuitive meaning, and worse, backwards from the already-named
+sprite atlases (`lev_enemy_0..3` were 4×24 small flying things;
+`lev_hazard_0..13` were 4×32 gun-tower stencils).
+
+### The swap
+
+Mechanically renamed both pools so the pool name matches the sprite
+category it consumes:
+
+  - The 8-slot moving pool → `enemy_*` (uses `lev_enemy_*` and
+    `gfx_enemy_*` via `enemy_anim_ptr_lo/hi`).
+  - The 8-slot scrolling pool → `hazard_*` (uses `lev_hazard_*` via
+    `lev_hazard_ptr_lo/hi`).
+
+Affected ~55 labels across `disasm/*.cfg.json`, `Nevryon.6502` and
+`docs/memory_map.md`. Done as a three-pass word-boundary swap via
+a temp placeholder (script in `/tmp/swap_enemy_hazard.py`), since
+direct substitution would have clashed (e.g. `n_enemies` ↔
+`n_hazards`).
+
+Carve-outs (deliberately not swapped — they're correct in either
+terminology because the sprite category already aligned with the
+new pool naming):
+
+  - `lev_enemy_0..3`, `lev_enemy_hit_1..3` (LEVD1 sprite categories)
+  - `lev_hazard_0..13` (LEVD2 sprite categories)
+  - `enemy_anim_ptr_lo/_hi` (LUT consumed by the enemy pool, points
+    at enemy sprites; named correctly under both conventions)
+  - `gfx_enemy_small_frame0/1` (GRAPHIX, depicts an enemy)
+  - `lev_explosion_*`, `lev_player_sprite`, `lev_tile_*` (generic)
+
+Additional GRAPHIX cfg fix (consequence of the swap): `gfx_enemy_
+slot15/16/19` were renamed to `gfx_hazard_slot15/16/19` — they're
+consumed by hazard types 15/16/19 (the cross-scenario shared
+gun-tower sprites), so they're hazards.
+
+### Prose-coherence pass
+
+After the label swap, the standalone English words "enemy" and
+"hazard" in cfg comments and prose were also inverted (the old
+prose described pools using the wrong terms — e.g. "iterate the 8
+hazard slots" referred to what we now call enemies). A second
+three-pass word-boundary swap on the standalone words took care of
+the common cases.
+
+That was over-aggressive in one direction: phrases like "small
+enemy frames" — which referred to the SPRITE CATEGORY (already
+correct under both old and new conventions) — got mis-swapped to
+"small hazard frames". A third targeted regex pass undid those
+mis-swaps, plus stale `lev_enemy_ptr_*` (literal asterisk)
+references and a "Wholesale swap pending" note that no longer
+applies.
+
+### Build remains byte-identical
+
+After all of the above: `./build.sh` → BYTE-IDENTICAL for all
+four binaries.
+
+### What older journal entries say
+
+Sessions 17–21 use the OLD terminology in their prose. They've
+been left as historical record so the chronological narrative
+makes sense — the term "hazard" in those entries means what
+Session 22 onwards calls "enemy", and vice versa. The cfgs and
+docs at the current commit reflect the new terminology.
+
+---
+
+## 2026-05-18 — Session 21: player missile system + `enemy_anim_ptr` LUT + GRAPHIX missile labels off-by-one
+
+### Survey: still-unnamed routines
+
+Scanned the disasm for `Lxxxx` labels that are JSR targets — the
+unnamed subroutines. 13 in total across CODE/CODE2/CODE3, plus
+29 unnamed JMP-only targets (mostly tail-call continuations).
+
+### Player missile system (was the "L1577 beam weapon")
+
+Followed the call chain from `on_fire_pressed`:
+
+  - `fire_player_missiles` (L1577) — launch. Gated on
+    `player_missiles_unlocked == 1` (tier-7 pickup flag) AND
+    `player_missile_step == 0`. Captures the player position into
+    a 2-element pair (upper + lower) of `player_missile_x[2]`,
+    `player_missile_y[2]`, sets `player_missile_active[2] = {1,1}`,
+    `player_missile_frame = 1`, `player_missile_step = 1`.
+    Suppresses upper if `player_y >= &D8`, lower if `< &A0`.
+  - `update_player_missiles` (L15C4) — per-subframe ticker. Phase
+    0 (steps 1..4): vertical-spread (INC upper_y, DEC lower_y).
+    Phase 1 (steps 5..7): walk right by +1 px, advance frame
+    (1→2→3→4→5→2 ping-pong). Phase 2 (step 8+): walk right by
+    +2 px. Erases & deactivates when `x >= &24`.
+  - `plot_player_missile` (L1689) — sprite-frame plotter. Computes
+    `sprite_src = &4400 + (frame-1) * &28` for frames 1..5
+    via an inline multiply-by-&28 unrolled.
+  - `missile_collide_hazard` (L23C8) — per-hazard-slot collision
+    test for both missiles. Calls `missile_hazard_box_test` (L23F9)
+    with Y=0 (upper) or Y=1 (lower); hit path is `missile_hit_
+    hazard` (L241A) — DEC hazard_hp by 4, deactivate the missile
+    slot, erase.
+
+Old `pickup_spawn_blocked` flag (was `data_25A7`) renamed to
+`player_missiles_unlocked` — it's primary effect is to enable
+`fire_player_missiles`; the "no more pickups spawn" side-effect
+just falls out (player has nothing left to upgrade).
+
+### `enemy_anim_ptr_lo/_hi` LUT decoded as data
+
+`tbl_1C0C` / `tbl_1C13` were two parallel 7-entry LSB/HSB tables
+read by `enemy_anim_dispatch` (L1BE3). Mostly used by states 1..6
+to pick the enemy sprite frame. Marked as data (forced region +
+array_labels). Initially thought slot 5 (= `&4840`) was a bug
+(pointed at `gfx_pad_4840`), but visualising as 4×24 (Rich's
+suggestion) revealed it's a coherent **winged-creature sprite**.
+
+The bug was in the GRAPHIX cfg: it had been splitting the bytes
+at `&4840..&48FF` into `gfx_pad_4840` (8 B) + `gfx_bomb` (8 B) +
+`gfx_pad_4850` (8 B) + `gfx_enemy_small_frame0` (3×24 = 72 B at
+`&4858`) + `gfx_enemy_small_frame1` (3×24 at `&48A0`) + trailing
+pad. The real layout: two contiguous 4×24 enemy frames at `&4840`
+and `&48A0` (96 B each = 192 B total), exactly back-to-back with
+the IRQ handler at `&4900`. Fixed.
+
+### GRAPHIX missile pointers were off by &10
+
+`plot_player_missile` reads from `&4400 + (frame-1)*&28` for
+frames 1..5 = `&4400, &4428, &4450, &4478, &44A0`. The previous
+GRAPHIX cfg labelled `gfx_missile_0..4` at `&4410..&44B0` —
+shifted &10 too late, so the labels actually pointed at the
+**trailing** padding of the previous sprite. Rendering `&4400` as
+5×8 shows a clean projectile-launch frame and `&44A0` shows it
+further along its trajectory with an exhaust trail — confirming
+the labels were wrong, not the routine.
+
+Shifted the labels to `gfx_missile_0..4 = &4400..&44A0`, moved
+the `gfx_pad_43E0` (now 32 B before missiles) and added `gfx_
+pad_44C8` (now 56 B after). Regenerated the per-sprite PNGs in
+`graphix/` to match — `render_graphix_sprites.py` CATALOG updated.
+
+### `byte_overrides` cfg feature
+
+Introduced a new disasm tool cfg field so the `enemy_anim_ptr`
+LUT renders each entry as `LO(lev_enemy_0)` / `HI(lev_enemy_0)`
+etc. instead of raw `&00`/`&4D`. See Session 22 entry above for
+the plumbing-bug details — they only surfaced today.
+
+Build remains byte-identical.
+
+---
+
 ## 2026-05-17 — Session 20: pickup tier ladder (correcting Session 19)
 
 ### The pod IS reachable — Session 19's "dead code" claim was wrong

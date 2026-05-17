@@ -36,8 +36,8 @@
 \   pod_fire = &2975
 \   draw_score = &29E7
 \   score = &2A02
-\   spawn_enemy_missile = &2A20
-\   update_enemy_missiles = &2AA2
+\   spawn_hazard_missile = &2A20
+\   update_hazard_missiles = &2AA2
 \   intro_get_ready = &2BA4
 \   draw_title_screen = &2CCA
 \   play_death_sequence = &2E94
@@ -52,9 +52,9 @@
 \   stage_clear_screen = &3325
 \   game_over_or_continue = &3432
 \   get_ready_overlay = &3513
-\   lev_enemy_ptr_lo = &7A80
+\   lev_hazard_ptr_lo = &7A80
 \   lev_explosion_ptr_lo = &7A95
-\   lev_enemy_ptr_hi = &7AC0
+\   lev_hazard_ptr_hi = &7AC0
 \   lev_explosion_ptr_hi = &7AD5
 \   lev_spawn_col = &7B00
 \   lev_spawn_attr = &7B80
@@ -304,16 +304,16 @@ sprite_src_hi    = * + 2
     RTS
 
 .scroll_step
-    LDA zp_scroll_col  \ Per-frame scroll entry. If zp_scroll_col has reached &F0 (the wrap point — last 240 columns of the map loop forever), restart the starfield and jump straight to update_enemies, skipping the scroll. Otherwise fall through to scroll_playfield.
+    LDA zp_scroll_col  \ Per-frame scroll entry. If zp_scroll_col has reached &F0 (the wrap point — last 240 columns of the map loop forever), restart the starfield and jump straight to update_hazards, skipping the scroll. Otherwise fall through to scroll_playfield.
     CMP #&F0
     BNE scroll_playfield
     JSR starfield_init
-    JMP update_enemies
-    JMP update_enemies
+    JMP update_hazards
+    JMP update_hazards
 
 .scroll_playfield
     JSR starfield_update  \ Soft-scroll the playfield's upper and lower tile bands left by 8 pixels (one BBC char cell = 2 byte-cols), then plot the new column at the right edge (col 39). The inner copy loop is unrolled into two parallel pairs of self-modified `LDA &XXXX / STA &XXXX` instructions — one pair for the upper band (HI = &58 → screen row 0), one for the lower band (HI = &6C → screen row 16). The eight self-modified operand bytes are named `scroll_{upper,lower}_{src,dst}_{lo,hi}` and are incremented in tandem by the loop. Outer counter X=5 + inner loop runs 256 iterations each ⇒ 5×256 = 1280 bytes per band copied (= 4 char rows × 320 B/row, the full band). On exit, plot the freshly-scrolled-in column at (col &27, row 0) mirrored from zp_tile_upper, then (col &27, row 16) normal from zp_tile_lower.
-    JSR update_enemies
+    JSR update_hazards
     JSR get_ready_overlay
     LDX #&27
     LDY #&FF
@@ -493,8 +493,8 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .game_step
-    JSR try_spawn_pickup  \ ONE COLUMN of game progress — called once per main_loop iteration. Does the per-tile-column setup (try_spawn_pickup, spawn_periodic_hazard, spawn_check_step, then computes the new right-edge tile sprite pointers `zp_tile_lower_hi/lo` and `zp_tile_upper_hi/lo` by indexing `lev_map_lower[zp_scroll_col]` / `lev_map_upper[zp_scroll_col]` into the tile catalog at &4E80, multiply-by-&80 via repeated ADC), bumps `zp_scroll_col` by 1 (with wrap from &F0+ back to &F0 = the end-of-map loop), checks the PAUSE key, then runs 4 sub-frames (`play_subframe` loop, gated on `zp_get_ready_erase` going 0→1→2→3→4). Each subframe scrolls the playfield by 4 px (so 4×4 = 16 px = one tile-cell per game_step call), updates enemies / hazards / missiles / pickups, draws score, reads input, and on even columns also bumps `zp_frame_progress` + draws the get_ready overlay. Returns early once `lives_left` drops to 0, which the caller `main_loop` immediately tests to go to game_over_or_continue.
-    JSR spawn_periodic_hazard
+    JSR try_spawn_pickup  \ ONE COLUMN of game progress — called once per main_loop iteration. Does the per-tile-column setup (try_spawn_pickup, spawn_periodic_enemy, spawn_check_step, then computes the new right-edge tile sprite pointers `zp_tile_lower_hi/lo` and `zp_tile_upper_hi/lo` by indexing `lev_map_lower[zp_scroll_col]` / `lev_map_upper[zp_scroll_col]` into the tile catalog at &4E80, multiply-by-&80 via repeated ADC), bumps `zp_scroll_col` by 1 (with wrap from &F0+ back to &F0 = the end-of-map loop), checks the PAUSE key, then runs 4 sub-frames (`play_subframe` loop, gated on `zp_get_ready_erase` going 0→1→2→3→4). Each subframe scrolls the playfield by 4 px (so 4×4 = 16 px = one tile-cell per game_step call), updates hazards / enemies / missiles / pickups, draws score, reads input, and on even columns also bumps `zp_frame_progress` + draws the get_ready overlay. Returns early once `lives_left` drops to 0, which the caller `main_loop` immediately tests to go to game_over_or_continue.
+    JSR spawn_periodic_enemy
     JSR spawn_check_step
     LDX zp_scroll_col
     LDA lev_map_lower,X
@@ -560,19 +560,19 @@ scroll_upper_dst_hi = * + 2
 .play_subframe
     LDA lives_left  \ Body of game_step's per-subframe inner loop. Runs once per BBC display frame (gated by frame_delay). 4 iterations are run per game_step (= per tile-column of horizontal scroll), producing the 4-frame soft-scroll animation between successive columns.
     BEQ game_step_done
-    JSR update_enemy_missiles
+    JSR update_hazard_missiles
     JSR draw_score
     JSR force_pod_anim
     INC zp_get_ready_erase
     JSR frame_delay
-    JSR update_hazards
+    JSR update_enemies
     JSR scroll_step
     LDX #&00
     STX data_70FF
     INX
     STX zp_sprite_dir_flag
     JSR update_pickup
-    JSR L15C4
+    JSR update_player_missiles
     JSR read_input
     LDA zp_scroll_col
     AND #&01
@@ -725,53 +725,53 @@ scroll_upper_dst_hi = * + 2
 .L156C
     DEC zp_player_x
     RTS
-.data_156F
+
+.player_missile_x
     BRK
-.data_1570
     BRK
-.tbl_1571
+
+.player_missile_y
     BRK
-.data_1572
     BRK
-.data_1573
+
+.player_missile_frame
     BRK
-.data_1574
+
+.player_missile_step
     BRK
 
 \ ----- data &1575..&1577 -----
-.tbl_1575
-    EQUB &EA
-.data_1576
-    EQUB &EA
+.player_missile_active
+    EQUB &EA, &EA
 
 \ ----- code &1577..&16FD -----
-.L1577
-    LDA pickup_spawn_blocked
+.fire_player_missiles
+    LDA player_missiles_unlocked  \ Player-missile launch (called from on_fire_pressed). Gated on `player_missiles_unlocked == 1` (= the player has collected 7 pickups → tier 7) AND `player_missile_step == 0` (= no pair currently in flight). On launch: captures the player position into two parallel slots — upper (player_missile_x[0], player_missile_y[0] = player_x, player_y + 2) and lower (player_missile_x[1], player_missile_y[1] = player_x, player_y - &12). Activates both slots (player_missile_active = {1, 1}), sets sprite-frame = 1 and step counter = 1. Suppresses the upper missile if player_y >= &D8 (too low — would be off-screen) and suppresses the lower if player_y < &A0 (too high). On the next pass, `update_player_missiles` (called per-subframe) drives the pair.
     CMP #&01
     BEQ L157F
     RTS
 .L157F
-    LDA data_1574
+    LDA player_missile_step
     BEQ L1585
     RTS
 .L1585
     LDX zp_player_x
-    STX data_156F
-    STX data_1570
+    STX player_missile_x
+    STX player_missile_x + 1
     LDA zp_player_y
     CLC
     ADC #&02
-    STA tbl_1571
+    STA player_missile_y
     SEC
     SBC #&14
-    STA data_1572
+    STA player_missile_y + 1
     LDA #&01
-    STA tbl_1575
-    STA data_1576
+    STA player_missile_active
+    STA player_missile_active + 1
     LDA #&01
-    STA data_1573
+    STA player_missile_frame
     LDA #&01
-    STA data_1574
+    STA player_missile_step
     LDA zp_player_y
     CMP #&D8
     BCS L15B8
@@ -780,72 +780,72 @@ scroll_upper_dst_hi = * + 2
     RTS
 .L15B8
     LDA #&00
-    STA tbl_1575
+    STA player_missile_active
     RTS
 .L15BE
     LDA #&00
-    STA data_1576
+    STA player_missile_active + 1
     RTS
 
-.L15C4
-    LDA data_1574
+.update_player_missiles
+    LDA player_missile_step  \ Per-subframe ticker for the paired player missiles. RTS if `player_missile_step == 0` (idle). Phase 0: steps 1..4 spread the pair vertically (INC upper_y, DEC lower_y); phase 1: steps 5..7 advance the missile-frame index 1→2→3→4→5→2 (ping-pong loop) and walk the pair rightward by +1 px per subframe; phase 2: steps 8+ accelerate to +2 px/subframe. Each subframe re-plots whichever slots are active via `plot_player_missile`. When player_missile_x[0] >= &24 (off the right edge), erases both sprites with lev_erase_brush+&80 and resets the state (step = 0, x = 0). Note that the per-slot `player_missile_active` flag is cleared independently by `missile_hit_hazard` when a missile connects.
     BNE L15CA
     RTS
 .L15CA
-    LDA data_1574
+    LDA player_missile_step
     CMP #&05
     BCS L15DD
-    INC tbl_1571
-    DEC data_1572
-    INC data_1574
+    INC player_missile_y
+    DEC player_missile_y + 1
+    INC player_missile_step
     JMP L160E
 .L15DD
-    INC data_1573
-    LDA data_1573
+    INC player_missile_frame
+    LDA player_missile_frame
     CMP #&06
     BNE L15EC
     LDA #&02
-    STA data_1573
+    STA player_missile_frame
 .L15EC
-    LDA data_1574
+    LDA player_missile_step
     CMP #&08
     BCS L15FF
-    INC data_156F
-    INC data_1570
-    INC data_1574
+    INC player_missile_x
+    INC player_missile_x + 1
+    INC player_missile_step
     JMP L160E
 .L15FF
-    INC data_156F
-    INC data_156F
-    INC data_1570
-    INC data_1570
-    INC data_1574
+    INC player_missile_x
+    INC player_missile_x
+    INC player_missile_x + 1
+    INC player_missile_x + 1
+    INC player_missile_step
 .L160E
     LDA #&01
     STA zp_sprite_dir_flag
-    LDA tbl_1575
+    LDA player_missile_active
     CMP #&01
     BNE L1625
-    LDX data_156F
-    LDY tbl_1571
+    LDX player_missile_x
+    LDY player_missile_y
     JSR calc_screen_addr
-    JSR L1689
+    JSR plot_player_missile
 .L1625
-    LDA data_1576
+    LDA player_missile_active + 1
     CMP #&01
     BNE L1638
-    LDX data_1570
-    LDY data_1572
+    LDX player_missile_x + 1
+    LDY player_missile_y + 1
     JSR calc_screen_addr
-    JSR L1689
+    JSR plot_player_missile
 .L1638
-    LDA data_156F
+    LDA player_missile_x
     CMP #&24
     BCC L1688
-    LDA tbl_1575
+    LDA player_missile_active
     BEQ L165E
-    LDX data_156F
-    LDY tbl_1571
+    LDX player_missile_x
+    LDY player_missile_y
     JSR calc_screen_addr
     LDX #&05
     LDY #&08
@@ -855,10 +855,10 @@ scroll_upper_dst_hi = * + 2
     STA sprite_src_hi
     JSR sprite_plot_xy
 .L165E
-    LDA data_1576
+    LDA player_missile_active + 1
     BEQ L167D
-    LDX data_156F
-    LDY data_1572
+    LDX player_missile_x
+    LDY player_missile_y + 1
     JSR calc_screen_addr
     LDX #&05
     LDY #&08
@@ -869,15 +869,15 @@ scroll_upper_dst_hi = * + 2
     JSR sprite_plot_xy
 .L167D
     LDA #&00
-    STA data_1570
-    STA data_156F
-    STA data_1574
+    STA player_missile_x + 1
+    STA player_missile_x
+    STA player_missile_step
 .L1688
     RTS
 
-.L1689
-    LDA #&00
-    LDX data_1573
+.plot_player_missile
+    LDA #&00  \ Plot one player-missile frame at the screen position already set up by the caller's calc_screen_addr. Selects the sprite via the inline multiply: `LDA #0 / LDX player_missile_frame / loop ADC #&28 / DEX / BNE / SBC #&28 / STA src_lo / LDA #&44 / STA src_hi` — so frame N (1..5) → src = &4400 + (N-1)*&28 = &4400/&4428/&4450/&4478/&44A0. Always 5×8 px. (Note: the existing GRAPHIX cfg labels gfx_missile_0..4 at &4410..&44B0 are inconsistent with this — the actual frames L1689 reads are 16 bytes lower in memory. Either the GRAPHIX labels are off by one, or this routine has a constant-offset bug producing scrambled-looking trails.)
+    LDX player_missile_frame
     CLC
 .L168F
     ADC #&28
@@ -981,12 +981,12 @@ scroll_upper_dst_hi = * + 2
     EQUB &EA, &45, &45, &46, &46, &EA, &EA
 .tbl_1709
     EQUB &EA, &78, &9C, &60, &D6, &EA, &EA
-.hazard_pattern_len
+.enemy_pattern_len
     EQUB &EA, &EA
 
 \ ----- code &1712..&1A55 -----
-.spawn_periodic_hazard
-    LDA zp_scroll_col  \ Periodic background-hazard spawner — called once per game_step. Doesn't run after the map has wrapped (zp_scroll_col == &F0). Otherwise paces on zp_87 (sub-counter, 0..A): when zp_87 reaches &0A, wait for the hazard field to fully empty, then advance `zp_86` (pattern selector, cycles 1..6 wrapping back to 1 after 7) and pre-load the per-pattern parameters from the LUTs at tbl_16FB / tbl_1702 / tbl_1709. On the other 10 calls of each cycle, INC zp_87 and spawn one hazard into the first free slot: hazard_x = &25 (right edge), hazard_state and hazard_y set per pattern (patterns 5/6: state 3/5, Y random in [&97..&D7]; others: state 1, Y = &9A fixed).
+.spawn_periodic_enemy
+    LDA zp_scroll_col  \ Periodic background-enemy spawner — called once per game_step. Doesn't run after the map has wrapped (zp_scroll_col == &F0). Otherwise paces on zp_87 (sub-counter, 0..A): when zp_87 reaches &0A, wait for the enemy field to fully empty, then advance `zp_86` (pattern selector, cycles 1..6 wrapping back to 1 after 7) and pre-load the per-pattern parameters from the LUTs at tbl_16FB / tbl_1702 / tbl_1709. On the other 10 calls of each cycle, INC zp_87 and spawn one enemy into the first free slot: enemy_x = &25 (right edge), enemy_state and enemy_y set per pattern (patterns 5/6: state 3/5, Y random in [&97..&D7]; others: state 1, Y = &9A fixed).
     CMP #&F0
     BNE L1719
     RTS
@@ -996,7 +996,7 @@ scroll_upper_dst_hi = * + 2
     BNE L1753
     LDX #&08
 .L1721
-    LDA hazard_state,X
+    LDA enemy_state,X
     BNE L1752
     DEX
     BNE L1721
@@ -1013,7 +1013,7 @@ scroll_upper_dst_hi = * + 2
 .L173D
     TAX
     LDA tbl_1709,X
-    STA hazard_pattern_len
+    STA enemy_pattern_len
     LDA tbl_16FB,X
     STA zp_88
     LDA tbl_1702,X
@@ -1026,59 +1026,59 @@ scroll_upper_dst_hi = * + 2
     INC zp_87
     LDX #&08
 .L1757
-    LDA hazard_state,X
+    LDA enemy_state,X
     BEQ L175F
     DEX
     BNE L1757
 .L175F
     LDA #&25
-    STA hazard_x,X
+    STA enemy_x,X
     LDA #&00
-    STA hazard_pattern_step,X
+    STA enemy_pattern_step,X
     LDA zp_86
-    STA hazard_pattern_id,X
+    STA enemy_pattern_id,X
     CMP #&05
     BEQ L1781
     CMP #&06
     BEQ L1793
     LDA #&01
-    STA hazard_state,X
+    STA enemy_state,X
     LDA #&9A
-    STA hazard_y,X
+    STA enemy_y,X
     RTS
 .L1781
     LDA #&03
-    STA hazard_state,X
+    STA enemy_state,X
     JSR lfsr_random
     SEC
     LDA #&D7
     SBC rndval64
-    STA hazard_y,X
+    STA enemy_y,X
     RTS
 .L1793
     LDA #&05
-    STA hazard_state,X
+    STA enemy_state,X
     JSR lfsr_random
     SEC
     LDA #&D7
     SBC rndval64
-    STA hazard_y,X
+    STA enemy_y,X
     RTS
 .L17A5
     LDA #&26
-    STA hazard_pattern_len
+    STA enemy_pattern_len
     LDA #&00
     STA zp_87
     RTS
 .L17AF
     LDA #&26
-    STA hazard_pattern_len
+    STA enemy_pattern_len
     LDA #&00
     STA zp_87
     RTS
 
 .on_fire_pressed
-    JSR L1577  \ Fire button handler: if cooldown (zp_8A) elapsed, find the first empty player_bullet_x slot (search 4..1), store player_x+2 / player_y-&0C into it, reload cooldown from fire_cooldown_reload (init = 6), play sfx_fire.
+    JSR fire_player_missiles  \ Fire button handler: if cooldown (zp_8A) elapsed, find the first empty player_bullet_x slot (search 4..1), store player_x+2 / player_y-&0C into it, reload cooldown from fire_cooldown_reload (init = 6), play sfx_fire.
     LDA zp_8A
     BEQ L17C1
     RTS
@@ -1151,7 +1151,7 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .check_bullet_hits
-    LDX data_16F5  \ Check what the current player bullet has hit. Two loops over the same bullet position (zp_test_x = player_bullet_x+2, zp_test_y = player_bullet_y): (a) X=8..1 over the hazard slots in hazard_x/hazard_y/hazard_state — a hit INCs hazard_state[X] and at values 3/5/7 plays OSWRCH 7 + INCs pickup_kill_count; at >=9 the hazard is fully expired; (b) X=0..7 over the enemy slots — a hit decrements enemy_hp, plays explode, and on kill clears the slot. Either way, the bullet erases itself (3x2 brush) and the slot is freed.
+    LDX data_16F5  \ Check what the current player bullet has hit. Two loops over the same bullet position (zp_test_x = player_bullet_x+2, zp_test_y = player_bullet_y): (a) X=8..1 over the enemy slots in enemy_x/enemy_y/enemy_state — a hit INCs enemy_state[X] and at values 3/5/7 plays OSWRCH 7 + INCs pickup_kill_count; at >=9 the enemy is fully expired; (b) X=0..7 over the hazard slots — a hit decrements hazard_hp, plays explode, and on kill clears the slot. Either way, the bullet erases itself (3x2 brush) and the slot is freed.
     LDY player_bullet_x,X
     INY
     INY
@@ -1165,10 +1165,10 @@ scroll_upper_dst_hi = * + 2
     LDX data_16F5
     JMP L18F7
 .L1861
-    LDA hazard_state,X
+    LDA enemy_state,X
     BEQ L1858
     STX data_16F7
-    LDY hazard_x,X
+    LDY enemy_x,X
     CPY zp_test_x
     BEQ L1889
     BCC L1878
@@ -1186,7 +1186,7 @@ scroll_upper_dst_hi = * + 2
     LDX data_16F7
     JMP L1858
 .L1889
-    LDA hazard_y,X
+    LDA enemy_y,X
     CMP zp_test_y
     BEQ L18A1
     BCC L189B
@@ -1199,14 +1199,14 @@ scroll_upper_dst_hi = * + 2
     LDX data_16F7
     JMP L1858
 .L18A1
-    LDY hazard_state,X
+    LDY enemy_state,X
     CPY #&09
     BCC L18A9
     RTS
 .L18A9
     INY
     TYA
-    STA hazard_state,X
+    STA enemy_state,X
     CPY #&03
     BEQ L18BD
     CPY #&05
@@ -1218,7 +1218,7 @@ scroll_upper_dst_hi = * + 2
     LDA #&07
     JSR OSWRCH
     LDA #&0A
-    STA hazard_state,X
+    STA enemy_state,X
     JSR add_score_x1
     INC pickup_kill_count
     LDX data_16F5
@@ -1248,10 +1248,10 @@ scroll_upper_dst_hi = * + 2
     LDX data_16F5
     RTS
 .L1902
-    LDA enemy_type,X
+    LDA hazard_type,X
     BEQ L18F9
     STX data_16F7
-    LDY enemy_x,X
+    LDY hazard_x,X
     CPY zp_test_x
     BEQ L192B
     BCC L1919
@@ -1270,7 +1270,7 @@ scroll_upper_dst_hi = * + 2
     LDX data_16F7
     JMP L18F9
 .L192B
-    LDA enemy_y,X
+    LDA hazard_y,X
     CMP zp_test_y
     BEQ L1943
     BCC L193D
@@ -1299,11 +1299,11 @@ scroll_upper_dst_hi = * + 2
     LDA #&00
     STA player_bullet_x,X
     LDX data_16F7
-    DEC enemy_hp,X
-    LDA enemy_hp,X
+    DEC hazard_hp,X
+    LDA hazard_hp,X
     BNE L1983
     LDA #&14
-    STA enemy_type,X
+    STA hazard_type,X
     JSR add_score_x10
     JSR sfx_explode
     LDX data_16F5
@@ -1314,22 +1314,22 @@ scroll_upper_dst_hi = * + 2
     JMP OSWRCH
 
 .check_player_collisions
-    LDX #n_hazards + 1  \ Per-frame player collision check. Two loops: (a) X=8..1 over the hazard slots at hazard_x/_y/_state — for any slot whose hazard_state is in 1..9 (active), test the player against a 6×&18 bounding box; on hit, mark the slot &0A (expired) and JSR lose_a_life. (b) X=0..7 over the enemy slots (enemy_x, enemy_y, enemy_type < &14) — same test. Each hit triggers a `OSWRCH &07` (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be a short non-musical blip used as the in-game collision sound).
+    LDX #n_enemies + 1  \ Per-frame player collision check. Two loops: (a) X=8..1 over the enemy slots at enemy_x/_y/_state — for any slot whose enemy_state is in 1..9 (active), test the player against a 6×&18 bounding box; on hit, mark the slot &0A (expired) and JSR lose_a_life. (b) X=0..7 over the hazard slots (hazard_x, hazard_y, hazard_type < &14) — same test. Each hit triggers a `OSWRCH &07` (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be a short non-musical blip used as the in-game collision sound).
 .L198D
     DEX
     BNE L1993
     JMP L19F6
 .L1993
-    LDA hazard_state,X
+    LDA enemy_state,X
     BEQ L198D
     CMP #&0A
     BCS L198D
     STX data_16F5
-    LDA hazard_y,X
+    LDA enemy_y,X
     SEC
     SBC #&0C
     STA zp_test_y
-    LDA hazard_x,X
+    LDA enemy_x,X
     ADC #&01
     STA zp_test_x
     LDA zp_player_x
@@ -1362,7 +1362,7 @@ scroll_upper_dst_hi = * + 2
     JSR OSWRCH
     LDX data_16F5
     LDA #&0A
-    STA hazard_state,X
+    STA enemy_state,X
     JSR add_score_x1
     INC pickup_kill_count
     JSR lose_a_life
@@ -1370,20 +1370,20 @@ scroll_upper_dst_hi = * + 2
     LDX #&FF
 .L19F8
     INX
-    CPX #n_enemies
+    CPX #n_hazards
     BNE L19FE
     RTS
 .L19FE
-    LDA enemy_type,X
+    LDA hazard_type,X
     BEQ L19F8
     CMP #&14
     BCS L19F8
     STX data_16F5
-    LDA enemy_y,X
+    LDA hazard_y,X
     SEC
     SBC #&10
     STA zp_test_y
-    LDA enemy_x,X
+    LDA hazard_x,X
     CLC
     ADC #&01
     STA zp_test_x
@@ -1419,38 +1419,38 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 \ ----- data &1A55..&1A99 -----
-.hazard_x
-    \ Hazard slot pool — 11 bytes per array (slots 0..10), but only indices 1..n_hazards (1..8) are ever populated. Active per-slot state: hazard_x[i] / hazard_y[i] = screen position; hazard_state[i] = animation/lifecycle counter (0 = free, 1..8 = active, 9 = expiring, &0A = just hit / about to free). Plus hazard_pattern_step[i] (the byte-offset into the per-pattern motion script pointed at by zp_88) and hazard_pattern_id[i] (pattern selector 1..6, captured at spawn). Spawned by spawn_periodic_hazard with hazard_x = &25; per-frame stepped by update_hazards which calls L1B87 to walk each slot's script.
+.enemy_x
+    \ Enemy slot pool — 11 bytes per array (slots 0..10), but only indices 1..n_enemies (1..8) are ever populated. Active per-slot state: enemy_x[i] / enemy_y[i] = screen position; enemy_state[i] = animation/lifecycle counter (0 = free, 1..8 = active, 9 = expiring, &0A = just hit / about to free). Plus enemy_pattern_step[i] (the byte-offset into the per-pattern motion script pointed at by zp_88) and enemy_pattern_id[i] (pattern selector 1..6, captured at spawn). Spawned by spawn_periodic_enemy with enemy_x = &25; per-frame stepped by update_enemies which calls L1B87 to walk each slot's script.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA, &EA
-.hazard_y
+.enemy_y
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA, &EA
-.hazard_state
+.enemy_state
     EQUB &EA, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00
-.hazard_pattern_step
-    \ Hazard per-slot pattern-step counter — byte-offset into the per-pattern motion script that update_hazards/L1B87 is currently walking. The script (pointed at by zp_88, length hazard_pattern_len bytes) is a sequence of (dy_dir, dx_dir) byte pairs. L1B87 reads `(zp_88),Y` at Y = hazard_pattern_step[X] into data_16F6 (vertical-dir) and `(zp_88),Y+1` into data_16F7 (horizontal-dir), then INYs twice; the next frame's L1B2D stashes the new Y back here. Wrap-around at hazard_pattern_len.
+.enemy_pattern_step
+    \ Enemy per-slot pattern-step counter — byte-offset into the per-pattern motion script that update_enemies/L1B87 is currently walking. The script (pointed at by zp_88, length enemy_pattern_len bytes) is a sequence of (dy_dir, dx_dir) byte pairs. L1B87 reads `(zp_88),Y` at Y = enemy_pattern_step[X] into data_16F6 (vertical-dir) and `(zp_88),Y+1` into data_16F7 (horizontal-dir), then INYs twice; the next frame's L1B2D stashes the new Y back here. Wrap-around at enemy_pattern_len.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA, &EA
-.hazard_pattern_id
-    \ Hazard per-slot pattern ID — selects which motion pattern the slot follows. Set at spawn by spawn_periodic_hazard (cycles 1..6 via zp_86). Values 5 and 6 are special-cased in L1B87 (player-homing: pattern 5 toggles horizontal dir based on player_x; pattern 6 = straight at the player). Other values walk the table at (zp_88) verbatim. Slot 0 unused, slots 1..n_hazards (1..8) active; only 10 bytes wide (vs 11 for the position/state arrays) because hazard_pattern_id slot 10 wasn't allocated.
+.enemy_pattern_id
+    \ Enemy per-slot pattern ID — selects which motion pattern the slot follows. Set at spawn by spawn_periodic_enemy (cycles 1..6 via zp_86). Values 5 and 6 are special-cased in L1B87 (player-homing: pattern 5 toggles horizontal dir based on player_x; pattern 6 = straight at the player). Other values walk the table at (zp_88) verbatim. Slot 0 unused, slots 1..n_enemies (1..8) active; only 10 bytes wide (vs 11 for the position/state arrays) because enemy_pattern_id slot 10 wasn't allocated.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA
-.enemy_bullet_x
+.hazard_bullet_x
     EQUB &FF, &FF, &FF, &FF, &FF, &FF, &FF
-.enemy_bullet_y
+.hazard_bullet_y
     EQUB &00, &00, &00, &00, &00, &00, &00
 
-\ ----- code &1A99..&1C12 -----
-.hazard_try_fire_bullet
-    JSR lfsr_random  \ Hazard 'try to fire a bullet' hook — called from update_hazards after plotting each active hazard slot. Random chance (rndval32 == 2 → 1/16) gates each call; further requires the hazard to be near the left edge (hazard_x < &10), the global cooldown zp_7E to be 0, and a free slot in enemy_bullet_x[4..1]. On success: stores hazard_x+2 / hazard_y-8 into the chosen slot, sets zp_7E = 8 (8-frame cooldown), plays sfx_hit_lo. Shares the enemy_bullet_x/_y pool with enqueue_enemy_bullet — hazards and enemies fire the same bullet sprite.
+\ ----- code &1A99..&1C0C -----
+.enemy_try_fire_bullet
+    JSR lfsr_random  \ Enemy 'try to fire a bullet' hook — called from update_enemies after plotting each active enemy slot. Random chance (rndval32 == 2 → 1/16) gates each call; further requires the enemy to be near the left edge (enemy_x < &10), the global cooldown zp_7E to be 0, and a free slot in hazard_bullet_x[4..1]. On success: stores enemy_x+2 / enemy_y-8 into the chosen slot, sets zp_7E = 8 (8-frame cooldown), plays sfx_hit_lo. Shares the hazard_bullet_x/_y pool with enqueue_hazard_bullet — enemies and hazards fire the same bullet sprite.
     LDA rndval32
     CMP #&02
     BEQ L1AA4
     RTS
 .L1AA4
-    LDA hazard_x,X
+    LDA enemy_x,X
     CMP #&10
     BCC L1AAE
     JMP L1AAF
@@ -1459,13 +1459,13 @@ scroll_upper_dst_hi = * + 2
 .L1AAF
     LDA zp_7E
     CMP #&00
-    BEQ enemy_bullet_alloc
+    BEQ hazard_bullet_alloc
     RTS
 
-.enemy_bullet_alloc
-    LDX #n_hazard_bullets
+.hazard_bullet_alloc
+    LDX #n_enemy_bullets
 .L1AB8
-    LDA enemy_bullet_x,X
+    LDA hazard_bullet_x,X
     CMP #&FF
     BEQ L1AC3
     DEX
@@ -1474,41 +1474,41 @@ scroll_upper_dst_hi = * + 2
 .L1AC3
     STX data_16F6
     LDX data_16F5
-    LDA hazard_x,X
+    LDA enemy_x,X
     CLC
     ADC #&02
     LDX data_16F6
-    STA enemy_bullet_x,X
+    STA hazard_bullet_x,X
     LDX data_16F5
-    LDA hazard_y,X
+    LDA enemy_y,X
     SEC
     SBC #&08
     LDX data_16F6
-    STA enemy_bullet_y,X
+    STA hazard_bullet_y,X
     LDA #&08
     STA zp_7E
     JMP sfx_hit_lo
 
-.update_hazards
-    LDX #n_hazards  \ Per-frame hazard update: iterate the 8 hazard slots (X=8..1 in hazard_state), move each by ±1 X / ±4 Y depending on data_16F6/16F7 direction bits, erase + redraw at the new position with a 4x24 sprite. Slot deactivates (and is erased) when hazard_state drops to 0. Hazards damage the player on contact (check_player_collisions) and are destructible by player bullets (check_bullet_hits).
+.update_enemies
+    LDX #n_enemies  \ Per-frame enemy update: iterate the 8 enemy slots (X=8..1 in enemy_state), move each by ±1 X / ±4 Y depending on data_16F6/16F7 direction bits, erase + redraw at the new position with a 4x24 sprite. Slot deactivates (and is erased) when enemy_state drops to 0. Enemies damage the player on contact (check_player_collisions) and are destructible by player bullets (check_bullet_hits).
 .L1AED
-    LDA hazard_state,X
+    LDA enemy_state,X
     BNE L1AF8
     DEX
     BNE L1AED
-    JMP update_enemy_bullets
+    JMP update_hazard_bullets
 .L1AF8
     INC zp_frame_progress
     INC zp_frame_progress
-    JSR pod_collide_hazard
+    JSR pod_collide_enemy
     JSR L1C5D
     JSR L1B87
     BNE L1B2D
 .L1B07
     LDA #&00
-    STA hazard_state,X
-    LDY hazard_y,X
-    LDA hazard_x,X
+    STA enemy_state,X
+    LDY enemy_y,X
+    LDA enemy_x,X
     TAX
     JSR calc_screen_addr
     LDA #&7D
@@ -1522,63 +1522,63 @@ scroll_upper_dst_hi = * + 2
     JMP L1AED
 .L1B2D
     TYA
-    STA hazard_pattern_step,X
+    STA enemy_pattern_step,X
     LDA data_16F6
     BEQ L1B4F
     CMP #&01
     BEQ L1B46
-    LDA hazard_y,X
+    LDA enemy_y,X
     SEC
     SBC #&04
-    STA hazard_y,X
+    STA enemy_y,X
     JMP L1B4F
 .L1B46
-    LDA hazard_y,X
+    LDA enemy_y,X
     CLC
     ADC #&04
-    STA hazard_y,X
+    STA enemy_y,X
 .L1B4F
     LDA data_16F7
     BEQ L1B61
     CMP #&01
     BNE L1B5E
-    INC hazard_x,X
+    INC enemy_x,X
     JMP L1B61
 .L1B5E
-    DEC hazard_x,X
+    DEC enemy_x,X
 .L1B61
-    LDA hazard_y,X
+    LDA enemy_y,X
     TAY
-    LDA hazard_x,X
+    LDA enemy_x,X
     BEQ L1B07
     TAX
     JSR calc_screen_addr
-    JSR L1BE3
+    JSR enemy_anim_dispatch
     LDX #&04
     LDY #&18
     JSR sprite_plot_xy
-    JSR hazard_try_fire_bullet
+    JSR enemy_try_fire_bullet
     LDX data_16F5
     DEX
     BEQ L1B84
     JMP L1AED
 .L1B84
-    JMP update_enemy_bullets
+    JMP update_hazard_bullets
 
 .L1B87
-    LDA hazard_pattern_id,X
+    LDA enemy_pattern_id,X
     CMP #&05
     BEQ L1BA5
     CMP #&06
     BEQ L1BD1
-    LDY hazard_pattern_step,X
+    LDY enemy_pattern_step,X
     LDA (zp_88),Y
     STA data_16F6
     INY
     LDA (zp_88),Y
     STA data_16F7
     INY
-    CPY hazard_pattern_len
+    CPY enemy_pattern_len
     RTS
 .L1BA5
     LDA zp_7F
@@ -1587,34 +1587,34 @@ scroll_upper_dst_hi = * + 2
     LDA #&03
     STA data_16F7
     LDA zp_player_y
-    CMP hazard_y,X
+    CMP enemy_y,X
     BCC L1BC4
     LDA #&01
     STA data_16F6
-    LDY hazard_pattern_step,X
+    LDY enemy_pattern_step,X
     INY
-    CPY hazard_pattern_len
+    CPY enemy_pattern_len
     RTS
 .L1BC4
     LDA #&03
     STA data_16F6
-    LDY hazard_pattern_step,X
+    LDY enemy_pattern_step,X
     INY
-    CPY hazard_pattern_len
+    CPY enemy_pattern_len
     RTS
 .L1BD1
     LDA #&03
     STA data_16F7
     LDA #&00
     STA data_16F6
-    LDY hazard_pattern_step,X
+    LDY enemy_pattern_step,X
     INY
-    CPY hazard_pattern_len
+    CPY enemy_pattern_len
     RTS
 
-.L1BE3
-    LDX data_16F5
-    LDA hazard_state,X
+.enemy_anim_dispatch
+    LDX data_16F5  \ Enemy sprite-frame dispatcher (X = data_16F5 = current enemy slot). For enemy_state in 0..6 it indexes into the parallel `enemy_anim_ptr_lo` / `enemy_anim_ptr_hi` LUT: slots 1..4 → `lev_enemy_0..3` (LEVD1), slots 5..6 → `gfx_enemy_small_frame0/1` (GRAPHIX, two 4×24 winged-creature frames). For state >= &0A it dispatches to one of the hit-animation routines: &0A → L1C1A (sprite_src = &4C20 = lev_enemy_hit_1), &0B → L1C2B (lev_enemy_hit_2), &0C → L1C3C (lev_enemy_hit_3), &0D → L1C4D (final). Sets sprite_src_lo/hi for the caller to plot.
+    LDA enemy_state,X
     CMP #&0A
     BCC L1BFB
     BEQ L1C1A
@@ -1626,32 +1626,38 @@ scroll_upper_dst_hi = * + 2
     BEQ L1C4D
 .L1BFB
     TAX
-    LDA tbl_1C0C,X
+    LDA enemy_anim_ptr_lo,X
     STA sprite_src_lo
-    LDA tbl_1C13,X
+    LDA enemy_anim_ptr_hi,X
     STA sprite_src_hi
     LDX data_16F5
     RTS
-.tbl_1C0C
-    NOP
-    BRK
-    PHA
-    BCS L1C21
-    RTI
 
-\ ----- data &1C12..&1C1A -----
-.data_1C12
-    EQUB &A0
-.tbl_1C13
-    EQUB &EA, &4D, &4D, &4D, &4E, &48, &48
+\ ----- data &1C0C..&1C1A -----
+\ Per-state animation-frame sprite-pointer LUT (parallel LSB+HSB tables, 7 entries each, indexed by enemy_state in [0..6]). Read by enemy_anim_dispatch (L1BE3). Slot 0 = &EAEA (placeholder; state 0 = inactive, never plotted). Slots 1..4 = lev_enemy_0..3 (the four 4×24 small-enemy frames in LEVD1). Slots 5..6 = gfx_enemy_small_frame0/1 in GRAPHIX (two 4×24 frames of a winged creature). Earlier GRAPHIX cfg labels mis-split this region into gfx_pad/gfx_bomb/3×24-frames; corrected in Session 22 to two contiguous 4×24 sprites at &4840 and &48A0, exactly back-to-back to the IRQ handler at &4900.
+.enemy_anim_ptr_lo
+    EQUB &EA
+    EQUB LO(lev_enemy_0)
+    EQUB LO(lev_enemy_1)
+    EQUB LO(lev_enemy_2)
+    EQUB LO(lev_enemy_3)
+    EQUB LO(gfx_enemy_small_frame0)
+    EQUB LO(gfx_enemy_small_frame1)
+.enemy_anim_ptr_hi
+    EQUB &EA
+    EQUB HI(lev_enemy_0)
+    EQUB HI(lev_enemy_1)
+    EQUB HI(lev_enemy_2)
+    EQUB HI(lev_enemy_3)
+    EQUB HI(gfx_enemy_small_frame0)
+    EQUB HI(gfx_enemy_small_frame1)
 
 \ ----- code &1C1A..&1E46 -----
 .L1C1A
     TAY
     INY
     TYA
-    STA hazard_state,X
-L1C21            = * + 1
+    STA enemy_state,X
     LDA #&4C
     STA sprite_src_hi
     LDA #&20
@@ -1661,7 +1667,7 @@ L1C21            = * + 1
     TAY
     INY
     TYA
-    STA hazard_state,X
+    STA enemy_state,X
     LDA #&4C
     STA sprite_src_hi
     LDA #&68
@@ -1671,7 +1677,7 @@ L1C21            = * + 1
     TAY
     INY
     TYA
-    STA hazard_state,X
+    STA enemy_state,X
     LDA #&4C
     STA sprite_src_hi
     LDA #LO(lev_erase_brush + &B0)
@@ -1683,20 +1689,20 @@ L1C21            = * + 1
     LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     LDA #&00
-    STA hazard_state,X
+    STA enemy_state,X
     RTS
 
 .L1C5D
     STX data_16F5
-    LDA hazard_state,X
+    LDA enemy_state,X
     CMP #&0A
     BCC L1C68
     RTS
 .L1C68
-    LDY hazard_x,X
+    LDY enemy_x,X
     INY
     STY zp_test_x
-    LDA hazard_y,X
+    LDA enemy_y,X
     SEC
     SBC #&0C
     STA zp_test_y
@@ -1708,45 +1714,45 @@ L1C21            = * + 1
     LDX data_16F5
     JMP L1CB1
 .L1C83
-    LDA enemy_type,X
+    LDA hazard_type,X
     BEQ L1C78
     LDA zp_test_x
-    CMP enemy_x,X
+    CMP hazard_x,X
     BCC L1C78
     SBC #&06
-    CMP enemy_x,X
+    CMP hazard_x,X
     BCS L1C78
     LDA zp_test_y
-    CMP enemy_y,X
+    CMP hazard_y,X
     BCS L1C78
     ADC #&20
-    CMP enemy_y,X
+    CMP hazard_y,X
     BCC L1C78
     LDX data_16F5
     LDA #&0A
-    STA hazard_state,X
+    STA enemy_state,X
     LDA #&07
     JMP OSWRCH
 .L1CB1
-    LDY data_156F
+    LDY player_missile_x
     INY
     INY
     STY zp_test_x
-    LDA tbl_1571
+    LDA player_missile_y
     SEC
     SBC #&04
     STA zp_test_y
-    LDA tbl_1575
+    LDA player_missile_active
     CMP #&01
     BNE L1CCC
     LDY #&00
     JSR L1CE1
 .L1CCC
-    LDA data_1572
+    LDA player_missile_y + 1
     SEC
     SBC #&04
     STA zp_test_y
-    LDA data_1576
+    LDA player_missile_active + 1
     CMP #&01
     BNE L1CE0
     LDY #&01
@@ -1756,7 +1762,7 @@ L1C21            = * + 1
 
 .L1CE1
     LDX data_16F5
-    LDA hazard_x,X
+    LDA enemy_x,X
     CMP zp_test_x
     BCC L1CEC
     RTS
@@ -1766,7 +1772,7 @@ L1C21            = * + 1
     BCS L1CF3
     RTS
 .L1CF3
-    LDA hazard_y,X
+    LDA enemy_y,X
     CMP zp_test_y
     BCS L1CFB
     RTS
@@ -1780,9 +1786,9 @@ L1C21            = * + 1
     TYA
     TAX
     LDA #&00
-    STA tbl_1575,X
-    LDY tbl_1571,X
-    LDX data_156F
+    STA player_missile_active,X
+    LDY player_missile_y,X
+    LDX player_missile_x
     JSR calc_screen_addr
     LDX #&05
     LDY #&08
@@ -1793,21 +1799,21 @@ L1C21            = * + 1
     JSR sprite_plot_xy
     LDX data_16F5
     LDA #&0A
-    STA hazard_state,X
+    STA enemy_state,X
     JSR add_score_x1
     INC pickup_kill_count
     RTS
 
-.update_enemy_bullets
-    LDX #n_enemy_bullets  \ Per-frame mover for the 6-slot enemy_bullet pool. For each active slot (enemy_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00, or new X <= 1) or re-plot the 12×2-px red dart at the new position. Each active slot then runs enemy_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global hazard-fire cooldown zp_7E.
+.update_hazard_bullets
+    LDX #n_hazard_bullets  \ Per-frame mover for the 6-slot hazard_bullet pool. For each active slot (hazard_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00, or new X <= 1) or re-plot the 12×2-px red dart at the new position. Each active slot then runs hazard_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global enemy-fire cooldown zp_7E.
 .L1D37
-    LDA enemy_bullet_x,X
+    LDA hazard_bullet_x,X
     CMP #&FF
     BEQ L1D94
-    LDY enemy_bullet_y,X
-    DEC enemy_bullet_x,X
-    DEC enemy_bullet_x,X
-    LDA enemy_bullet_x,X
+    LDY hazard_bullet_y,X
+    DEC hazard_bullet_x,X
+    DEC hazard_bullet_x,X
+    LDA hazard_bullet_x,X
     STX data_16F5
     TAX
     CMP #&27
@@ -1817,7 +1823,7 @@ L1C21            = * + 1
     JSR calc_screen_addr
     LDX data_16F5
     LDA #&FF
-    STA enemy_bullet_x,X
+    STA hazard_bullet_x,X
     LDX #&02
     LDY #&02
     LDA #LO(lev_erase_brush + &102)
@@ -1842,7 +1848,7 @@ L1C21            = * + 1
     JSR sprite_plot_xy
     LDX data_16F5
 .L1D94
-    JSR enemy_bullet_collide_player
+    JSR hazard_bullet_collide_player
     DEX
     BNE L1D37
     LDA zp_7E
@@ -1851,10 +1857,10 @@ L1C21            = * + 1
 .L1DA0
     RTS
 
-.enemy_bullet_collide_player
-    LDA enemy_bullet_x,X  \ Box-collision test for one enemy_bullet against the player. Hit window: player_x in [bullet_x, bullet_x+5] AND player_y in [bullet_y, bullet_y+&10]. On hit: erase the 2×2 bullet trail with lev_erase_brush+&102, mark the slot inactive (&FF), and fall through into lose_a_life.
+.hazard_bullet_collide_player
+    LDA hazard_bullet_x,X  \ Box-collision test for one hazard_bullet against the player. Hit window: player_x in [bullet_x, bullet_x+5] AND player_y in [bullet_y, bullet_y+&10]. On hit: erase the 2×2 bullet trail with lev_erase_brush+&102, mark the slot inactive (&FF), and fall through into lose_a_life.
     STA zp_test_x
-    LDA enemy_bullet_y,X
+    LDA hazard_bullet_y,X
     STA zp_test_y
     LDA zp_player_x
     CMP zp_test_x
@@ -1877,8 +1883,8 @@ L1C21            = * + 1
     BCC L1DCB
     RTS
 .L1DCB
-    LDY enemy_bullet_y,X
-    LDA enemy_bullet_x,X
+    LDY hazard_bullet_y,X
+    LDA hazard_bullet_x,X
     TAX
     JSR calc_screen_addr
     LDX #&02
@@ -1890,10 +1896,10 @@ L1C21            = * + 1
     JSR sprite_plot_xy
     LDX data_16F5
     LDA #&FF
-    STA enemy_bullet_x,X
+    STA hazard_bullet_x,X
 
 .lose_a_life
-    STX data_16F5  \ Per-hit handler — runs once each time the player ship is touched by a hazard / enemy / bullet (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F, using gfx_icon_03 (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0 AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).
+    STX data_16F5  \ Per-hit handler — runs once each time the player ship is touched by a enemy / hazard / bullet (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F, using gfx_icon_03 (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0 AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).
     LDA #&07
     JSR OSWRCH
     LDA lives_blink_state
@@ -1941,7 +1947,7 @@ L1C21            = * + 1
 
 \ ----- code &1E47..&2050 -----
 .death_anim
-    LDA #&01  \ Player death animation. Plays sfx_explode then plots 6 frames of a 4×32 explosion sprite (`lev_explosion_0..5`) at the player position with `frame_delay` between frames. The source pointer pairs live in slots 21..26 of `lev_enemy_ptr_*` (aliased as `lev_explosion_ptr_lo` / `_hi` at &7A95 / &7AD5). Frames 0..3 are in LEVD1 (`lev_explosion_0..3` at &4A00 / &4A80 / &4B00 / &4B80); frames 4..5 are in LEVD2 (`lev_explosion_4..5` at &7C00 / &7C80). After the last frame, DEC `lives_left` and redraw the lives-remaining indicator at row &57; if any lives are left, also plays intro_get_ready and re-runs init to start the next ship.
+    LDA #&01  \ Player death animation. Plays sfx_explode then plots 6 frames of a 4×32 explosion sprite (`lev_explosion_0..5`) at the player position with `frame_delay` between frames. The source pointer pairs live in slots 21..26 of `lev_hazard_ptr_*` (aliased as `lev_explosion_ptr_lo` / `_hi` at &7A95 / &7AD5). Frames 0..3 are in LEVD1 (`lev_explosion_0..3` at &4A00 / &4A80 / &4B00 / &4B80); frames 4..5 are in LEVD2 (`lev_explosion_4..5` at &7C00 / &7C80). After the last frame, DEC `lives_left` and redraw the lives-remaining indicator at row &57; if any lives are left, also plays intro_get_ready and re-runs init to start the next ship.
     STA zp_sprite_dir_flag
     LDX zp_player_x
     LDA zp_player_y
@@ -2073,7 +2079,7 @@ L1C21            = * + 1
     RTS
 
 .init
-    LDA #&01  \ Per-level init. Sets player start position (&05, &C8), zero-fills the six 9-slot enemy state tables (enemy_x, enemy_y, enemy_type, enemy_hp, enemy_step, hazard_state), clears single-byte state (player bullets, force-pod registers), sets fire_cooldown_reload=6, and marks all 7 enemy_bullet_x slots inactive (&FF).
+    LDA #&01  \ Per-level init. Sets player start position (&05, &C8), zero-fills the six 9-slot hazard state tables (hazard_x, hazard_y, hazard_type, hazard_hp, hazard_step, enemy_state), clears single-byte state (player bullets, force-pod registers), sets fire_cooldown_reload=6, and marks all 7 hazard_bullet_x slots inactive (&FF).
     STA lives_blink_state
     LDA #&05
     STA zp_player_x
@@ -2094,24 +2100,24 @@ L1C21            = * + 1
     LDX #&00
 .L1FB6
     LDA #&00
-    STA enemy_y,X
-    STA enemy_x,X
-    STA enemy_type,X
-    STA enemy_hp,X
-    STA enemy_step,X
-    STA hazard_state,X
+    STA hazard_y,X
+    STA hazard_x,X
+    STA hazard_type,X
+    STA hazard_hp,X
+    STA hazard_step,X
+    STA enemy_state,X
     INX
     CPX #n_state_slots
     BNE L1FB6
-    STA tbl_1575
-    STA data_1576
+    STA player_missile_active
+    STA player_missile_active + 1
     STA pickup_state
-    STA data_156F
+    STA player_missile_x
     STA player_bullet_x
     STA data_16E7
     STA data_16E8
     STA data_16E9
-    STA hazard_pattern_len
+    STA enemy_pattern_len
     STA data_16EA
     STA data_16EB
     STA data_16EC
@@ -2132,19 +2138,19 @@ L1C21            = * + 1
     STA pod_attached
 L2016            = * + 1
     STA force_pod_state
-    STA pickup_spawn_blocked
+    STA player_missiles_unlocked
     STA data_25A9
     STA pickup_count
     LDX data_16F5
     LDY #&00
     LDA #&FF
-    STA enemy_bullet_x
-    STA enemy_bullet_x + 1
-    STA enemy_bullet_x + 2
-    STA enemy_bullet_x + 3
-    STA enemy_bullet_x + 5
-    STA enemy_bullet_x + 6
-    STA enemy_bullet_x + 4
+    STA hazard_bullet_x
+    STA hazard_bullet_x + 1
+    STA hazard_bullet_x + 2
+    STA hazard_bullet_x + 3
+    STA hazard_bullet_x + 5
+    STA hazard_bullet_x + 6
+    STA hazard_bullet_x + 4
     LDA zp_9A
     STA player_hp
     LDA #&00
@@ -2161,28 +2167,28 @@ L2016            = * + 1
 .lives_left
     \ Lives counter — number of ships remaining BEFORE the current one (i.e. continues / extra lives). Initialised by restore_score_from_loader from loader_lives_save (= 3 at game start; preserved across levels). DEC'd by death_anim after the explosion plays. main_loop polls this each game_step: when it reaches 0 → JMP game_over_or_continue.
     EQUB &06
-.enemy_x
+.hazard_x
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &EA
-.enemy_y
+.hazard_y
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA
-.enemy_type
+.hazard_type
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
     EQUB &00
-.enemy_flip
+.hazard_flip
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA
-.enemy_hp
+.hazard_hp
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA
-.enemy_step
+.hazard_step
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA
 
 \ ----- code &208A..&23C5 -----
 .spawn_check_step
-    LDX zp_7B  \ Spawn-table scanner — runs once per frame from main_loop. Compares lev_spawn_col[zp_7B] against zp_scroll_col; on match, decodes the paired lev_spawn_attr byte into a new enemy in the slot pool: bits 0..4 → enemy_type (0..31), bit 7 → enemy_flip (INVERTED: 0 in attr = upright, 1 = vertical-flip), bits 5..6 → spawn row 0..3 mapped to Y = &DF / &BF / &9F / &7F (4 evenly-spaced lines spanning the playfield gap between the upper and lower tile bands). Initial slot state: enemy_x = &28 (off-screen right, col 40), enemy_hp = &14 for type &10 / &06 for types &07 and < &03 / &08 otherwise, enemy_step = 4. Allocates slot via zp_7C (round-robin 0..7). On any non-spawning type (3..6 special-cased) it re-enters spawn_check_step to drain back-to-back spawns at the same column.
+    LDX zp_7B  \ Spawn-table scanner — runs once per frame from main_loop. Compares lev_spawn_col[zp_7B] against zp_scroll_col; on match, decodes the paired lev_spawn_attr byte into a new hazard in the slot pool: bits 0..4 → hazard_type (0..31), bit 7 → hazard_flip (INVERTED: 0 in attr = upright, 1 = vertical-flip), bits 5..6 → spawn row 0..3 mapped to Y = &DF / &BF / &9F / &7F (4 evenly-spaced lines spanning the playfield gap between the upper and lower tile bands). Initial slot state: hazard_x = &28 (off-screen right, col 40), hazard_hp = &14 for type &10 / &06 for types &07 and < &03 / &08 otherwise, hazard_step = 4. Allocates slot via zp_7C (round-robin 0..7). On any non-spawning type (3..6 special-cased) it re-enters spawn_check_step to drain back-to-back spawns at the same column.
     LDA lev_spawn_col,X
     CMP zp_scroll_col
     BEQ L2094
@@ -2194,7 +2200,7 @@ L2016            = * + 1
 .L209A
     INC zp_7C
     LDA zp_7C
-    CMP #n_enemies
+    CMP #n_hazards
     BCC L20A6
 
 .tbl_20A2
@@ -2206,7 +2212,7 @@ L2016            = * + 1
     TAY
     LDX zp_7C
     AND #&1F
-    STA enemy_type,X
+    STA hazard_type,X
     TYA
     AND #&80
     LSR A
@@ -2217,7 +2223,7 @@ L2016            = * + 1
     LSR A
     LSR A
     EOR #&01
-    STA enemy_flip,X
+    STA hazard_flip,X
     TYA
     AND #&60
     LSR A
@@ -2234,14 +2240,14 @@ L2016            = * + 1
     DEX
     BNE L20CF
     LDX zp_7C
-    STA enemy_y,X
+    STA hazard_y,X
     LDA #&28
-    STA enemy_x,X
+    STA hazard_x,X
     LDA #&08
-    STA enemy_hp,X
+    STA hazard_hp,X
     LDA #&04
-    STA enemy_step,X
-    LDA enemy_type,X
+    STA hazard_step,X
+    LDA hazard_type,X
     CMP #&10
     BEQ L20FA
     CMP #&07
@@ -2251,15 +2257,15 @@ L2016            = * + 1
     JMP spawn_check_step
 .L20FA
     LDA #&14
-    STA enemy_hp,X
+    STA hazard_hp,X
     JMP spawn_check_step
 .L2102
     LDA #&06
-    STA enemy_hp,X
+    STA hazard_hp,X
     JMP spawn_check_step
 
-.update_enemies
-    LDA forcefield_active  \ Per-frame enemy + force-field update + plot. First clears the force-field strip if forcefield_active=1 (erases a 2×&20 rectangle at (forcefield_x, forcefield_y) and clears the flag — the strip is procedural noise re-drawn every frame, so it has to be wiped before forcefield_render generates a fresh one). Then iterates the 8 enemy slots: for each active enemy (enemy_type != 0), DEC enemy_x to scroll it left, redraw, and dispatch any per-type behaviour via enemy_type_dispatch.
+.update_hazards
+    LDA forcefield_active  \ Per-frame hazard + force-field update + plot. First clears the force-field strip if forcefield_active=1 (erases a 2×&20 rectangle at (forcefield_x, forcefield_y) and clears the flag — the strip is procedural noise re-drawn every frame, so it has to be wiped before forcefield_render generates a fresh one). Then iterates the 8 hazard slots: for each active hazard (hazard_type != 0), DEC hazard_x to scroll it left, redraw, and dispatch any per-type behaviour via hazard_type_dispatch.
     CMP #&01
     BNE L2130
     LDX forcefield_x
@@ -2282,10 +2288,10 @@ L2016            = * + 1
     LDX #&FF
 .L213A
     INX
-    LDA enemy_type,X
+    LDA hazard_type,X
     BNE L2151
 .L2140
-    CPX #n_enemies
+    CPX #n_hazards
     BNE L213A
     INC zp_7F
     LDA zp_7F
@@ -2299,32 +2305,32 @@ L2016            = * + 1
     INC zp_frame_progress
     INC zp_frame_progress
     STX data_16F5
-    JSR update_enemy_slot
+    JSR update_hazard_slot
     LDA zp_scroll_col
     CMP #&F0
     BEQ L2164
-    DEC enemy_x,X
+    DEC hazard_x,X
 .L2164
-    LDA enemy_x,X
+    LDA hazard_x,X
     CMP #&FF
     BNE L216E
     JMP L21F1
 .L216E
-    LDY enemy_y,X
+    LDY hazard_y,X
     TAX
     JSR calc_screen_addr
     LDX data_16F5
-    LDA enemy_flip,X
+    LDA hazard_flip,X
     STA zp_sprite_dir_flag
-    LDA enemy_type,X
+    LDA hazard_type,X
     TAX
-    LDA lev_enemy_ptr_lo,X
+    LDA lev_hazard_ptr_lo,X
     CLC
     STA sprite_src_lo
-    LDA lev_enemy_ptr_hi,X
+    LDA lev_hazard_ptr_hi,X
     STA sprite_src_hi
     LDX data_16F5
-    LDA enemy_x,X
+    LDA hazard_x,X
     CMP #&25
     BCC L21BA
     CMP #&27
@@ -2342,7 +2348,7 @@ L2016            = * + 1
     LDY #&20
     JSR sprite_plot_xy
     LDX data_16F5
-    JSR L23C8
+    JSR missile_collide_hazard
     JMP L2140
 .L21BA
     LDX #&04
@@ -2353,9 +2359,9 @@ L2016            = * + 1
     LDA zp_scroll_col
     CMP #&F0
     BEQ L21EB
-    LDA enemy_x,X
-    ADC enemy_step,X
-    LDY enemy_y,X
+    LDA hazard_x,X
+    ADC hazard_step,X
+    LDY hazard_y,X
     TAX
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
@@ -2367,17 +2373,17 @@ L2016            = * + 1
     JSR sprite_plot_xy
     LDX data_16F5
 .L21EB
-    JSR L23C8
+    JSR missile_collide_hazard
     JMP L2140
 .L21F1
     LDA #&00
-    STA enemy_x,X
-    LDY enemy_y,X
+    STA hazard_x,X
+    LDY hazard_y,X
     TAX
     JSR calc_screen_addr
     LDX data_16F5
-    DEC enemy_step,X
-    LDY enemy_step,X
+    DEC hazard_step,X
+    LDY hazard_step,X
     BEQ L2237
     LDA #&FF
     CLC
@@ -2387,17 +2393,17 @@ L2016            = * + 1
     CPY #&04
     BNE L220B
     STA sprite_src_lo
-    LDA enemy_type,X
+    LDA hazard_type,X
     TAX
-    LDA lev_enemy_ptr_hi,X
+    LDA lev_hazard_ptr_hi,X
     STA sprite_src_hi
-    LDA lev_enemy_ptr_lo,X
+    LDA lev_hazard_ptr_lo,X
     ADC sprite_src_lo
     STA sprite_src_lo
     LDX data_16F5
-    LDA enemy_flip,X
+    LDA hazard_flip,X
     STA zp_sprite_dir_flag
-    LDA enemy_step,X
+    LDA hazard_step,X
     TAX
     JMP L21BC
 .L2237
@@ -2410,30 +2416,30 @@ L2016            = * + 1
     JSR sprite_plot_xy
     LDX data_16F5
     LDA #&00
-    STA enemy_type,X
+    STA hazard_type,X
     JMP L2140
 
-.update_enemy_slot
-    JSR enemy_type_dispatch  \ Per-frame action for one enemy slot (X = slot index). Two steps: (1) call enemy_type_dispatch for the per-type immediate action; if the dispatch path bumped enemy_type past &14 (the death-anim range), jump to enemy_death_step. (2) Otherwise gate frame-advance on zp_7F == 4 (the animation phase tick — zp_7F cycles 3/4 across frames, so anim only advances 50% of the time) and fall into enemy_anim_advance.
-    LDA enemy_type,X
+.update_hazard_slot
+    JSR hazard_type_dispatch  \ Per-frame action for one hazard slot (X = slot index). Two steps: (1) call hazard_type_dispatch for the per-type immediate action; if the dispatch path bumped hazard_type past &14 (the death-anim range), jump to hazard_death_step. (2) Otherwise gate frame-advance on zp_7F == 4 (the animation phase tick — zp_7F cycles 3/4 across frames, so anim only advances 50% of the time) and fall into hazard_anim_advance.
+    LDA hazard_type,X
     CMP #&14
     BCC L2260
-    JMP enemy_death_step
+    JMP hazard_death_step
 .L2260
     LDA zp_7F
     CMP #&04
-    BEQ enemy_anim_advance
+    BEQ hazard_anim_advance
     RTS
 
-.enemy_anim_advance
-    \ Animation-frame state machine for one enemy slot — keyed on enemy_type[X]:
-    \ type < &04 → anim_loop_1_to_3 (small-enemy 3-frame loop: 1→2→3→1, with type 4 hit briefly to spawn a bullet then immediately wrapped back to 1)
-    \ type &08 or &09 → anim_toggle_8_9 (EOR #1 — flame-firing enemy alternates between pre-fire pose &08 and post-fire idle &09)
+.hazard_anim_advance
+    \ Animation-frame state machine for one hazard slot — keyed on hazard_type[X]:
+    \ type < &04 → anim_loop_1_to_3 (3-frame anim loop: 1→2→3→1, with type 4 hit briefly to spawn a bullet then immediately wrapped back to 1)
+    \ type &08 or &09 → anim_toggle_8_9 (EOR #1 — flame-firing hazard alternates between pre-fire pose &08 and post-fire idle &09)
     \ type &0F → anim_set_type_10 (2-frame loop with &10)
     \ type &10 → anim_set_type_F (2-frame loop with &0F)
-    \ &04..&07, &0A..&0E, &11..&13 → enemy_anim_done (no animation — these are either action types that mutate to their own next state on dispatch, or static decor)
-    \ type ≥ &14 → enemy_death_step (the explosion-animation tail).
-    LDA enemy_type,X
+    \ &04..&07, &0A..&0E, &11..&13 → hazard_anim_done (no animation — these are either action types that mutate to their own next state on dispatch, or static decor)
+    \ type ≥ &14 → hazard_death_step (the explosion-animation tail).
+    LDA hazard_type,X
     CMP #&04
     BCC anim_loop_1_to_3
     CMP #&08
@@ -2445,67 +2451,67 @@ L2016            = * + 1
     CMP #&10
     BEQ anim_set_type_F
     CMP #&14
-    BCC enemy_anim_done
-    JMP enemy_death_step
+    BCC hazard_anim_done
+    JMP hazard_death_step
 
 .anim_loop_1_to_3
-    INC enemy_type,X  \ Small-enemy 3-frame animation loop (types 1, 2, 3). INC type; on hitting type 4 (which is the 'fire' marker, NOT a frame), wrap back to type 1. Note: type 4 IS reached momentarily — enemy_type_dispatch runs FIRST and enqueues a bullet on type 4, then this routine wraps the type back to 1.
-    LDA enemy_type,X
+    INC hazard_type,X  \ Small-hazard 3-frame animation loop (types 1, 2, 3). INC type; on hitting type 4 (which is the 'fire' marker, NOT a frame), wrap back to type 1. Note: type 4 IS reached momentarily — hazard_type_dispatch runs FIRST and enqueues a bullet on type 4, then this routine wraps the type back to 1.
+    LDA hazard_type,X
     CMP #&04
-    BNE enemy_anim_done
+    BNE hazard_anim_done
     LDA #&01
-    STA enemy_type,X
+    STA hazard_type,X
     RTS
 
 .anim_toggle_8_9
-    EOR #&01  \ Flame-firing enemy 2-state toggle. EOR #&01 flips between type &08 (about-to-fire pose; on the next dispatch call this triggers spawn_flame which itself bumps the slot to &09) and type &09 (post-fire idle).
-    STA enemy_type,X
+    EOR #&01  \ Flame-firing hazard 2-state toggle. EOR #&01 flips between type &08 (about-to-fire pose; on the next dispatch call this triggers spawn_flame which itself bumps the slot to &09) and type &09 (post-fire idle).
+    STA hazard_type,X
     RTS
 
-.enemy_anim_done
-    RTS  \ Shared 'no animation' RTS — branches here from enemy_anim_advance for enemy types that don't auto-advance their frame (force-fields, hazards already-advanced by dispatch, idle states).
+.hazard_anim_done
+    RTS  \ Shared 'no animation' RTS — branches here from hazard_anim_advance for hazard types that don't auto-advance their frame (force-fields, enemies already-advanced by dispatch, idle states).
 
-.enemy_death_step
-    INC enemy_type,X  \ Explosion-animation step for a dying enemy. INC enemy_type so it walks &14 → &15 → ... → &1B (= 8 frames using lev_enemy_ptr_*[20..27]); on reaching &1C clears the slot completely (enemy_type/_x/_y = 0). Triggered when an enemy's HP hits 0 (check_bullet_hits sets enemy_type = &14 to start the death anim).
-    LDA enemy_type,X
+.hazard_death_step
+    INC hazard_type,X  \ Explosion-animation step for a dying hazard. INC hazard_type so it walks &14 → &15 → ... → &1B (= 8 frames using lev_hazard_ptr_*[20..27]); on reaching &1C clears the slot completely (hazard_type/_x/_y = 0). Triggered when a hazard's HP hits 0 (check_bullet_hits sets hazard_type = &14 to start the death anim).
+    LDA hazard_type,X
     CMP #&1C
-    BNE enemy_anim_done
+    BNE hazard_anim_done
     LDA #&00
-    STA enemy_type,X
-    STA enemy_x,X
-    STA enemy_y,X
+    STA hazard_type,X
+    STA hazard_x,X
+    STA hazard_y,X
     RTS
 
-.enemy_type_dispatch
-    \ Enemy per-type IMMEDIATE action — called once per frame per active slot from update_enemy_slot, before frame-advance. Dispatch table by enemy_type[X]:
-    \ type &04 → enqueue_enemy_bullet (small enemy fires a leftward 12×2-px red bullet; pool at enemy_bullet_x/_y, 7 slots)
-    \ type &06 → spawn_enemy_missile (CODE2: launch a vertical 4×6-px yellow-red rocket that horizontally homes on the player; pool at enemy_missile_x/_y, 2 slots)
+.hazard_type_dispatch
+    \ Hazard per-type IMMEDIATE action — called once per frame per active slot from update_hazard_slot, before frame-advance. Dispatch table by hazard_type[X]:
+    \ type &04 → enqueue_hazard_bullet (hazard fires a leftward 12×2-px red bullet; pool at hazard_bullet_x/_y, 7 slots)
+    \ type &06 → spawn_hazard_missile (CODE2: launch a vertical 4×6-px yellow-red rocket that horizontally homes on the player; pool at hazard_missile_x/_y, 2 slots)
     \ type &07 → forcefield_render (this slot IS a force-field — re-noise the strip every frame)
     \ type &08 → spawn_flame (start the one-shot 32×8-px flame projectile; auto-mutates to type 9 on success)
-    \ type &13 → enqueue_enemy_bullet (same as type 4 — second enemy variant that fires a bullet)
+    \ type &13 → enqueue_hazard_bullet (same as type 4 — second hazard variant that fires a bullet)
     \ else     → RTS (no per-frame action; the slot just gets drawn and frame-advanced).
-    LDA enemy_type,X
+    LDA hazard_type,X
     CMP #&04
     BNE L22BC
-    JMP enqueue_enemy_bullet
+    JMP enqueue_hazard_bullet
 .L22BC
     CMP #&13
     BNE L22CF
-    JMP enqueue_enemy_bullet
+    JMP enqueue_hazard_bullet
 
 .anim_set_type_10
-    LDA #&10  \ Frame-advance for type-&0F enemies → set enemy_type = &10. Pairs with anim_set_type_F to form a 2-frame ping-pong (F↔10) for whichever enemy type this is (likely a 2-frame animated decor / persistent hazard with no death state).
-    STA enemy_type,X
+    LDA #&10  \ Frame-advance for type-&0F hazards → set hazard_type = &10. Pairs with anim_set_type_F to form a 2-frame ping-pong (F↔10) for whichever hazard type this is (likely a 2-frame animated decor / persistent enemy with no death state).
+    STA hazard_type,X
     RTS
 
 .anim_set_type_F
-    LDA #&0F  \ Frame-advance for type-&10 enemies → set enemy_type = &0F. The other half of the F↔10 ping-pong (see anim_set_type_10).
-    STA enemy_type,X
+    LDA #&0F  \ Frame-advance for type-&10 hazards → set hazard_type = &0F. The other half of the F↔10 ping-pong (see anim_set_type_10).
+    STA hazard_type,X
     RTS
 .L22CF
     CMP #&06
     BNE L22D6
-    JMP spawn_enemy_missile
+    JMP spawn_hazard_missile
 .L22D6
     CMP #&07
     BNE L22DD
@@ -2517,15 +2523,15 @@ L2016            = * + 1
 .L22E4
     RTS
 
-.enqueue_enemy_bullet
-    LDA zp_get_ready_erase  \ Enqueue an enemy bullet — called from enemy_type_dispatch for enemy types &04 and &13. Scans enemy_bullet_x[6..1] for a &FF (free) slot; on found, stores `enemy_x[firer] - 1` at enemy_bullet_x[slot] and `enemy_y[firer] - &10` at enemy_bullet_y[slot] (Y lifted by 16 px to fire from above the enemy). Plays sfx_fire. If the firer is already at enemy_x < &08 (almost off-screen left) the bullet is suppressed — there's not enough screen left for it to fly. Per-frame mover: update_enemy_bullets. The bullet sprite is a 12×2-px red dart (3-byte-col × 2-line block at lev_erase_brush+&100); the deactivation erase brush is at +&102.
+.enqueue_hazard_bullet
+    LDA zp_get_ready_erase  \ Enqueue a hazard bullet — called from hazard_type_dispatch for hazard types &04 and &13. Scans hazard_bullet_x[6..1] for a &FF (free) slot; on found, stores `hazard_x[firer] - 1` at hazard_bullet_x[slot] and `hazard_y[firer] - &10` at hazard_bullet_y[slot] (Y lifted by 16 px to fire from above the hazard). Plays sfx_fire. If the firer is already at hazard_x < &08 (almost off-screen left) the bullet is suppressed — there's not enough screen left for it to fly. Per-frame mover: update_hazard_bullets. The bullet sprite is a 12×2-px red dart (3-byte-col × 2-line block at lev_erase_brush+&100); the deactivation erase brush is at +&102.
     CMP #&02
     BEQ L22EC
     RTS
 .L22EC
-    LDX #n_enemy_bullets
+    LDX #n_hazard_bullets
 .L22EE
-    LDA enemy_bullet_x,X
+    LDA hazard_bullet_x,X
     CMP #&FF
     BEQ L22FC
     DEX
@@ -2535,21 +2541,21 @@ L2016            = * + 1
 .L22FC
     STX data_16F6
     LDX data_16F5
-    LDA enemy_x,X
+    LDA hazard_x,X
     CMP #&08
     BCS L230D
     LDX data_16F5
     RTS
 .L230D
     LDX data_16F6
-    STA enemy_bullet_x,X
-    DEC enemy_bullet_x,X
+    STA hazard_bullet_x,X
+    DEC hazard_bullet_x,X
     LDX data_16F5
-    LDA enemy_y,X
+    LDA hazard_y,X
     LDX data_16F6
     SEC
     SBC #&10
-    STA enemy_bullet_y,X
+    STA hazard_bullet_y,X
     JSR sfx_fire
     LDX data_16F5
     RTS
@@ -2563,8 +2569,8 @@ L2016            = * + 1
     LDA #&01
     STA forcefield_active
     LDX data_16F5
-    LDA enemy_y,X
-    LDY enemy_flip,X
+    LDA hazard_y,X
+    LDY hazard_flip,X
     BNE L234A
     SEC
     SBC #&20
@@ -2575,7 +2581,7 @@ L2016            = * + 1
 
 .forcefield_draw_or_erase
     STA forcefield_y
-    LDA enemy_x,X
+    LDA hazard_x,X
     STX data_16F8
     STA forcefield_x
     LDY forcefield_y
@@ -2640,37 +2646,37 @@ L2016            = * + 1
     EQUB &00
 
 \ ----- code &23C8..&2554 -----
-.L23C8
-    LDY data_156F
+.missile_collide_hazard
+    LDY player_missile_x  \ Per-frame test of both player missiles against the current hazard slot (X = hazard slot index, passed in via data_16F5). Sets up zp_test_x = upper_x + 3 and zp_test_y = upper_y - 4, calls `missile_hazard_box_test` with Y = 0 if the upper slot is active; then repeats with the lower slot's Y (zp_test_y = lower_y - 4) and Y = 1. Called from update_hazards' per-slot tail (L21AC, L21EB).
     INY
     INY
     INY
     STY zp_test_x
-    LDA tbl_1571
+    LDA player_missile_y
     SEC
     SBC #&04
     STA zp_test_y
-    LDA tbl_1575
+    LDA player_missile_active
     CMP #&01
     BNE L23E4
     LDY #&00
-    JSR L23F9
+    JSR missile_hazard_box_test
 .L23E4
-    LDA data_1572
+    LDA player_missile_y + 1
     SEC
     SBC #&04
     STA zp_test_y
-    LDA data_1576
+    LDA player_missile_active + 1
     CMP #&01
     BNE L23F8
     LDY #&01
-    JSR L23F9
+    JSR missile_hazard_box_test
 .L23F8
     RTS
 
-.L23F9
-    LDX data_16F5
-    LDA enemy_x,X
+.missile_hazard_box_test
+    LDX data_16F5  \ Box-test the hazard at slot X (data_16F5) against the test point (zp_test_x, zp_test_y). Hit window: hazard_x in [test_x - 5, test_x] AND hazard_y in [test_y, test_y + &20]. On hit → `missile_hit_hazard`. Y on entry encodes which missile is being tested (0 = upper, 1 = lower) and is used by the hit path to deactivate the right slot and pick the right Y coordinate.
+    LDA hazard_x,X
     CMP zp_test_x
     BCC L2404
     RTS
@@ -2680,23 +2686,24 @@ L2016            = * + 1
     BCS L240B
     RTS
 .L240B
-    LDA enemy_y,X
+    LDA hazard_y,X
     CMP zp_test_y
     BCS L2413
     RTS
 .L2413
     SBC #&20
     CMP zp_test_y
-    BCC L241A
+    BCC missile_hit_hazard
     RTS
-.L241A
-    JSR sfx_explode
+
+.missile_hit_hazard
+    JSR sfx_explode  \ Player missile hits hazard. Plays sfx_explode; uses the Y passed in (0 = upper, 1 = lower) to deactivate the corresponding `player_missile_active[Y]` and erase the corresponding sprite at (player_missile_x[Y], player_missile_y[Y]). Then DECs hazard_hp[X] by 4 — on kill (hp == 0) jumps to L2458 (the hazard-death path); on damage-but-not-killed RTSes.
     TYA
     TAX
     LDA #&00
-    STA tbl_1575,X
-    LDY tbl_1571,X
-    LDX data_156F
+    STA player_missile_active,X
+    LDY player_missile_y,X
+    LDX player_missile_x
     JSR calc_screen_addr
     LDA #&01
     STA zp_sprite_dir_flag
@@ -2708,10 +2715,10 @@ L2016            = * + 1
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX data_16F5
-    LDA enemy_hp,X
+    LDA hazard_hp,X
     SEC
     SBC #&04
-    STA enemy_hp,X
+    STA hazard_hp,X
     BEQ L2458
     CMP #&08
     BCS L2458
@@ -2720,24 +2727,24 @@ L2016            = * + 1
 .L2458
     LDA #&14
     LDX data_16F5
-    STA enemy_type,X
+    STA hazard_type,X
     LDX data_16F5
     RTS
 
 .spawn_flame
-    LDA flame_state  \ Spawn the flame projectile. Called from enemy_type_dispatch when an enemy of type 8 wants to fire. Refuses if `flame_state != 0` (only one flame at a time) or if the firing enemy's `enemy_x < &0C` (it has already scrolled too far left to spawn from). On success: mutates the firing enemy to type 9 (the post-fire idle state), copies its position into `flame_x` / `flame_y` (with a per-flip Y offset), and sets `flame_state = 1` to start the 6-frame animation.
+    LDA flame_state  \ Spawn the flame projectile. Called from hazard_type_dispatch when a hazard of type 8 wants to fire. Refuses if `flame_state != 0` (only one flame at a time) or if the firing hazard's `hazard_x < &0C` (it has already scrolled too far left to spawn from). On success: mutates the firing hazard to type 9 (the post-fire idle state), copies its position into `flame_x` / `flame_y` (with a per-flip Y offset), and sets `flame_state = 1` to start the 6-frame animation.
     BEQ L246A
     RTS
 .L246A
-    LDA enemy_x,X
+    LDA hazard_x,X
     CMP #&0C
     BCS L2472
     RTS
 .L2472
     LDA #&09
-    STA enemy_type,X
-    LDA enemy_y,X
-    LDY enemy_flip,X
+    STA hazard_type,X
+    LDA hazard_y,X
+    LDY hazard_flip,X
     SEC
     CPY #&01
     BNE L2487
@@ -2747,7 +2754,7 @@ L2016            = * + 1
     SBC #&10
 .L2489
     STA flame_y
-    LDA enemy_x,X
+    LDA hazard_x,X
     SBC #&09
     STA flame_x
     LDA #&01
@@ -2764,7 +2771,7 @@ L2016            = * + 1
     BRK  \ Flame state machine: 0 = inactive (slot free for a new spawn); 1..6 = animation frames (1=&3B00, 2=&3B40, 3=&3B80, then ping-pongs back 4=&3B80, 5=&3B40, 6=&3B00); 7 = deactivate next call. Each call to update_flame INCs the state (via advance_flame_state) or jumps straight to 7 if the player has been hit.
 
 .update_flame
-    LDX flame_x  \ Per-frame flame update (called from update_enemies when `flame_state != 0`). Erases the previous 32×8 frame, shifts the flame left by 1 px (DEC flame_x), then either re-plots the next animation frame from `gfx_flame_frame0..2` (states 1..6) or deactivates (state 7 / off-screen). Each frame is 8 byte-cols × 8 lines = 32×8 px. There is only ever one flame on screen — `spawn_flame` checks `flame_state` and refuses to start a new one until this slot is free.
+    LDX flame_x  \ Per-frame flame update (called from update_hazards when `flame_state != 0`). Erases the previous 32×8 frame, shifts the flame left by 1 px (DEC flame_x), then either re-plots the next animation frame from `gfx_flame_frame0..2` (states 1..6) or deactivates (state 7 / off-screen). Each frame is 8 byte-cols × 8 lines = 32×8 px. There is only ever one flame on screen — `spawn_flame` checks `flame_state` and refuses to start a new one until this slot is free.
     LDY flame_y
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
@@ -2864,13 +2871,13 @@ L2016            = * + 1
     EQUB &06
 
 \ ----- code &2555..&25A1 -----
-.pod_collide_hazard
-    LDA pod_attached  \ Per-frame pod ↔ hazard collision check (X = hazard slot). Only runs when the force-pod power-up is attached to the player (`pod_attached == 1`) and the hazard slot is active (`hazard_state < 9`). Test box is 3×&14 px at (player_x+8, player_y-11) — matches where draw_player_pod plots the pod sprite (offset (+5, +1) from the player). On hit: marks the slot &0A (expired), plays OSWRCH &07 (collision bell), runs `add_score_x1` for the score, and INCs `pickup_kill_count` (the kill-milestone counter that triggers a pickup spawn every 10 hits). Differs from `check_player_collisions` in that this is the POD doing damage to the hazard (scoring), whereas check_player_collisions is the hazard damaging the player (lose_a_life). Called from update_hazards per-slot.
+.pod_collide_enemy
+    LDA pod_attached  \ Per-frame pod ↔ enemy collision check (X = enemy slot). Only runs when the force-pod power-up is attached to the player (`pod_attached == 1`) and the enemy slot is active (`enemy_state < 9`). Test box is 3×&14 px at (player_x+8, player_y-11) — matches where draw_player_pod plots the pod sprite (offset (+5, +1) from the player). On hit: marks the slot &0A (expired), plays OSWRCH &07 (collision bell), runs `add_score_x1` for the score, and INCs `pickup_kill_count` (the kill-milestone counter that triggers a pickup spawn every 10 hits). Differs from `check_player_collisions` in that this is the POD doing damage to the enemy (scoring), whereas check_player_collisions is the enemy damaging the player (lose_a_life). Called from update_enemies per-slot.
     CMP #&01
     BEQ L255D
     RTS
 .L255D
-    LDA hazard_state,X
+    LDA enemy_state,X
     CMP #&09
     BCC L2565
     RTS
@@ -2883,13 +2890,13 @@ L2016            = * + 1
     SEC
     SBC #&0B
     STA zp_test_y
-    LDA hazard_x,X
+    LDA enemy_x,X
     CMP zp_test_x
     BCS L259E
     ADC #&03
     CMP zp_test_x
     BCC L259E
-    LDA hazard_y,X
+    LDA enemy_y,X
     CMP zp_test_y
     BCC L259E
     SEC
@@ -2897,7 +2904,7 @@ L2016            = * + 1
     CMP zp_test_y
     BCS L259E
     LDA #&0A
-    STA hazard_state,X
+    STA enemy_state,X
     LDA #&07
     JSR OSWRCH
     JSR add_score_x1
@@ -2913,20 +2920,20 @@ L2016            = * + 1
 
 \ ----- data &25A1..&25AA -----
 .pickup_tier_flag
-    \ 8-element pickup tier-flag array (&25A1..&25A8), indexed by `pickup_count - 1`. Set by `set_pickup_tier_flag` to mark each tier as reached. Three slots overlap with named flags whose meaning is consumed elsewhere: tier 3 (offset +2) = `pod_attached` (pod sprite + pod_collide_hazard kicks in), tier 5 (offset +4) = `force_pod_state` (pod_fire enabled + force_pod_anim runs), tier 7 (offset +6) = `pickup_spawn_blocked` (try_spawn_pickup refuses further spawns). Tiers 2, 4, 6, 8 (offsets +1, +3, +5, +7) ARE written but nothing reads them — orphan flags, presumably scaffolding for power-ups that were planned but never implemented (no consumer code).
+    \ 8-element pickup tier-flag array (&25A1..&25A8), indexed by `pickup_count - 1`. Set by `set_pickup_tier_flag` to mark each tier as reached. Three slots overlap with named flags whose meaning is consumed elsewhere: tier 3 (offset +2) = `pod_attached` (pod sprite + pod_collide_enemy kicks in), tier 5 (offset +4) = `force_pod_state` (pod_fire enabled + force_pod_anim runs), tier 7 (offset +6) = `player_missiles_unlocked` (`fire_player_missiles` enabled — a paired upper+lower 5×8 missile pattern fires on the next fire-button press; the spawn-block side-effect just falls out — there's nothing left to upgrade). Tiers 2, 4, 6, 8 (offsets +1, +3, +5, +7) ARE written but nothing reads them — orphan flags, presumably scaffolding for power-ups that were planned but never implemented (no consumer code).
     EQUB &EA, &EA
 .pod_attached
     EQUB &EA, &EA
 .force_pod_state
     EQUB &EA, &EA
-.pickup_spawn_blocked
+.player_missiles_unlocked
     EQUB &EA, &EA
 .data_25A9
     EQUB &EA
 
 \ ----- code &25AA..&268F -----
 .try_spawn_pickup
-    LDA pickup_kill_count  \ Try to start a power-up pickup. Triggered when pickup_kill_count (the kill-milestone counter — INC'd in check_bullet_hits at hazard-hit values 3/5/7) reaches &0A. Requires no pickup already active (pickup_state == 0) and `pickup_spawn_blocked != 1` (= the 7th-pickup ceiling — once the player has collected 7 power-ups, no more spawn). On success: stash player_y in pickup_y, set pickup_x = &27 (right edge col 39), pickup_state = 1 (animation start), play sfx_level_start.
+    LDA pickup_kill_count  \ Try to start a power-up pickup. Triggered when pickup_kill_count (the kill-milestone counter — INC'd in check_bullet_hits at enemy-hit values 3/5/7) reaches &0A. Requires no pickup already active (pickup_state == 0) and `player_missiles_unlocked != 1` (= the 7th-pickup ceiling — once the player has collected 7 power-ups, no more spawn). On success: stash player_y in pickup_y, set pickup_x = &27 (right edge col 39), pickup_state = 1 (animation start), play sfx_level_start.
     CMP #&0A
     BCS L25B2
     RTS
@@ -2937,7 +2944,7 @@ L2016            = * + 1
     BEQ L25BD
     RTS
 .L25BD
-    LDA pickup_spawn_blocked
+    LDA player_missiles_unlocked
     CMP #&01
     BNE L25C5
     RTS
@@ -3046,7 +3053,7 @@ L2016            = * + 1
     BNE L265A
     LDX #&00
 .L267B
-    LDA enemy_type,X
+    LDA hazard_type,X
     BNE L268A
     INX
     CPX #&08
@@ -3168,7 +3175,7 @@ L2016            = * + 1
     RTS
 
 .pickup_collected
-    LDX zp_player_x  \ Per-subframe pickup ↔ player collision test + tier ladder. Box-test the player against (pickup_x, pickup_y) with a (6 × &1C) hit window; miss → RTS. On hit: clear pickup_state, erase the pickup sprite (3×&10 brush), play sfx_level_start, add 100 to score (add_score_x10 with zp_score_acc=10? — TODO confirm), INC pickup_count, plot the +1 icon on the status row, then dispatch to `apply_pickup_tier`. Effects ladder (cumulative per game/life): #1 → fast fire (fire_cooldown_reload = 3); #2 → pickup_tier_flag+1 (unused); #3 → pod_attached = 1; #4 → unused; #5 → force_pod_state = 1 AND reset fire timer zp_8A = 8; #6 → unused; #7 → pickup_spawn_blocked = 1; #8+ → no effect (count clamped). Called from update_pickup every active subframe.
+    LDX zp_player_x  \ Per-subframe pickup ↔ player collision test + tier ladder. Box-test the player against (pickup_x, pickup_y) with a (6 × &1C) hit window; miss → RTS. On hit: clear pickup_state, erase the pickup sprite (3×&10 brush), play sfx_level_start, add 100 to score (add_score_x10 with zp_score_acc=10? — TODO confirm), INC pickup_count, plot the +1 icon on the status row, then dispatch to `apply_pickup_tier`. Effects ladder (cumulative per game/life): #1 → fast fire (fire_cooldown_reload = 3); #2 → pickup_tier_flag+1 (unused); #3 → pod_attached = 1; #4 → unused; #5 → force_pod_state = 1 AND reset fire timer zp_8A = 8; #6 → unused; #7 → player_missiles_unlocked = 1; #8+ → no effect (count clamped). Called from update_pickup every active subframe.
     DEX
     TXA
     CMP pickup_x
@@ -3227,7 +3234,7 @@ L2016            = * + 1
     RTS
 
 .set_pickup_tier_flag
-    LDA #&01  \ Set the per-tier pickup flag at `pickup_tier_flag,X`. The interesting tiers are X=2 (= pod_attached), X=4 (= force_pod_state, also resets zp_8A), X=6 (= pickup_spawn_blocked). Tiers X=1/3/5/7 write to dead slots.
+    LDA #&01  \ Set the per-tier pickup flag at `pickup_tier_flag,X`. The interesting tiers are X=2 (= pod_attached), X=4 (= force_pod_state, also resets zp_8A), X=6 (= player_missiles_unlocked). Tiers X=1/3/5/7 write to dead slots.
     STA pickup_tier_flag,X
     CPX #&04
     BNE L27E6

@@ -168,6 +168,12 @@ class DisasmConfig:
     # Value is a literal BeebAsm expression that replaces the raw value
     # (e.g. "LO(some_label)" / "HI(some_label)").
     immediate_overrides: dict[int, str] = field(default_factory=dict)
+    # Per-byte data overrides — for bytes inside forced-data regions,
+    # emit `EQUB <override>` instead of `EQUB &XX`. The override breaks
+    # any in-flight row, lands on its own line, and the row resumes
+    # after. Useful for sprite-pointer tables where each byte is
+    # logically `LO(label)` / `HI(label)`.
+    byte_overrides: dict[int, str] = field(default_factory=dict)
     # Named arrays: a base address gets a label; references to bytes
     # within `[base, base+length)` render as `<name> + N` in operands
     # instead of getting separate auto-generated `data_XXXX` labels.
@@ -207,6 +213,8 @@ class DisasmConfig:
             c.extern_labels[int(k, 0)] = v
         for k, v in j.get("immediate_overrides", {}).items():
             c.immediate_overrides[int(k, 0)] = v
+        for k, v in j.get("byte_overrides", {}).items():
+            c.byte_overrides[int(k, 0)] = v
         for k, v in j.get("array_labels", {}).items():
             # Each value is [name, length].
             c.array_labels[int(k, 0)] = (v[0], int(v[1]))
@@ -407,7 +415,9 @@ def disasm_code_region(data: bytes, base: int, region: Region,
 
 def disasm_data_region(data: bytes, base: int, region: Region,
                        labels: dict[int, str], comments: dict[int, str],
-                       lines: list[str]):
+                       lines: list[str],
+                       byte_overrides: dict[int, str] | None = None):
+    byte_overrides = byte_overrides or {}
     pc = region.start
     while pc < region.end:
         if pc in labels:
@@ -461,16 +471,31 @@ def disasm_data_region(data: bytes, base: int, region: Region,
             row = []
             row_start = pc
             row_end = min(pc + 8, region.end)
+            emitted_any = False
             while pc < row_end and off < len(data):
-                # Check if next byte has a label; if so, break the line
-                if pc != row_start and pc in labels:
+                # Stop the row when we hit a label (so the outer loop
+                # can emit the `.label` header) — but only AFTER we've
+                # emitted at least one byte in this row pass.
+                if emitted_any and pc in labels:
                     break
+                # Per-byte override → flush row, emit on own line, restart
+                if pc in byte_overrides:
+                    if row:
+                        lines.append(f"    EQUB {', '.join(row)}")
+                        row = []
+                    lines.append(f"    EQUB {byte_overrides[pc]}")
+                    pc += 1
+                    off = pc - base
+                    emitted_any = True
+                    continue
                 row.append(fmt_hex(data[off], 2))
                 pc += 1
                 off = pc - base
+                emitted_any = True
                 if pc in comments and pc != row_start:
                     break
-            lines.append(f"    EQUB {', '.join(row)}")
+            if row:
+                lines.append(f"    EQUB {', '.join(row)}")
 
 
 def find_dead_jumps(data: bytes, base: int, code_bytes: set[int]) -> list[int]:
@@ -720,6 +745,7 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
             auto_extern_labels=dict(cfg.auto_extern_labels),
             master_externs=dict(cfg.master_externs),
             immediate_overrides=dict(cfg.immediate_overrides),
+            byte_overrides=dict(cfg.byte_overrides),
             array_labels=dict(cfg.array_labels),
             entries=cfg.entries,
             emit_externs=cfg.emit_externs,
@@ -927,7 +953,7 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
                                 comment="(unannotated gap, treated as data)")
             lines.append("")
             lines.append(f"\\ --- gap {fmt_hex(cursor, 4)}..{fmt_hex(r.start, 4)} ---")
-            disasm_data_region(data, cfg.base, gap_region, cfg.labels, cfg.comments, lines)
+            disasm_data_region(data, cfg.base, gap_region, cfg.labels, cfg.comments, lines, byte_overrides=cfg.byte_overrides)
         lines.append("")
         lines.append(f"\\ ----- {r.kind} {fmt_hex(r.start, 4)}..{fmt_hex(r.end, 4)} -----")
         if r.comment:
@@ -938,7 +964,7 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
                                cfg.auto_extern_labels, jsr_targets,
                                sm_operand_labels, cfg.array_labels)
         else:
-            disasm_data_region(data, cfg.base, r, cfg.labels, cfg.comments, lines)
+            disasm_data_region(data, cfg.base, r, cfg.labels, cfg.comments, lines, byte_overrides=cfg.byte_overrides)
         cursor = r.end
 
     # Trailing data
@@ -947,7 +973,7 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
         lines.append("")
         lines.append(f"\\ --- trailing data {fmt_hex(cursor, 4)}..{fmt_hex(end_of_file, 4)} ---")
         trailing = Region(start=cursor, end=end_of_file, kind="data", width=1)
-        disasm_data_region(data, cfg.base, trailing, cfg.labels, cfg.comments, lines)
+        disasm_data_region(data, cfg.base, trailing, cfg.labels, cfg.comments, lines, byte_overrides=cfg.byte_overrides)
 
     return "\n".join(lines) + "\n"
 

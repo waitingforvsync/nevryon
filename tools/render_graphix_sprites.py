@@ -38,8 +38,8 @@ OUT = "graphix"
 CATALOG = [
     (0x3680, "muzzle_flash_frame0",  4, 16),
     (0x36C0, "muzzle_flash_frame1",  4, 16),
-    (0x3700, "enemy_slot15",          4, 32),
-    (0x3780, "enemy_slot16",          4, 32),
+    (0x3700, "hazard_slot15",          4, 32),
+    (0x3780, "hazard_slot16",          4, 32),
     (0x3800, "text_wow",              6, 16),
     # &3860..&38EF: 6 ball-chomp animation frames, 2×12 each (24 B/frame)
     (0x3860, "ball", 2, 12, [
@@ -96,16 +96,18 @@ CATALOG = [
     (0x4280, "text_over",             8, 16),
     (0x4300, "text_on",               6, 16),
 
-    (0x4360, "enemy_slot19",          4, 32),
+    (0x4360, "hazard_slot19",          4, 32),
 
-    # &43E0..&440F: 48 B blank padding before missiles
-    # Five missile sprites at &4410, &4438, &4460, &4488, &44B0 (5×8 each = 40 B)
-    (0x4410, "missile_0",             5, 8),
-    (0x4438, "missile_1",             5, 8),
-    (0x4460, "missile_2",             5, 8),
-    (0x4488, "missile_3",             5, 8),
-    (0x44B0, "missile_4",             5, 8),
-    # &44D8..&44FF: 40 B padding
+    # &43E0..&43FF: 32 B blank padding before missiles
+    # Five missile sprites at &4400, &4428, &4450, &4478, &44A0 (5×8 each = 40 B).
+    # These are the addresses L1689 (plot_player_missile) actually reads;
+    # earlier cfgs had them off by +&10 into the trailing pad — Session 22 fix.
+    (0x4400, "missile_0",             5, 8),
+    (0x4428, "missile_1",             5, 8),
+    (0x4450, "missile_2",             5, 8),
+    (0x4478, "missile_3",             5, 8),
+    (0x44A0, "missile_4",             5, 8),
+    # &44C8..&44FF: 56 B padding
     # &4500..&474F: orphan_4500, 592 B of sprite-like bytes (`00 03 00 03 ...`)
     # — no references in CODE/CODE2/CODE3 or any BASIC loader. Dead data.
     (0x4500, "orphan_4500",           1, 592),  # rendered as a strip
@@ -120,14 +122,13 @@ CATALOG = [
         "icon_10", "icon_11", "icon_12", "icon_13",
         "icon_14", "icon_15", "icon_16", "icon_17",
     ]),
-    # &4840..&4847: 8 B pad
-    # &4848..&484F: bomb/ball (1×8)
-    (0x4848, "bomb",                  1, 8),
-    # &4850..&4857: 8 B pad
-    # &4858..&48E7: two 3×24 enemy animation frames (72 B each)
-    (0x4858, "enemy_small_frame0",    3, 24),
-    (0x48A0, "enemy_small_frame1",    3, 24),
-    # &48E8..&48FF: 24 B trailing pad
+    # &4840..&48FF: two 4×24 enemy animation frames (96 B each), back-to-back
+    # to the IRQ handler at &4900. Session 22 fix: prior cfgs split this
+    # range into bomb / pad / 3×24-frame fragments which mis-rendered both
+    # the bomb and the enemy sprites. The enemy_anim_ptr LUT in CODE
+    # references &4840 (slot 5) and &48A0 (slot 6) directly.
+    (0x4840, "enemy_small_frame0",    4, 24),
+    (0x48A0, "enemy_small_frame1",    4, 24),
 ]
 
 

@@ -49,12 +49,12 @@
 \   lose_a_life = &1DEE
 \   L2016 = &2016
 \   lives_left = &2051
-\   enemy_x = &2052
-\   enemy_y = &205C
-\   enemy_flip = &206E
+\   hazard_x = &2052
+\   hazard_y = &205C
+\   hazard_flip = &206E
 \   spawn_check_step = &208A
 \   tbl_20A2 = &20A2
-\   enemy_type_dispatch = &22B2
+\   hazard_type_dispatch = &22B2
 \   forcefield_render = &232C
 \   forcefield_draw_or_erase = &234D
 \   forcefield_erase = &23A8
@@ -416,17 +416,17 @@ data_28D8        = * + 1
     LDY #&08
     JMP sprite_plot_xy
 
-.spawn_enemy_missile
-    LDA zp_get_ready_erase  \ Try to spawn a new enemy missile in one of the two slots (enemy_missile_x[0..1] == &FF = free). Called from CODE's enemy_type_dispatch for enemy_type &06. Validates the firer's enemy_x is in [&08, &25] (on-screen), copies enemy_x+2 / enemy_y into the missile slot, mirrors enemy_flip into enemy_missile_flip (controls vertical direction in step_enemy_missile), and sets enemy_missile_homing_dir from a player-X comparison: 1 if player_x+3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise (home leftward). Plays sfx_score_tick to mark the launch. The missile sprite is gfx_icon_08, a 4×6-px yellow-and-red rocket pointing vertically.
+.spawn_hazard_missile
+    LDA zp_get_ready_erase  \ Try to spawn a new hazard missile in one of the two slots (hazard_missile_x[0..1] == &FF = free). Called from CODE's hazard_type_dispatch for hazard_type &06. Validates the firer's hazard_x is in [&08, &25] (on-screen), copies hazard_x+2 / hazard_y into the missile slot, mirrors hazard_flip into hazard_missile_flip (controls vertical direction in step_hazard_missile), and sets hazard_missile_homing_dir from a player-X comparison: 1 if player_x+3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise (home leftward). Plays sfx_score_tick to mark the launch. The missile sprite is gfx_icon_08, a 4×6-px yellow-and-red rocket pointing vertically.
     CMP #&02
     BNE L2A3E
     STX scratch_28D4
     LDX #&00
-    LDA enemy_missile_x,X
+    LDA hazard_missile_x,X
     CMP #&FF
     BEQ L2A3F
     LDX #&01
-    LDA enemy_missile_x,X
+    LDA hazard_missile_x,X
     CMP #&FF
     BEQ L2A3F
     LDX scratch_28D4
@@ -435,7 +435,7 @@ data_28D8        = * + 1
 .L2A3F
     STX scratch_28D3
     LDX scratch_28D4
-    LDA enemy_x,X
+    LDA hazard_x,X
     CMP #&08
     BCC L2A9E
     CMP #&25
@@ -443,64 +443,64 @@ data_28D8        = * + 1
     CLC
     ADC #&02
     LDX scratch_28D3
-    STA enemy_missile_x,X
+    STA hazard_missile_x,X
     LDX scratch_28D4
-    LDA enemy_flip,X
+    LDA hazard_flip,X
     CMP #&01
     BEQ L2A6F
-    STA enemy_missile_flip
-    LDA enemy_y,X
+    STA hazard_missile_flip
+    LDA hazard_y,X
     SEC
     SBC #&18
     JMP L2A7B
 .L2A6F
     LDX scratch_28D3
-    STA enemy_missile_flip,X
+    STA hazard_missile_flip,X
     LDX scratch_28D4
-    LDA enemy_y,X
+    LDA hazard_y,X
 .L2A7B
     LDX scratch_28D3
-    STA enemy_missile_y,X
+    STA hazard_missile_y,X
     LDA #&00
-    STA enemy_missile_unused,X
-    STA enemy_missile_homing_dir,X
+    STA hazard_missile_unused,X
+    STA hazard_missile_homing_dir,X
     LDA zp_player_x
     CLC
     ADC #&03
-    CMP enemy_missile_x,X
+    CMP hazard_missile_x,X
     BCS L2A96
     JMP L2A9B
 .L2A96
     LDA #&01
-    STA enemy_missile_homing_dir,X
+    STA hazard_missile_homing_dir,X
 .L2A9B
     JSR sfx_score_tick
 .L2A9E
     LDX scratch_28D4
     RTS
 
-.update_enemy_missiles
-    LDX #&00  \ Per-frame: step each of the 2 enemy missiles (slots 0 and 1) then collision-check each against the player. Inactive slots (enemy_missile_x == &FF) are skipped.
-    LDA enemy_missile_x,X
+.update_hazard_missiles
+    LDX #&00  \ Per-frame: step each of the 2 hazard missiles (slots 0 and 1) then collision-check each against the player. Inactive slots (hazard_missile_x == &FF) are skipped.
+    LDA hazard_missile_x,X
     CMP #&FF
     BEQ L2AAE
-    JSR step_enemy_missile
+    JSR step_hazard_missile
 .L2AAE
     LDX #&01
-    LDA enemy_missile_x,X
+    LDA hazard_missile_x,X
     CMP #&FF
     BEQ L2ABA
-    JSR step_enemy_missile
+    JSR step_hazard_missile
 .L2ABA
     LDX #&00
     JSR missile_player_collide
     LDX #&01
     JMP missile_player_collide
 
-.step_enemy_missile
-    STX scratch_28D3  \ Step one enemy missile (X = slot index 0..1). Erases the old 1×6 position with lev_erase_brush+&80, then advances: horizontally by enemy_missile_homing_dir (1 = INC X by 1 → home rightward, else DEC X by 2 → home leftward), vertically by enemy_missile_flip (1 = Y+=2, else Y-=2). Bounds-checks the new (X, Y) against the playfield; out-of-bounds → mark slot inactive. Plots gfx_icon_08 (4×6-px rocket) at the new position.
-    LDA enemy_missile_x,X
-    LDY enemy_missile_y,X
+.step_hazard_missile
+    STX scratch_28D3  \ Step one hazard missile (X = slot index 0..1). Erases the old 1×6 position with lev_erase_brush+&80, then advances: horizontally by hazard_missile_homing_dir (1 = INC X by 1 → home rightward, else DEC X by 2 → home leftward), vertically by hazard_missile_flip (1 = Y+=2, else Y-=2). Bounds-checks the new (X, Y) against the playfield; out-of-bounds → mark slot inactive. Plots gfx_icon_08 (4×6-px rocket) at the new position.
+    LDA hazard_missile_x,X
+    LDY hazard_missile_y,X
     TAX
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
@@ -511,40 +511,40 @@ data_28D8        = * + 1
     LDY #&06
     JSR sprite_plot_xy
     LDX scratch_28D3
-    LDA enemy_missile_homing_dir,X
+    LDA hazard_missile_homing_dir,X
     CMP #&01
     BEQ L2AF5
-    DEC enemy_missile_x,X
-    DEC enemy_missile_x,X
+    DEC hazard_missile_x,X
+    DEC hazard_missile_x,X
     JMP L2AF8
 .L2AF5
-    INC enemy_missile_x,X
+    INC hazard_missile_x,X
 .L2AF8
-    LDA enemy_missile_x,X
+    LDA hazard_missile_x,X
     CMP #&03
     BCC L2B42
     CMP #&25
     BCS L2B42
-    LDA enemy_missile_flip,X
+    LDA hazard_missile_flip,X
     CMP #&01
     BEQ L2B1A
     SEC
-    LDA enemy_missile_y,X
+    LDA hazard_missile_y,X
     SBC #&02
-    STA enemy_missile_y,X
+    STA hazard_missile_y,X
     CMP #&82
     BCC L2B42
     JMP L2B27
 .L2B1A
     CLC
-    LDA enemy_missile_y,X
+    LDA hazard_missile_y,X
     ADC #&02
-    STA enemy_missile_y,X
+    STA hazard_missile_y,X
     CMP #&C8
     BCS L2B42
 .L2B27
-    LDA enemy_missile_x,X
-    LDY enemy_missile_y,X
+    LDA hazard_missile_x,X
+    LDY hazard_missile_y,X
     TAX
     JSR calc_screen_addr
     LDA #LO(gfx_icon_08)
@@ -556,14 +556,14 @@ data_28D8        = * + 1
     JMP sprite_plot_xy
 .L2B42
     LDA #&FF
-    STA enemy_missile_x,X
+    STA hazard_missile_x,X
     RTS
 
 .missile_player_collide
-    STX scratch_28D3  \ Box-collision check between one enemy_missile slot and the player. On hit, jumps to the player-death path (lose_a_life via the CODE-side handler).
-    LDA enemy_missile_x,X
+    STX scratch_28D3  \ Box-collision check between one hazard_missile slot and the player. On hit, jumps to the player-death path (lose_a_life via the CODE-side handler).
+    LDA hazard_missile_x,X
     STA zp_test_x
-    LDA enemy_missile_y,X
+    LDA hazard_missile_y,X
     SEC
     SBC #&04
     STA zp_test_y
@@ -579,8 +579,8 @@ data_28D8        = * + 1
     SBC #&18
     CMP zp_test_y
     BCS L2B99
-    LDY enemy_missile_y,X
-    LDA enemy_missile_x,X
+    LDY hazard_missile_y,X
+    LDA hazard_missile_x,X
     TAX
     JSR calc_screen_addr
     LDA #LO(lev_erase_brush + &80)
@@ -592,22 +592,22 @@ data_28D8        = * + 1
     JSR sprite_plot_xy
     LDX scratch_28D3
     LDA #&FF
-    STA enemy_missile_x,X
+    STA hazard_missile_x,X
     JSR lose_a_life
     JSR sfx_explode
 .L2B99
     RTS
 
 \ ----- data &2B9A..&2BA4 -----
-.enemy_missile_x
+.hazard_missile_x
     EQUB &FF, &FF
-.enemy_missile_y
+.hazard_missile_y
     EQUB &EA, &EA
-.enemy_missile_flip
+.hazard_missile_flip
     EQUB &EA, &EA
-.enemy_missile_unused
+.hazard_missile_unused
     EQUB &EA, &EA
-.enemy_missile_homing_dir
+.hazard_missile_homing_dir
     EQUB &EA, &EA
 
 \ ----- code &2BA4..&2E8C -----
@@ -732,8 +732,8 @@ data_28D8        = * + 1
     JMP L2C72
 .L2CB8
     LDA #&FF
-    STA enemy_missile_x
-    STA enemy_missile_x + 1
+    STA hazard_missile_x
+    STA hazard_missile_x + 1
     LDA #&03
     STA zp_get_ready_erase
     JSR intro_or_scoreboard

@@ -51,7 +51,7 @@ Conventions:
       │ Load &1100..&27E6 (5863 B, p.3). See "$.CODE" below.     │
 &1100 │   main engine code & data (see expanded layout below)   │
 &27E7 ├─────────────────────────────────────────────────────────┤
-      │ $.CODE2 — sound effects, score, intro, hazards, etc.     │
+      │ $.CODE2 — sound effects, score, intro, enemies, etc.     │
 &2800 │   Load &2800..&31E8 (2537 B, p.236).                     │
 &31E9 ├─────────────────────────────────────────────────────────┤
       │ Reserved gap (&31E9..&32FF, ~280 B) — unused.           │
@@ -77,7 +77,7 @@ Conventions:
       │ Screen RAM — MODE 5 framebuffer.                         │
       │   Char rows  0-19 (160 px tall): playfield                │
       │     rows  0-3:  upper tile band (mirrored)                │
-      │     rows  4-15: player + enemies + hazards + starfield   │
+      │     rows  4-15: player + hazards + enemies + starfield   │
       │     rows 16-19: lower tile band (normal)                 │
       │   Char rows 20-21: scoreboard (loaded from $.SCOREBD     │
       │     into the BOTTOM of screen RAM around &7100, then    │
@@ -162,19 +162,19 @@ Loaded at `&1100`, length 5863 B = `&16E7`, ends at `&27E6`.
 | `&1565..&175D` | `move_player_left` / `*_right` / `*_up` / `*_down` + collision helpers | Movement clamps + bookkeeping |
 | `&17B9..&17E6` | `on_fire_pressed` | Allocate player_bullet slot, store position, play `sfx_fire` |
 | `&17E7..&1846` | `update_bullets` | Per-frame: advance the 6 player-bullet slots +2 px; erase or replot; decrement fire cooldown |
-| `&1847..&19F5` | `check_bullet_hits` | Test current bullet against hazards then enemies; mark hits + spawn effects |
+| `&1847..&19F5` | `check_bullet_hits` | Test current bullet against enemies then hazards; mark hits + spawn effects |
 | `&19F6..&1A54` | (collision tail) | Common hit-resolution code |
-| `&1A55..&1A6F` | `hazard_x` / `hazard_y` / `hazard_state` | The 11-byte parallel state arrays for the 8 hazard slots |
-| `&1A76..&1A98` | `tbl_1A76` / `tbl_1A81` / `tbl_1A8B..&1A91` / `tbl_1A92` | More hazard state (direction, prior-hit memory, slot-active markers initialised to `&FF`) |
-| `&1A99..&1AEA` | (hazard helper) | Inner update used by `update_hazards` |
-| `&1AEB..&1C11` | `update_hazards` | Per-frame mover for the 8 hazard slots (move ±1 X / ±4 Y, erase + replot 4×24) |
+| `&1A55..&1A6F` | `enemy_x` / `enemy_y` / `enemy_state` | The 11-byte parallel state arrays for the 8 enemy slots |
+| `&1A76..&1A98` | `tbl_1A76` / `tbl_1A81` / `tbl_1A8B..&1A91` / `tbl_1A92` | More enemy state (direction, prior-hit memory, slot-active markers initialised to `&FF`) |
+| `&1A99..&1AEA` | (enemy helper) | Inner update used by `update_enemies` |
+| `&1AEB..&1C11` | `update_enemies` | Per-frame mover for the 8 enemy slots (move ±1 X / ±4 Y, erase + replot 4×24) |
 | `&1C12..&1DED` | (decor-sprite + LEVD1 logic) | Various LEVD1-accessing draw paths (CODE &1C25 / &1C36 push into the LEVD1 decoration banks — still TBD) |
 | `&1DEE..&1E45` | `lose_a_life` | Play OSWRCH 7 + toggle/decrement the lives indicator |
 | `&1E46` | `data_1E46` | 1-byte blink flip-flop for lives icon |
 | `&1E47..&206D` | `death_anim` | 6-frame explosion at player position via `lev_explosion_ptr_lo/hi` (frames 0..3 from `lev_explosion_00..03` in LEVD1, frames 4..5 from `lev_explosion_04` / `lev_explosion_05` in LEVD2) |
-| `&206E..&2080` | `tbl_206E` / `enemy_step` | Active enemy v-flip flag + step counter (parallel to `enemy_x/y/type/hp`) |
-| `&2050..&209F` | `data_2050` / `data_2051` / `enemy_x` / `enemy_y` / `enemy_type` / `enemy_hp` | The 9-slot active-enemy state tables, plus the lives counter (`data_2051`) and "lives lost" counter (`data_2050`) |
-| `&208A..&21EE` | `spawn_check_step` / `enemy_type_dispatch` | Per-frame: match `zp_scroll_col` against `lev_spawn_col`, install the next free enemy slot from `lev_spawn_attr` |
+| `&206E..&2080` | `tbl_206E` / `hazard_step` | Active hazard v-flip flag + step counter (parallel to `hazard_x/y/type/hp`) |
+| `&2050..&209F` | `data_2050` / `data_2051` / `hazard_x` / `hazard_y` / `hazard_type` / `hazard_hp` | The 9-slot active-hazard state tables, plus the lives counter (`data_2051`) and "lives lost" counter (`data_2050`) |
+| `&208A..&21EE` | `spawn_check_step` / `hazard_type_dispatch` | Per-frame: match `zp_scroll_col` against `lev_spawn_col`, install the next free hazard slot from `lev_spawn_attr` |
 | `&232C..&23C4` | `forcefield_render` / `forcefield_draw_or_erase` / `forcefield_erase` | Procedural vertical strip (uses `lfsr_random` byte as the low byte of an `&80XX` source — i.e. reads sideways ROM as cheap noise) |
 | `&23C5..&2553` | various L<addr> | Spawn + per-type dispatch helpers (TBD) |
 | `&2554` | `fire_cooldown_reload` | Default cooldown value (= 6 from `init`) |
@@ -182,7 +182,7 @@ Loaded at `&1100`, length 5863 B = `&16E7`, ends at `&27E6`.
 | `&2656..&268F` | `starfield_init` + helpers | One-shot at level start: walks the 60-star arrays and plants the initial pixel byte at each starting screen address |
 | `&2690..&27E6` | various L<addr> | Trampolines + utility code (TBD) |
 
-## `$.CODE2` — sound, score, intro, hazards
+## `$.CODE2` — sound, score, intro, enemies
 
 Loaded at `&2800`, length 2537 B, ends at `&31E8`.
 
@@ -196,7 +196,7 @@ Sub-blocks at a glance (full per-routine breakdown is in
 | `&28D7..&2972` | `force_pod_anim`                     | Force-pod chomping-ball animation (`gfx_ball_frame0..5`) |
 | `&29E7..&2A1F` | `draw_score` / `draw_score_digit`    | 6-digit BCD score plot at char-col 9 |
 | `&2A02..&2A07` | `score_d3` / `score_d2` / `score_d1` / `score_d0` (+2) | The 6-digit BCD score store (read by `draw_score`) |
-| `&2A20..&2BA3` | `spawn_enemy_missile` / `update_enemy_missiles` / `step_enemy_missile` / `missile_player_collide` | Enemy bomb-drop pipeline (2 slots in `tbl_2B9A` etc.) |
+| `&2A20..&2BA3` | `spawn_hazard_missile` / `update_hazard_missiles` / `step_hazard_missile` / `missile_player_collide` | Hazard bomb-drop pipeline (2 slots in `tbl_2B9A` etc.) |
 | `&2BA4..&2CC9` | `intro_get_ready`                    | Level-start "GET READY!" 75-frame countdown |
 | `&2CCA..&2E5F` | `draw_title_screen`                  | 4th Dimension logo + GPR '90 + PRESS SPACE renderer |
 | `&2E5A..&2E5F` | `tbl_2E5A`                           | 6-byte BCD high-score store |
@@ -237,7 +237,7 @@ Sprite atlas at `&3680..&48FF` (4736 B). Every named sprite has the
 | Range          | Group                                       |
 |----------------|---------------------------------------------|
 | `&3680..&36FF` | `gfx_muzzle_flash_frame0/1`                 |
-| `&3700..&37FF` | `gfx_enemy_slot15/16` — shared enemies      |
+| `&3700..&37FF` | `gfx_hazard_slot15/16` — shared hazards      |
 | `&3860..&38EF` | `gfx_ball_frame0..5` (force-pod ball-chomp) |
 | `&3900..&3A1F` | `gfx_pod_frame0..2` (player force-pod)      |
 | `&3A20..&3AAF` | `gfx_icon_00..09`, `gfx_digit_0..9`         |
@@ -246,7 +246,7 @@ Sprite atlas at `&3680..&48FF` (4736 B). Every named sprite has the
 | `&3D00..&3DDF` | `gfx_logo_4thdim`                           |
 | `&3DE0..&3FFF` | `gfx_text_score / _last / _high / _gpr90` etc. |
 | `&4060..&4090..` | `gfx_pickup_red / _yellow / _checker / _white` |
-| `&4100..&4360..` | `gfx_text_get_ready / _game / _over / _on` + `gfx_enemy_slot19` |
+| `&4100..&4360..` | `gfx_text_get_ready / _game / _over / _on` + `gfx_hazard_slot19` |
 | `&4410..&44D7` | `gfx_missile_0..4`                          |
 | `&4500..&474F` | `gfx_orphan_4500` (592 B — dead data, no references) |
 | `&4750..&47FD` | `gfx_pickup_white / _pause`                 |
@@ -271,15 +271,15 @@ internal layout for all four scenarios:
 
 | Range           | Symbol                     | Contents |
 |-----------------|----------------------------|----------|
-| `&4A00..&4BFF`  | `lev_explosion_00..03`     | First 4 frames of the 6-frame player-death explosion (4×32 = 128 B each). Same bytes also accessible via `lev_enemy_ptr_*[21..24]`. |
-| `&4C00..&4C1F`  | (zero pad)                 | 32 B of zeros separating explosion frames from the enemy-animation strip. |
-| `&4C20..&4CFF`  | `lev_enemy_hit_1..3`       | 3 frames of the per-scenario small-enemy *hit/destruction* cycle (4×24 = 96 B each, with column sharing). Read by the `L1BE3` state machine in CODE at hazard_state values `&0A..&0C`. (Numbered 1..3 to track the state-machine index — state `&0A` reuses the same animation timeline as state 1's, so the level designer never made a frame 0.) |
+| `&4A00..&4BFF`  | `lev_explosion_00..03`     | First 4 frames of the 6-frame player-death explosion (4×32 = 128 B each). Same bytes also accessible via `lev_hazard_ptr_*[21..24]`. |
+| `&4C00..&4C1F`  | (zero pad)                 | 32 B of zeros separating explosion frames from the hazard-animation strip. |
+| `&4C20..&4CFF`  | `lev_enemy_hit_1..3`       | 3 frames of the per-scenario small-enemy *hit/destruction* cycle (4×24 = 96 B each, with column sharing). Read by the `L1BE3` state machine in CODE at enemy_state values `&0A..&0C`. (Numbered 1..3 to track the state-machine index — state `&0A` reuses the same animation timeline as state 1's, so the level designer never made a frame 0.) |
 | `&4D00..&4DA7`  | `lev_enemy_0..1`           | First 2 frames of the small-enemy *normal* cycle. Same 4×24 shape, continuing the shared-column strip. |
 | `&4DA8..&4DAF`  | (zero pad)                 | 8 B of zeros inside the strip. |
 | `&4DB0..&4E6F`  | `lev_enemy_2..3`           | Last 2 frames of the small-enemy normal cycle. |
 | `&4E70..&4E7F`  | (zero pad)                 | 16 B before the player ship. |
 | `&4E80..&4F03`  | `lev_player_sprite`        | 132 B = 6 byte-cols × 22 lines (24 px × 22 px) — the player ship. |
-| `&4F00..&57FF`  | `lev_tile_catalog`         | 18 tile slots × 128 B = 4 cols × 32 lines (16 px × 32 px). Tile id N at `lev_tile_catalog + N*&80`. The player ship overlaps tile 0's first 4 bytes; those bytes are zero in tile 0 (its top is empty), so the overlap is harmless. Not every slot is populated — typically 12-17 tiles per scenario, the rest are zero-filled. Tile slots `4` and `5` (= `&5100` / `&5180`) double as enemy sprites — `lev_enemy_ptr_*` slots `18` and `17` point at them. |
+| `&4F00..&57FF`  | `lev_tile_catalog`         | 18 tile slots × 128 B = 4 cols × 32 lines (16 px × 32 px). Tile id N at `lev_tile_catalog + N*&80`. The player ship overlaps tile 0's first 4 bytes; those bytes are zero in tile 0 (its top is empty), so the overlap is harmless. Not every slot is populated — typically 12-17 tiles per scenario, the rest are zero-filled. Tile slots `4` and `5` (= `&5100` / `&5180`) double as hazard sprites — `lev_hazard_ptr_*` slots `18` and `17` point at them. |
 
 ## `$.LEVD2` / `$.LEVD3` — per-stage data
 
@@ -287,30 +287,30 @@ Loaded at `&7380` over the off-display tail of MODE 5 screen RAM
 (char rows 22-31, which CRTC trims off the visible area).
 
 LEVD2 is always 3200 B; LEVD3 is 2176 B for scenarios 1-3 (overlays
-only the lower half — sprites + spawns + hazards — and the map
+only the lower half — sprites + spawns + enemies — and the map
 tile-id streams inherit from LEVD2) or 3200 B for scenario 4 (full
 overlay; its tile streams happen to be byte-identical to LEVD2 so the
 geometry is unchanged).
 
 | Range           | Symbol                     | Contents |
 |-----------------|----------------------------|----------|
-| `&7380..&7A7F`  | `lev_hazard_00..13`        | 14 × 4×32 (128 B each) hazard sprites — the per-stage large stationary threats (gun-towers, tanks, structures). Accessible via `lev_enemy_ptr_*[1..14]`. |
-| `&7A80..&7ABF`  | `lev_enemy_ptr_lo` (32)    | Sprite pointer LO byte per enemy type (0..31). Bits 0..4 of the spawn attribute byte index this table. |
-| `&7AC0..&7AFF`  | `lev_enemy_ptr_hi` (32)    | Paired HI bytes. |
-| `&7A95..&7A9A`  | `lev_explosion_ptr_lo` (6) | **Same physical bytes** as `lev_enemy_ptr_lo + &15..+&1A` (slots 21..26 of the enemy pointer table). `death_anim` (CODE `&1E47`) walks these six byte-pairs as the source pointers for the 6-frame player explosion. There is no separate explosion-frame pointer table — `lev_explosion_ptr_*` is just an alias for the tail of `lev_enemy_ptr_*`. |
-| `&7AD5..&7ADA`  | `lev_explosion_ptr_hi` (6) | Paired HI bytes (slots 21..26 of `lev_enemy_ptr_hi`). |
+| `&7380..&7A7F`  | `lev_hazard_00..13`        | 14 × 4×32 (128 B each) hazard sprites — the per-stage large stationary threats (gun-towers, tanks, structures). Accessible via `lev_hazard_ptr_*[1..14]`. |
+| `&7A80..&7ABF`  | `lev_hazard_ptr_lo` (32)    | Sprite pointer LO byte per hazard type (0..31). Bits 0..4 of the spawn attribute byte index this table. |
+| `&7AC0..&7AFF`  | `lev_hazard_ptr_hi` (32)    | Paired HI bytes. |
+| `&7A95..&7A9A`  | `lev_explosion_ptr_lo` (6) | **Same physical bytes** as `lev_hazard_ptr_lo + &15..+&1A` (slots 21..26 of the hazard pointer table). `death_anim` (CODE `&1E47`) walks these six byte-pairs as the source pointers for the 6-frame player explosion. There is no separate explosion-frame pointer table — `lev_explosion_ptr_*` is just an alias for the tail of `lev_hazard_ptr_*`. |
+| `&7AD5..&7ADA`  | `lev_explosion_ptr_hi` (6) | Paired HI bytes (slots 21..26 of `lev_hazard_ptr_hi`). |
 | `&7B00..&7B7F`  | `lev_spawn_col` (128)      | Spawn-column schedule. Sorted ascending; `&FF` terminates. Walked every frame by `spawn_check_step`. |
-| `&7B80..&7BFF`  | `lev_spawn_attr` (128)     | Parallel attribute table. Bits 0..4 = enemy type, bits 5..6 = Y-row, bit 7 = vertical-mirror. |
-| `&7C00..&7C7F`  | `lev_explosion_04` (128)   | 4×32 frame 4 of the 6-frame explosion. Same bytes accessible as `lev_enemy_ptr_*[25]`. |
-| `&7C80..&7CFF`  | `lev_explosion_05` (128)   | 4×32 frame 5 of the 6-frame explosion. Same bytes accessible as `lev_enemy_ptr_*[26]`. |
+| `&7B80..&7BFF`  | `lev_spawn_attr` (128)     | Parallel attribute table. Bits 0..4 = hazard type, bits 5..6 = Y-row, bit 7 = vertical-mirror. |
+| `&7C00..&7C7F`  | `lev_explosion_04` (128)   | 4×32 frame 4 of the 6-frame explosion. Same bytes accessible as `lev_hazard_ptr_*[25]`. |
+| `&7C80..&7CFF`  | `lev_explosion_05` (128)   | 4×32 frame 5 of the 6-frame explosion. Same bytes accessible as `lev_hazard_ptr_*[26]`. |
 | `&7D00..&7E0F`  | `lev_erase_brush` (272)    | All zeroes. `sprite_plot` from any offset here paints a transparent rectangle. The engine touches it at +&80 (4×24 erase), +&B0, +&100 (2×8 bullet erase), +&102 (3×2 bullet erase). |
 | `&7E10..&7EFF`  | `lev_map_upper` (240)      | Upper tile-id stream. One byte per scroll column; resolved against `lev_tile_catalog`. Drives `zp_tile_upper`; drawn at row 0 with `dir_flag = 0` (vertically mirrored, so a floor-shaped tile appears as a ceiling). |
 | `&7F00..&7F0F`  | (pad 16 B)                 | Gap between the two tile streams. Same-value-ish per scenario — possibly a wrap-around safety strip. |
 | `&7F10..&7FFF`  | `lev_map_lower` (240)      | Lower tile-id stream. Drives `zp_tile_lower`; drawn at row 16 with `dir_flag = 1` (normal). |
 
-### Enemy-pointer slot allocation
+### Hazard-pointer slot allocation
 
-The 32 slots of `lev_enemy_ptr_*` follow a fixed-per-scenario
+The 32 slots of `lev_hazard_ptr_*` follow a fixed-per-scenario
 convention — every scenario points the *same* slot at the *same*
 region; only the bytes at the resolved addresses differ. There's
 also a fair amount of pointer reuse, which can be confusing when
@@ -318,15 +318,15 @@ inspecting individual sprites:
 
 | Slot(s) | Resolves into                    | Role                                                       |
 |---------|----------------------------------|------------------------------------------------------------|
-| `0`     | `lev_erase_brush` (`&7D80`)      | All-zero "no enemy" placeholder. Plotting one renders blank. |
+| `0`     | `lev_erase_brush` (`&7D80`)      | All-zero "no hazard" placeholder. Plotting one renders blank. |
 | `1..14` | `lev_hazard_00..13` (LEVD2)      | Per-stage hazard sprites at `&7380..&7A00` (gun-towers, tanks, structures). |
-| `15`    | `gfx_enemy_slot15` (GRAPHIX `&3700`) | Shared across all 4 scenarios (the renderer applies the per-level palette so it still looks different per scenario). |
-| `16`    | `gfx_enemy_slot16` (GRAPHIX `&3780`) | Shared cross-scenario.                                  |
-| `17`    | LEVD1 `&5180`                    | Tile id 5 from `lev_tile_catalog` reused as an enemy sprite (4×32 same shape). |
-| `18`    | LEVD1 `&5100`                    | Tile id 4 reused as an enemy sprite.                         |
-| `19`    | `gfx_enemy_slot19` (GRAPHIX `&4360`) | Shared cross-scenario.                                  |
+| `15`    | `gfx_hazard_slot15` (GRAPHIX `&3700`) | Shared across all 4 scenarios (the renderer applies the per-level palette so it still looks different per scenario). |
+| `16`    | `gfx_hazard_slot16` (GRAPHIX `&3780`) | Shared cross-scenario.                                  |
+| `17`    | LEVD1 `&5180`                    | Tile id 5 from `lev_tile_catalog` reused as a hazard sprite (4×32 same shape). |
+| `18`    | LEVD1 `&5100`                    | Tile id 4 reused as a hazard sprite.                         |
+| `19`    | `gfx_hazard_slot19` (GRAPHIX `&4360`) | Shared cross-scenario.                                  |
 | `20`    | `&0000`                          | Unused (pointer pair is `00 00`).                            |
-| `21..24`| `lev_explosion_00..03` (LEVD1 `&4A00..&4B80`) | Player-death explosion frames 0..3. The same enemy slots can in principle be spawned via `lev_spawn_attr` (with `type = 21..24`); in practice the explosion role is the dominant use. |
+| `21..24`| `lev_explosion_00..03` (LEVD1 `&4A00..&4B80`) | Player-death explosion frames 0..3. The same hazard slots can in principle be spawned via `lev_spawn_attr` (with `type = 21..24`); in practice the explosion role is the dominant use. |
 | `25`    | `lev_explosion_04` (`&7C00`)     | Explosion frame 4. |
 | `26`    | `lev_explosion_05` (`&7C80`)     | Explosion frame 5. |
 | `27`    | `lev_erase_brush` (`&7D80`)      | Same all-zero placeholder as slot 0. Unused.               |
@@ -338,7 +338,7 @@ GRAPHIX, since those bytes live elsewhere). Filenames are semantic —
 `explosion_NN`, `enemy_NN`, `enemy_hit_NN`, `tile_NN`, `hazard_NN`,
 `player_sprite` — and the per-level `README.md` maps every table
 index back to a filename. So when the same memory plays two roles
-(e.g. `lev_enemy_ptr_*[25]` = `lev_explosion_04`), only one PNG
+(e.g. `lev_hazard_ptr_*[25]` = `lev_explosion_04`), only one PNG
 exists; the README spells out the aliasing.
 
 ### Spawn attribute encoding (recap)
@@ -351,10 +351,10 @@ The byte at `lev_spawn_attr[i]` is a packed record:
 │v-flip│  │   Y-row    │  │ type (0..31) │
 └──────┘  └────────────┘  └──────────────┘
    │            │                │
-   │            │                └─→ index into lev_enemy_ptr_*
-   │            │                    AND dispatch via enemy_type_dispatch:
+   │            │                └─→ index into lev_hazard_ptr_*
+   │            │                    AND dispatch via hazard_type_dispatch:
    │            │                       4 / &13 = multi-shot
-   │            │                       6       = enemy missile (CODE2)
+   │            │                       6       = hazard missile (CODE2)
    │            │                       7       = force-field
    │            │                       8       = high-HP variant
    │            │                       &10     = boss
@@ -404,7 +404,7 @@ at runtime; instead each routine scans a hard-coded slot range with
 an `LDX #N / DEX / BNE` (or `INX / CPX #N / BNE`) loop. Magic
 numbers for these caps are surfaced as named EQUs in
 `disasm/Nevryon.6502` and wired up via `immediate_overrides` in the
-per-binary cfgs, so the disassembly reads e.g. `LDX #n_enemies`
+per-binary cfgs, so the disassembly reads e.g. `LDX #n_hazards`
 instead of `LDX #&08`.
 
 | Pool                | Cap | Storage range                           | Iterator pattern               | Notes |
@@ -412,34 +412,34 @@ instead of `LDX #&08`.
 | Player ship         |   1 | `zp_player_x`/`_y` (&81/&82) + `lives_left` (&2051)                                 | singleton                      | Per-life HP at `player_hp` (&2050), default 6 from `?&9A`. |
 | Player explosion    |   1 | none — 6-frame anim plays inline in `death_anim`                                    | singleton                      | Frames sourced from `lev_explosion_0..5` (LEVD1/LEVD2). |
 | Player bullets      |   6 | `player_bullet_x[6]` (&16E6), `player_bullet_y[6]` (&16ED)                          | `LDX #n_player_bullets / DEX BNE`  in `update_bullets` | Keyboard fire only scans slots 1..`n_player_fire_slots` (=4); slots 5..6 are reserved for the force-pod's twin shot (CODE2 `pod_fire` scans slots `n_player_bullets..n_player_bullets-n_player_fire_slots+1`). |
-| Enemies             |   8 | `enemy_x`/`_y`/`_type`/`_hp`/`_step`/`enemy_flip` at &2052..&207F (parallel 9-wide arrays — see `n_state_slots`) | `INX / CPX #n_enemies / BNE` (slots 0..7); spawn round-robins `zp_7C` mod `n_enemies` | Per-type behaviour dispatched by `enemy_type_dispatch`; slot 8 of each array is unused (see below). |
-| Hazards             |   8 | `hazard_x`/`_y`/`hazard_state` at &1A55/&1A60/&1A6B (8-wide each) PLUS `hazard_state` overlay at &206E..&2076 (the parallel-with-enemies array) | `LDX #n_hazards / DEX BNE` (slots 1..8 — slot 0 unused) | Hazards share a back-store with enemies via the parallel `hazard_state` array; the cap of 8 active hazards is independent of the 8 enemies, but the predec loop pattern means index 0 is always empty. The `LDX #n_hazards + 1` in `check_player_collisions` is the same loop body with a DEX-first prelude. |
-| Combined slot width |   9 | union of enemy[0..7] and hazard[1..8]                                                | `init` clear loop: `CPX #n_state_slots`                              | `n_state_slots = 9` is the array width chosen so a single `INX/CPX/BNE` sweep zeroes both pools' active ranges. |
-| Enemy bullets       |   6 | `enemy_bullet_x[7]` (&1A8B), `enemy_bullet_y[7]` (&1A92)                            | `LDX #n_enemy_bullets / DEX BNE` (slots 1..6) | Backing arrays are 7-wide; slot 0 is initialised to &FF by `init` but no routine ever touches it (predec loop falls off at X=0 before processing). |
-| Enemy bullets (hz)  |   4 | (shares the pool above)                                                              | `LDX #n_hazard_bullets / DEX BNE` (slots 1..4)              | Hazards fire (`hazard_try_fire_bullet`) only into the first 4 slots of the shared pool, leaving slots 5..6 for enemy-type-&04/&13 fires (`enqueue_enemy_bullet`). Plus a global 8-frame cooldown at `zp_7E`. |
-| Enemy missiles      |   2 | `enemy_missile_x[2]`/`_y[2]`/`_flip[2]`/`_homing_dir[2]` at &2B9A..&2BA3 (CODE2)    | hard-coded `LDX #&00` / `LDX #&01` — no loop | Spawned by enemy type &06 (`spawn_enemy_missile`); homes on the player by toggling sign each tick. |
-| Force-field         |   1 | `forcefield_x`/`_y`/`_active` at &23C5..&23C7                                       | singleton                      | Enemy-type &07 is a force-field slot; `forcefield_render` re-noises the strip every frame. |
+| Hazards             |   8 | `hazard_x`/`_y`/`_type`/`_hp`/`_step`/`hazard_flip` at &2052..&207F (parallel 9-wide arrays — see `n_state_slots`) | `INX / CPX #n_hazards / BNE` (slots 0..7); spawn round-robins `zp_7C` mod `n_hazards` | Per-type behaviour dispatched by `hazard_type_dispatch`; slot 8 of each array is unused (see below). |
+| Enemies             |   8 | `enemy_x`/`_y`/`enemy_state` at &1A55/&1A60/&1A6B (8-wide each) PLUS `enemy_state` overlay at &206E..&2076 (the parallel-with-hazards array) | `LDX #n_enemies / DEX BNE` (slots 1..8 — slot 0 unused) | Enemies share a back-store with hazards via the parallel `enemy_state` array; the cap of 8 active enemies is independent of the 8 hazards, but the predec loop pattern means index 0 is always empty. The `LDX #n_enemies + 1` in `check_player_collisions` is the same loop body with a DEX-first prelude. |
+| Combined slot width |   9 | union of hazard[0..7] and enemy[1..8]                                                | `init` clear loop: `CPX #n_state_slots`                              | `n_state_slots = 9` is the array width chosen so a single `INX/CPX/BNE` sweep zeroes both pools' active ranges. |
+| Hazard bullets       |   6 | `hazard_bullet_x[7]` (&1A8B), `hazard_bullet_y[7]` (&1A92)                            | `LDX #n_hazard_bullets / DEX BNE` (slots 1..6) | Backing arrays are 7-wide; slot 0 is initialised to &FF by `init` but no routine ever touches it (predec loop falls off at X=0 before processing). |
+| Hazard bullets (hz)  |   4 | (shares the pool above)                                                              | `LDX #n_enemy_bullets / DEX BNE` (slots 1..4)              | Enemies fire (`enemy_try_fire_bullet`) only into the first 4 slots of the shared pool, leaving slots 5..6 for hazard-type-&04/&13 fires (`enqueue_hazard_bullet`). Plus a global 8-frame cooldown at `zp_7E`. |
+| Hazard missiles      |   2 | `hazard_missile_x[2]`/`_y[2]`/`_flip[2]`/`_homing_dir[2]` at &2B9A..&2BA3 (CODE2)    | hard-coded `LDX #&00` / `LDX #&01` — no loop | Spawned by hazard type &06 (`spawn_hazard_missile`); homes on the player by toggling sign each tick. |
+| Force-field         |   1 | `forcefield_x`/`_y`/`_active` at &23C5..&23C7                                       | singleton                      | Hazard-type &07 is a force-field slot; `forcefield_render` re-noises the strip every frame. |
 | Force pod           |   1 | `force_pod_x`/`_y`/`_frame` at &2972..&2974 (CODE2) + `force_pod_state` at &25A5 (CODE) | singleton                      | Orbits the player when state=1; can fire one bullet via `L2975` into player_bullet slots 5..6. |
-| Flame               |   1 | `flame_x`/`_y`/`flame_state` at &249A..&249C                                        | singleton                      | Spawned by enemy type &08; one-shot 6-frame 32×8 sprite — `spawn_flame` refuses while `flame_state != 0`. |
-| Power-up pickup     |   1 | `pickup_x`/`_y`/`pickup_state` at &2690..&2692                                      | singleton                      | Triggered every 10 hazard hits (`data_25A0 >= 10`); only one in flight at a time. |
+| Flame               |   1 | `flame_x`/`_y`/`flame_state` at &249A..&249C                                        | singleton                      | Spawned by hazard type &08; one-shot 6-frame 32×8 sprite — `spawn_flame` refuses while `flame_state != 0`. |
+| Power-up pickup     |   1 | `pickup_x`/`_y`/`pickup_state` at &2690..&2692                                      | singleton                      | Triggered every 10 enemy hits (`data_25A0 >= 10`); only one in flight at a time. |
 
-### Why hazards and enemies share storage
+### Why enemies and hazards share storage
 
-The hazard arrays at &1A55..&1A72 are the *primary* per-frame state
+The enemy arrays at &1A55..&1A72 are the *primary* per-frame state
 (per-slot position, direction, animation tick). The
-`hazard_state` byte at &206E..&2076 lives in the same parallel-with-
-enemies block specifically so that `init`'s clear loop
-(`STA hazard_state,X` interleaved with the enemy clears) can wipe
+`enemy_state` byte at &206E..&2076 lives in the same parallel-with-
+hazards block specifically so that `init`'s clear loop
+(`STA enemy_state,X` interleaved with the hazard clears) can wipe
 both pools in one pass. The disjoint index conventions —
-enemies at [0..7], hazards at [1..8] — keep the two from clashing
+hazards at [0..7], enemies at [1..8] — keep the two from clashing
 even though their parallel arrays overlap at indices 1..7.
 
 ### Total moving objects on screen
 
 Cap (excluding scenery / starfield / scoreboard):
 
-  1 player + 6 player bullets + 8 enemies + 8 hazards + 6 enemy
-  bullets + 2 enemy missiles + 1 force-field + 1 force-pod + 1
+  1 player + 6 player bullets + 8 hazards + 8 enemies + 6 hazard
+  bullets + 2 hazard missiles + 1 force-field + 1 force-pod + 1
   flame + 1 pickup = **35 simultaneous game objects**.
 
 In practice the spawn schedule rarely fills more than ~12 slots at
