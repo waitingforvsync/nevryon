@@ -23,6 +23,7 @@
 \   zp_tile_upper_lo = &008E
 \   zp_get_ready_erase = &008F
 \   zp_game_speed = &0092
+\   zp_score_acc = &009B
 \   zp_level_num = &009D
 \   sfx_fire = &2800
 \   sfx_hit_lo = &2811
@@ -32,12 +33,9 @@
 \   force_pod_x = &2972
 \   force_pod_y = &2973
 \   force_pod_frame = &2974
-\   L2975 = &2975
+\   pod_fire = &2975
 \   draw_score = &29E7
-\   score_d3 = &2A02
-\   score_d2 = &2A03
-\   score_d1 = &2A04
-\   score_d0 = &2A05
+\   score = &2A02
 \   spawn_enemy_missile = &2A20
 \   update_enemy_missiles = &2AA2
 \   intro_get_ready = &2BA4
@@ -85,20 +83,8 @@ zp_88            = &88
 zp_89            = &89
 zp_8A            = &8A
 zp_9A            = &9A
-zp_9B            = &9B
 zp_9F            = &9F
-data_2A06        = &2A06
 data_70FF        = &70FF
-data_7A96        = &7A96
-data_7A97        = &7A97
-data_7A98        = &7A98
-data_7A99        = &7A99
-data_7A9A        = &7A9A
-data_7AD6        = &7AD6
-data_7AD7        = &7AD7
-data_7AD8        = &7AD8
-data_7AD9        = &7AD9
-data_7ADA        = &7ADA
 
 ORG &1100
 
@@ -127,7 +113,7 @@ ORG &1100
     JSR play_death_sequence
     JMP stage_loading_screen
 .L1130
-    LDA data_268F
+    LDA stage_clear_flag
     BEQ main_loop
     JSR stage_clear_screen
     JSR shutter_fade
@@ -603,7 +589,7 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .draw_player
-    LDX zp_player_x  \ Draw the player ship: plot lev_player_sprite (6×22 from &4E80 in LEVD1) at (zp_player_x, zp_player_y). If data_25A3 == 1 (force-pod power-up active), also call draw_player_pod at (player_x+5, player_y+1). Then JSR check_player_collisions and JMP to update_player_bullets.
+    LDX zp_player_x  \ Draw the player ship: plot lev_player_sprite (6×22 from &4E80 in LEVD1) at (zp_player_x, zp_player_y). If pod_attached == 1 (force-pod power-up active), also call draw_player_pod at (player_x+5, player_y+1). Then JSR check_player_collisions and JMP to update_player_bullets.
     LDY zp_player_y
     JSR calc_screen_addr
     LDX #&06
@@ -613,7 +599,7 @@ scroll_upper_dst_hi = * + 2
     LDA #HI(lev_player_sprite)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDA data_25A3
+    LDA pod_attached
     CMP #&01
     BNE L14AF
     LDA zp_player_x
@@ -995,10 +981,10 @@ scroll_upper_dst_hi = * + 2
     EQUB &EA, &45, &45, &46, &46, &EA, &EA
 .tbl_1709
     EQUB &EA, &78, &9C, &60, &D6, &EA, &EA
-.data_1710
+.hazard_pattern_len
     EQUB &EA, &EA
 
-\ ----- code &1712..&1A76 -----
+\ ----- code &1712..&1A55 -----
 .spawn_periodic_hazard
     LDA zp_scroll_col  \ Periodic background-hazard spawner — called once per game_step. Doesn't run after the map has wrapped (zp_scroll_col == &F0). Otherwise paces on zp_87 (sub-counter, 0..A): when zp_87 reaches &0A, wait for the hazard field to fully empty, then advance `zp_86` (pattern selector, cycles 1..6 wrapping back to 1 after 7) and pre-load the per-pattern parameters from the LUTs at tbl_16FB / tbl_1702 / tbl_1709. On the other 10 calls of each cycle, INC zp_87 and spawn one hazard into the first free slot: hazard_x = &25 (right edge), hazard_state and hazard_y set per pattern (patterns 5/6: state 3/5, Y random in [&97..&D7]; others: state 1, Y = &9A fixed).
     CMP #&F0
@@ -1027,7 +1013,7 @@ scroll_upper_dst_hi = * + 2
 .L173D
     TAX
     LDA tbl_1709,X
-    STA data_1710
+    STA hazard_pattern_len
     LDA tbl_16FB,X
     STA zp_88
     LDA tbl_1702,X
@@ -1048,9 +1034,9 @@ scroll_upper_dst_hi = * + 2
     LDA #&25
     STA hazard_x,X
     LDA #&00
-    STA tbl_1A76,X
+    STA hazard_pattern_step,X
     LDA zp_86
-    STA tbl_1A81,X
+    STA hazard_pattern_id,X
     CMP #&05
     BEQ L1781
     CMP #&06
@@ -1080,13 +1066,13 @@ scroll_upper_dst_hi = * + 2
     RTS
 .L17A5
     LDA #&26
-    STA data_1710
+    STA hazard_pattern_len
     LDA #&00
     STA zp_87
     RTS
 .L17AF
     LDA #&26
-    STA data_1710
+    STA hazard_pattern_len
     LDA #&00
     STA zp_87
     RTS
@@ -1097,7 +1083,7 @@ scroll_upper_dst_hi = * + 2
     BEQ L17C1
     RTS
 .L17C1
-    LDX #&04
+    LDX #n_player_fire_slots
 .L17C3
     LDA player_bullet_x,X
     BEQ L17CC
@@ -1116,10 +1102,10 @@ scroll_upper_dst_hi = * + 2
     LDA fire_cooldown_reload
     STA zp_8A
     JSR sfx_fire
-    JMP L2975
+    JMP pod_fire
 
 .update_bullets
-    LDX #&06  \ Update player bullets: iterate the 6 player_bullet slots; for each active one (player_bullet_x != 0) move +2 px right, erase + clear if it has crossed col &25 (off-screen right), else replot the 3x2 bullet sprite and run check_bullet_hits. Finally decrement zp_8A (the fire cooldown).
+    LDX #n_player_bullets  \ Update player bullets: iterate the 6 player_bullet slots; for each active one (player_bullet_x != 0) move +2 px right, erase + clear if it has crossed col &25 (off-screen right), else replot the 3x2 bullet sprite and run check_bullet_hits. Finally decrement zp_8A (the fire cooldown).
 .L17E9
     LDA player_bullet_x,X
     BEQ L183D
@@ -1165,7 +1151,7 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .check_bullet_hits
-    LDX data_16F5  \ Check what the current player bullet has hit. Two loops over the same bullet position (zp_test_x = player_bullet_x+2, zp_test_y = player_bullet_y): (a) X=8..1 over the hazard slots in hazard_x/hazard_y/hazard_state — a hit INCs hazard_state[X] and at values 3/5/7 plays OSWRCH 7 + INCs data_25A0; at >=9 the hazard is fully expired; (b) X=0..7 over the enemy slots — a hit decrements enemy_hp, plays explode, and on kill clears the slot. Either way, the bullet erases itself (3x2 brush) and the slot is freed.
+    LDX data_16F5  \ Check what the current player bullet has hit. Two loops over the same bullet position (zp_test_x = player_bullet_x+2, zp_test_y = player_bullet_y): (a) X=8..1 over the hazard slots in hazard_x/hazard_y/hazard_state — a hit INCs hazard_state[X] and at values 3/5/7 plays OSWRCH 7 + INCs pickup_kill_count; at >=9 the hazard is fully expired; (b) X=0..7 over the enemy slots — a hit decrements enemy_hp, plays explode, and on kill clears the slot. Either way, the bullet erases itself (3x2 brush) and the slot is freed.
     LDY player_bullet_x,X
     INY
     INY
@@ -1233,8 +1219,8 @@ scroll_upper_dst_hi = * + 2
     JSR OSWRCH
     LDA #&0A
     STA hazard_state,X
-    JSR L25D7
-    INC data_25A0
+    JSR add_score_x1
+    INC pickup_kill_count
     LDX data_16F5
     RTS
 .L18D1
@@ -1318,7 +1304,7 @@ scroll_upper_dst_hi = * + 2
     BNE L1983
     LDA #&14
     STA enemy_type,X
-    JSR L25E5
+    JSR add_score_x10
     JSR sfx_explode
     LDX data_16F5
     RTS
@@ -1328,7 +1314,7 @@ scroll_upper_dst_hi = * + 2
     JMP OSWRCH
 
 .check_player_collisions
-    LDX #&09  \ Per-frame player collision check. Two loops: (a) X=8..1 over the hazard slots at hazard_x/_y/_state — for any slot whose hazard_state is in 1..9 (active), test the player against a 6×&18 bounding box; on hit, mark the slot &0A (expired) and JSR lose_a_life. (b) X=0..7 over the enemy slots (enemy_x, enemy_y, enemy_type < &14) — same test. Each hit triggers a `OSWRCH &07` (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be a short non-musical blip used as the in-game collision sound).
+    LDX #n_hazards + 1  \ Per-frame player collision check. Two loops: (a) X=8..1 over the hazard slots at hazard_x/_y/_state — for any slot whose hazard_state is in 1..9 (active), test the player against a 6×&18 bounding box; on hit, mark the slot &0A (expired) and JSR lose_a_life. (b) X=0..7 over the enemy slots (enemy_x, enemy_y, enemy_type < &14) — same test. Each hit triggers a `OSWRCH &07` (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be a short non-musical blip used as the in-game collision sound).
 .L198D
     DEX
     BNE L1993
@@ -1377,14 +1363,14 @@ scroll_upper_dst_hi = * + 2
     LDX data_16F5
     LDA #&0A
     STA hazard_state,X
-    JSR L25D7
-    INC data_25A0
+    JSR add_score_x1
+    INC pickup_kill_count
     JSR lose_a_life
 .L19F6
     LDX #&FF
 .L19F8
     INX
-    CPX #&08
+    CPX #n_enemies
     BNE L19FE
     RTS
 .L19FE
@@ -1432,50 +1418,23 @@ scroll_upper_dst_hi = * + 2
     JMP lose_a_life
     RTS
 
+\ ----- data &1A55..&1A99 -----
 .hazard_x
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-
-.hazard_y
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-
-.hazard_state
-    NOP
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-
-\ ----- data &1A76..&1A99 -----
-.tbl_1A76
+    \ Hazard slot pool — 11 bytes per array (slots 0..10), but only indices 1..n_hazards (1..8) are ever populated. Active per-slot state: hazard_x[i] / hazard_y[i] = screen position; hazard_state[i] = animation/lifecycle counter (0 = free, 1..8 = active, 9 = expiring, &0A = just hit / about to free). Plus hazard_pattern_step[i] (the byte-offset into the per-pattern motion script pointed at by zp_88) and hazard_pattern_id[i] (pattern selector 1..6, captured at spawn). Spawned by spawn_periodic_hazard with hazard_x = &25; per-frame stepped by update_hazards which calls L1B87 to walk each slot's script.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA, &EA
-.tbl_1A81
+.hazard_y
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA, &EA, &EA
+.hazard_state
+    EQUB &EA, &00, &00, &00, &00, &00, &00, &00
+    EQUB &00, &00, &00
+.hazard_pattern_step
+    \ Hazard per-slot pattern-step counter — byte-offset into the per-pattern motion script that update_hazards/L1B87 is currently walking. The script (pointed at by zp_88, length hazard_pattern_len bytes) is a sequence of (dy_dir, dx_dir) byte pairs. L1B87 reads `(zp_88),Y` at Y = hazard_pattern_step[X] into data_16F6 (vertical-dir) and `(zp_88),Y+1` into data_16F7 (horizontal-dir), then INYs twice; the next frame's L1B2D stashes the new Y back here. Wrap-around at hazard_pattern_len.
+    EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
+    EQUB &EA, &EA, &EA
+.hazard_pattern_id
+    \ Hazard per-slot pattern ID — selects which motion pattern the slot follows. Set at spawn by spawn_periodic_hazard (cycles 1..6 via zp_86). Values 5 and 6 are special-cased in L1B87 (player-homing: pattern 5 toggles horizontal dir based on player_x; pattern 6 = straight at the player). Other values walk the table at (zp_88) verbatim. Slot 0 unused, slots 1..n_hazards (1..8) active; only 10 bytes wide (vs 11 for the position/state arrays) because hazard_pattern_id slot 10 wasn't allocated.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA
 .enemy_bullet_x
@@ -1504,7 +1463,7 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .enemy_bullet_alloc
-    LDX #&04
+    LDX #n_hazard_bullets
 .L1AB8
     LDA enemy_bullet_x,X
     CMP #&FF
@@ -1531,7 +1490,7 @@ scroll_upper_dst_hi = * + 2
     JMP sfx_hit_lo
 
 .update_hazards
-    LDX #&08  \ Per-frame hazard update: iterate the 8 hazard slots (X=8..1 in hazard_state), move each by ±1 X / ±4 Y depending on data_16F6/16F7 direction bits, erase + redraw at the new position with a 4x24 sprite. Slot deactivates (and is erased) when hazard_state drops to 0. Hazards damage the player on contact (check_player_collisions) and are destructible by player bullets (check_bullet_hits).
+    LDX #n_hazards  \ Per-frame hazard update: iterate the 8 hazard slots (X=8..1 in hazard_state), move each by ±1 X / ±4 Y depending on data_16F6/16F7 direction bits, erase + redraw at the new position with a 4x24 sprite. Slot deactivates (and is erased) when hazard_state drops to 0. Hazards damage the player on contact (check_player_collisions) and are destructible by player bullets (check_bullet_hits).
 .L1AED
     LDA hazard_state,X
     BNE L1AF8
@@ -1541,7 +1500,7 @@ scroll_upper_dst_hi = * + 2
 .L1AF8
     INC zp_frame_progress
     INC zp_frame_progress
-    JSR L2555
+    JSR pod_collide_hazard
     JSR L1C5D
     JSR L1B87
     BNE L1B2D
@@ -1563,7 +1522,7 @@ scroll_upper_dst_hi = * + 2
     JMP L1AED
 .L1B2D
     TYA
-    STA tbl_1A76,X
+    STA hazard_pattern_step,X
     LDA data_16F6
     BEQ L1B4F
     CMP #&01
@@ -1607,19 +1566,19 @@ scroll_upper_dst_hi = * + 2
     JMP update_enemy_bullets
 
 .L1B87
-    LDA tbl_1A81,X
+    LDA hazard_pattern_id,X
     CMP #&05
     BEQ L1BA5
     CMP #&06
     BEQ L1BD1
-    LDY tbl_1A76,X
+    LDY hazard_pattern_step,X
     LDA (zp_88),Y
     STA data_16F6
     INY
     LDA (zp_88),Y
     STA data_16F7
     INY
-    CPY data_1710
+    CPY hazard_pattern_len
     RTS
 .L1BA5
     LDA zp_7F
@@ -1632,25 +1591,25 @@ scroll_upper_dst_hi = * + 2
     BCC L1BC4
     LDA #&01
     STA data_16F6
-    LDY tbl_1A76,X
+    LDY hazard_pattern_step,X
     INY
-    CPY data_1710
+    CPY hazard_pattern_len
     RTS
 .L1BC4
     LDA #&03
     STA data_16F6
-    LDY tbl_1A76,X
+    LDY hazard_pattern_step,X
     INY
-    CPY data_1710
+    CPY hazard_pattern_len
     RTS
 .L1BD1
     LDA #&03
     STA data_16F7
     LDA #&00
     STA data_16F6
-    LDY tbl_1A76,X
+    LDY hazard_pattern_step,X
     INY
-    CPY data_1710
+    CPY hazard_pattern_len
     RTS
 
 .L1BE3
@@ -1835,12 +1794,12 @@ L1C21            = * + 1
     LDX data_16F5
     LDA #&0A
     STA hazard_state,X
-    JSR L25D7
-    INC data_25A0
+    JSR add_score_x1
+    INC pickup_kill_count
     RTS
 
 .update_enemy_bullets
-    LDX #&06  \ Per-frame mover for the 6-slot enemy_bullet pool. For each active slot (enemy_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00, or new X <= 1) or re-plot the 12×2-px red dart at the new position. Each active slot then runs enemy_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global hazard-fire cooldown zp_7E.
+    LDX #n_enemy_bullets  \ Per-frame mover for the 6-slot enemy_bullet pool. For each active slot (enemy_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00, or new X <= 1) or re-plot the 12×2-px red dart at the new position. Each active slot then runs enemy_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global hazard-fire cooldown zp_7E.
 .L1D37
     LDA enemy_bullet_x,X
     CMP #&FF
@@ -2006,9 +1965,9 @@ L1C21            = * + 1
     JSR calc_screen_addr
     LDX #&04
     LDY #&20
-    LDA data_7A96
+    LDA lev_explosion_ptr_lo + 1
     STA sprite_src_lo
-    LDA data_7AD6
+    LDA lev_explosion_ptr_hi + 1
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR frame_delay
@@ -2018,9 +1977,9 @@ L1C21            = * + 1
     JSR calc_screen_addr
     LDX #&04
     LDY #&20
-    LDA data_7A97
+    LDA lev_explosion_ptr_lo + 2
     STA sprite_src_lo
-    LDA data_7AD7
+    LDA lev_explosion_ptr_hi + 2
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR frame_delay
@@ -2030,9 +1989,9 @@ L1C21            = * + 1
     JSR calc_screen_addr
     LDX #&04
     LDY #&20
-    LDA data_7A98
+    LDA lev_explosion_ptr_lo + 3
     STA sprite_src_lo
-    LDA data_7AD8
+    LDA lev_explosion_ptr_hi + 3
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR frame_delay
@@ -2044,9 +2003,9 @@ L1C21            = * + 1
     JSR calc_screen_addr
     LDX #&04
     LDY #&20
-    LDA data_7A99
+    LDA lev_explosion_ptr_lo + 4
     STA sprite_src_lo
-    LDA data_7AD9
+    LDA lev_explosion_ptr_hi + 4
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR frame_delay
@@ -2057,9 +2016,9 @@ L1C21            = * + 1
     JSR calc_screen_addr
     LDX #&04
     LDY #&20
-    LDA data_7A9A
+    LDA lev_explosion_ptr_lo + 5
     STA sprite_src_lo
-    LDA data_7ADA
+    LDA lev_explosion_ptr_hi + 5
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR frame_delay
@@ -2131,7 +2090,7 @@ L1C21            = * + 1
     STA zp_tile_lower_hi
     STA zp_tile_upper_hi
     LDA #&00
-    STA data_268F
+    STA stage_clear_flag
     LDX #&00
 .L1FB6
     LDA #&00
@@ -2142,7 +2101,7 @@ L1C21            = * + 1
     STA enemy_step,X
     STA hazard_state,X
     INX
-    CPX #&09
+    CPX #n_state_slots
     BNE L1FB6
     STA tbl_1575
     STA data_1576
@@ -2152,7 +2111,7 @@ L1C21            = * + 1
     STA data_16E7
     STA data_16E8
     STA data_16E9
-    STA data_1710
+    STA hazard_pattern_len
     STA data_16EA
     STA data_16EB
     STA data_16EC
@@ -2168,14 +2127,14 @@ L1C21            = * + 1
     LDA #&06
     STA fire_cooldown_reload
     LDA #&00
-    STA data_25A0
+    STA pickup_kill_count
     STA tbl_25A1
-    STA data_25A3
+    STA pod_attached
 L2016            = * + 1
     STA force_pod_state
     STA data_25A7
     STA data_25A9
-    STA data_259F
+    STA pickup_count
     LDX data_16F5
     LDY #&00
     LDA #&FF
@@ -2235,7 +2194,7 @@ L2016            = * + 1
 .L209A
     INC zp_7C
     LDA zp_7C
-    CMP #&08
+    CMP #n_enemies
     BCC L20A6
 
 .tbl_20A2
@@ -2326,7 +2285,7 @@ L2016            = * + 1
     LDA enemy_type,X
     BNE L2151
 .L2140
-    CPX #&08
+    CPX #n_enemies
     BNE L213A
     INC zp_7F
     LDA zp_7F
@@ -2564,7 +2523,7 @@ L2016            = * + 1
     BEQ L22EC
     RTS
 .L22EC
-    LDX #&06
+    LDX #n_enemy_bullets
 .L22EE
     LDA enemy_bullet_x,X
     CMP #&FF
@@ -2905,8 +2864,8 @@ L2016            = * + 1
     EQUB &06
 
 \ ----- code &2555..&25A1 -----
-.L2555
-    LDA data_25A3
+.pod_collide_hazard
+    LDA pod_attached  \ Per-frame pod ↔ hazard collision check (X = hazard slot). Only runs when the force-pod power-up is attached to the player (`pod_attached == 1`) and the hazard slot is active (`hazard_state < 9`). Test box is 3×&14 px at (player_x+8, player_y-11) — matches where draw_player_pod plots the pod sprite (offset (+5, +1) from the player). On hit: marks the slot &0A (expired), plays OSWRCH &07 (collision bell), runs `add_score_x1` for the score, and INCs `pickup_kill_count` (the kill-milestone counter that triggers a pickup spawn every 10 hits). Differs from `check_player_collisions` in that this is the POD doing damage to the hazard (scoring), whereas check_player_collisions is the hazard damaging the player (lose_a_life). Called from update_hazards per-slot.
     CMP #&01
     BEQ L255D
     RTS
@@ -2941,19 +2900,21 @@ L2016            = * + 1
     STA hazard_state,X
     LDA #&07
     JSR OSWRCH
-    JSR L25D7
-    INC data_25A0
+    JSR add_score_x1
+    INC pickup_kill_count
 .L259E
     RTS
-.data_259F
+
+.pickup_count
     BRK
-.data_25A0
+
+.pickup_kill_count
     BRK
 
 \ ----- data &25A1..&25AA -----
 .tbl_25A1
     EQUB &EA, &EA
-.data_25A3
+.pod_attached
     EQUB &EA, &EA
 .force_pod_state
     EQUB &EA, &EA
@@ -2964,13 +2925,13 @@ L2016            = * + 1
 
 \ ----- code &25AA..&268F -----
 .try_spawn_pickup
-    LDA data_25A0  \ Try to start a power-up pickup. Triggered when data_25A0 (the kill-milestone counter — INC'd in check_bullet_hits at hazard-hit values 3/5/7) reaches &0A. Requires no pickup already active (pickup_state == 0) and `data_25A7 != 1` (some other gate, TODO). On success: stash player_y in pickup_y, set pickup_x = &27 (right edge col 39), pickup_state = 1 (animation start), play sfx_level_start.
+    LDA pickup_kill_count  \ Try to start a power-up pickup. Triggered when pickup_kill_count (the kill-milestone counter — INC'd in check_bullet_hits at hazard-hit values 3/5/7) reaches &0A. Requires no pickup already active (pickup_state == 0) and `data_25A7 != 1` (some other gate, TODO). On success: stash player_y in pickup_y, set pickup_x = &27 (right edge col 39), pickup_state = 1 (animation start), play sfx_level_start.
     CMP #&0A
     BCS L25B2
     RTS
 .L25B2
     LDA #&00
-    STA data_25A0
+    STA pickup_kill_count
     LDA pickup_state
     BEQ L25BD
     RTS
@@ -2988,74 +2949,78 @@ L2016            = * + 1
     STA pickup_state
     JMP sfx_level_start
 
-.L25D7
-    CLC
-    LDA data_2A06
-    ADC zp_9B
-    STA data_2A06
+.add_score_x1
+    CLC  \ Score accumulator: ADD `zp_score_acc` to the units digit (`score + 4`) and propagate the carry chain through the 4 display digits (score+3 → +2 → +1 → +0). The score buffer is 6 bytes MSD-first at `score..score + 5`: bytes 0..3 are the four visible display digits, byte 4 is the actual units (which is what gets incremented), byte 5 is always 0 (the trailing '0' shown on screen so a score of 1230 stores as {0,1,2,3,0,0} and a +10 award stores `zp_score_acc = 1` then calls `add_score_x10`). Carries cascade through `add_score_carry_x{1,10,100,1000}`.
+    LDA score + 4
+    ADC zp_score_acc
+    STA score + 4
     CMP #&0A
-    BCS L2619
+    BCS add_score_carry_x1
     RTS
 
-.L25E5
-    CLC
-    LDA score_d0
-    ADC zp_9B
-    STA score_d0
+.add_score_x10
+    CLC  \ Score accumulator x10: ADD `zp_score_acc` to the tens digit (`score + 3`) and carry-chain through score+2 → +1 → +0. Equivalent to `add_score_x1` with the accumulator pre-multiplied by 10. The fall-through code at &25EE..&2618 (extra ADC blocks for score+2/+1/+0) is unreachable — RTS after each carry check exits before the next block, and the routine instead jumps straight into the shared `add_score_carry_*` chain via the BCS branches.
+    LDA score + 3
+    ADC zp_score_acc
+    STA score + 3
     CMP #&0A
-    BCS L262A
-    RTS
-    CLC
-    LDA score_d1
-    ADC zp_9B
-    STA score_d1
-    CMP #&0A
-    BCS L263B
+    BCS add_score_carry_x10
     RTS
     CLC
-    LDA score_d2
-    ADC zp_9B
-    STA score_d2
+    LDA score + 2
+    ADC zp_score_acc
+    STA score + 2
     CMP #&0A
-    BCS L264C
+    BCS add_score_carry_x100
     RTS
     CLC
-    LDA score_d3
-    ADC zp_9B
-    STA score_d3
-    RTS
-.L2619
-    SEC
-    SBC #&0A
-    STA data_2A06
-    INC score_d0
-    LDA score_d0
+    LDA score + 1
+    ADC zp_score_acc
+    STA score + 1
     CMP #&0A
-    BEQ L262A
+    BCS add_score_carry_x1000
     RTS
-.L262A
-    SEC
+    CLC
+    LDA score
+    ADC zp_score_acc
+    STA score
+    RTS
+
+.add_score_carry_x1
+    SEC  \ Score carry (units → tens): subtract 10 from the overflowed units digit, INC the tens digit (score+3), and if THAT now equals 10 fall into `add_score_carry_x10` to propagate. Reached from `add_score_x1` when score+4 wraps past 10.
     SBC #&0A
-    STA score_d0
-    INC score_d1
-    LDA score_d1
+    STA score + 4
+    INC score + 3
+    LDA score + 3
     CMP #&0A
-    BEQ L263B
+    BEQ add_score_carry_x10
     RTS
-.L263B
-    SEC
+
+.add_score_carry_x10
+    SEC  \ Score carry (tens → hundreds): subtract 10 from score+3, INC score+2 (hundreds), recurse if it also wraps. Shared by `add_score_x1` and `add_score_x10`.
     SBC #&0A
-    STA score_d1
-    INC score_d2
-    LDA score_d2
+    STA score + 3
+    INC score + 2
+    LDA score + 2
     CMP #&0A
-    BEQ L264C
+    BEQ add_score_carry_x100
     RTS
-.L264C
-    SEC
+
+.add_score_carry_x100
+    SEC  \ Score carry (hundreds → thousands): subtract 10 from score+2, INC score+1 (thousands), recurse if it also wraps.
     SBC #&0A
-    STA score_d2
-    INC score_d3
+    STA score + 2
+    INC score + 1
+    LDA score + 1
+    CMP #&0A
+    BEQ add_score_carry_x1000
+    RTS
+
+.add_score_carry_x1000
+    SEC  \ Score carry (thousands → ten-thousands): subtract 10 from score+1, INC score (the MSD = ten-thousands). No further carry — overflow past 99,999,0 silently wraps.
+    SBC #&0A
+    STA score + 1
+    INC score
     RTS
 
 .starfield_init
@@ -3086,14 +3051,14 @@ L2016            = * + 1
     CPX #&08
     BNE L267B
     LDA #&01
-    STA data_268F
+    STA stage_clear_flag
 .L268A
     LDA #&01
     STA zp_sprite_dir_flag
     RTS
 
 \ ----- data &268F..&2693 -----
-.data_268F
+.stage_clear_flag
     EQUB &EA
 .pickup_x
     \ Power-up pickup X coordinate (column). DEC'd by 1 each subframe of game_step (so the pickup drifts leftward 16 px/sec = 4 px per game_step). When it hits 0, update_pickup deactivates and erases. Initial value &27 (right edge) on spawn from try_spawn_pickup.
@@ -3231,7 +3196,7 @@ L2016            = * + 1
     LDY #&10
     JSR sprite_plot_xy
     JSR sfx_level_start
-    JSR L25E5
+    JSR add_score_x10
     LDX #&08
     LDY #&57
     JSR calc_screen_addr
@@ -3239,14 +3204,14 @@ L2016            = * + 1
     STA sprite_src_lo
     LDA #HI(gfx_icon_01)
     STA sprite_src_hi
-    INC data_259F
-    LDX data_259F
+    INC pickup_count
+    LDX pickup_count
     CPX #&08
     BCS L27C5
     LDY #&08
     JSR sprite_plot_xy
 .L27C5
-    LDA data_259F
+    LDA pickup_count
     CMP #&01
     BNE L27D2
     LDA #&03

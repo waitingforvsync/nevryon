@@ -317,19 +317,19 @@ data_28D8        = * + 1
     EQUB &01
 
 \ ----- code &2975..&29D8 -----
-.L2975
+.pod_fire
     LDA force_pod_state
     CMP #&01
     BEQ L297D
     RTS
 .L297D
-    LDX #&06
+    LDX #n_player_bullets
 .L297F
     LDA player_bullet_x,X
     CMP #&00
     BEQ L298C
     DEX
-    CPX #&02
+    CPX #n_player_bullets - n_player_fire_slots
     BNE L297F
     RTS
 .L298C
@@ -379,7 +379,7 @@ data_28D8        = * + 1
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA
 
-\ ----- code &29E7..&2B9A -----
+\ ----- code &29E7..&2A02 -----
 .draw_score
     LDX #&09  \ Draw 6-digit score at char-col 9 row &5F. Loops X=0..5 reading score_d* (&2A02..&2A07) and calls draw_score_digit per digit.
     LDY #&5F
@@ -387,7 +387,7 @@ data_28D8        = * + 1
     LDX #&00
 
 .L29F0
-    LDA score_d3,X
+    LDA score,X
     STX scratch_28D3
     JSR draw_score_digit
     LDX scratch_28D3
@@ -395,17 +395,13 @@ data_28D8        = * + 1
     CPX #&06
     BNE L29F0
     RTS
-.score_d3
-    BRK
-.score_d2
-    BRK
-.score_d1
-    BRK
-.score_d0
-    BRK
-    BRK
-    BRK
 
+\ ----- data &2A02..&2A08 -----
+\ Score: 6-byte BCD buffer, most-significant digit first. Bytes 0..3 are the four upper display digits (ten-thousands → tens of thousands → thousands → hundreds), byte 4 is the tens digit (which is what add_score_x1/x10 actually increment), byte 5 is always 0 (the trailing '0' that appears on screen — Nevryon awards score in multiples of 10). draw_score loops X=0..5 reading score,X. add_score_x1 / add_score_x10 in CODE add zp_score_acc (or zp_score_acc×10) at byte 4 / byte 3 with carry propagating upward through bytes 3..0.
+.score
+    EQUB &00, &00, &00, &00, &00, &00
+
+\ ----- code &2A08..&2B9A -----
 .draw_score_digit
     STX scratch_28D3  \ Draw one score digit. A=digit value (0..9), X=column offset; selects gfx_digit_N (= &3A60 + 8*N) and plots a 4x8 sprite.
     ASL A
@@ -936,7 +932,7 @@ data_28D8        = * + 1
     LDX #&00
 .L2E62
     LDA tbl_2E5A,X
-    CMP score_d3,X
+    CMP score,X
     BEQ L2E6F
     BCS L2E74
     JMP L2E75
@@ -949,7 +945,7 @@ data_28D8        = * + 1
 .L2E75
     LDX #&00
 .L2E77
-    LDA score_d3,X
+    LDA score,X
     STA tbl_2E5A,X
     INX
     CPX #&06
@@ -1221,7 +1217,7 @@ L2FF0            = * + 1
     JSR L2E60  \ Save current score (score_d0..d3) and high score (&2E5A..) to the loader persistence area at page &0CF3+. Called when handing off to the BASIC loader.
     LDX #&00
 .L30FD
-    LDA score_d3,X
+    LDA score,X
     STA loader_score_save,X
     LDA tbl_2E5A,X
     STA loader_hiscore_save,X
@@ -1236,7 +1232,7 @@ L2FF0            = * + 1
     LDX #&00  \ Restore score / high-score from loader area &0CF3+ back into &2051 / &2A02..&2A07 / &2E5A..&2E5F. Called by main_init at game start.
 .L3117
     LDA loader_score_save,X
-    STA score_d3,X
+    STA score,X
     LDA loader_hiscore_save,X
     STA tbl_2E5A,X
     INX

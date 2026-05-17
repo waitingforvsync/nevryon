@@ -4,6 +4,225 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-17 — Session 19: score buffer; hazard data; renames
+
+### Score as a 6-byte buffer
+
+Restructured `score_d3..score_d0 + data_2A06..7` into a single
+6-byte buffer at `&2A02`, most-significant-digit first:
+
+  | offset | role |
+  |-------:|------|
+  | `score + 0` | display digit 0 (ten-thousands of tens) |
+  | `score + 1` | display digit 1 |
+  | `score + 2` | display digit 2 |
+  | `score + 3` | display digit 3 (tens-of-displayed) |
+  | `score + 4` | actual units digit — what `add_score_x1` increments |
+  | `score + 5` | always 0 (the trailing '0' on screen; Nevryon awards in multiples of 10) |
+
+Implemented via `array_labels: {"0x2A02": ["score", 6]}` in all
+three cfgs (CODE / CODE2 / CODE3) so cross-binary references render
+as `score`, `score + 1`, … `score + 5`. The mid-array-extern
+mechanism needed mirrored array_labels in each consumer cfg (not
+just the declaring one) because `array_lookup` runs per-cfg.
+
+Renamed the score routines (in CODE):
+
+  | was   | now                                |
+  |-------|------------------------------------|
+  | `L25D7` | `add_score_x1` — adds zp_score_acc at the units digit (score+4), carries through |
+  | `L25E5` | `add_score_x10` — adds zp_score_acc at the tens digit (score+3); the ADC blocks at &25EE..&2618 are unreachable fall-through (each block RTSes before the next can run) |
+  | `L2619` | `add_score_carry_x1` |
+  | `L262A` | `add_score_carry_x10` |
+  | `L263B` | `add_score_carry_x100` |
+  | `L264C` | `add_score_carry_x1000` |
+
+Added `zp_score_acc = &009B` to the shared zp block in `Nevryon.6502`.
+
+### Hazard backing arrays declared as data
+
+Added a forced data region at `0x1A55..0x1A8B` in CODE.cfg.json and
+five array_labels covering:
+
+  | label                | base   | len |
+  |----------------------|-------:|----:|
+  | `hazard_x`           | `&1A55` | 11 |
+  | `hazard_y`           | `&1A60` | 11 |
+  | `hazard_state`       | `&1A6B` | 11 |
+  | `hazard_pattern_step`| `&1A76` | 11 |
+  | `hazard_pattern_id`  | `&1A81` | 10 |
+
+The 11-wide layout (vs `n_hazards = 8`) is because hazards use
+slots 1..8 (predec loop) and slots 0, 9, 10 are unused padding.
+The arrays were previously decoded as long runs of NOP/BRK because
+the &EA/&00 init bytes happen to be valid opcodes.
+
+### `tbl_1A76` / `tbl_1A81` identified
+
+`tbl_1A76` → `hazard_pattern_step`: per-slot byte-offset into the
+active hazard motion script. `L1B87` reads `(zp_88),Y` at `Y =
+hazard_pattern_step[X]` for the vertical-dir byte, then `Y+1` for
+the horizontal-dir byte; the next frame's `L1B2D` stashes the new
+Y back. Wrap-around at `hazard_pattern_len`.
+
+`tbl_1A81` → `hazard_pattern_id`: pattern selector 1..6 captured
+at spawn from `zp_86`. Values 5 and 6 are player-homing
+special-cases in `L1B87`; others walk `(zp_88)` verbatim.
+
+### Data-byte renames where the meaning is solid
+
+In CODE.cfg.json's `labels` (these slots are declared in CODE):
+
+  | was         | now                  | evidence |
+  |-------------|----------------------|----------|
+  | `data_25A3` | `pod_attached`       | Gates `draw_player_pod` and `pod_collide_hazard` |
+  | `data_25A0` | `pickup_kill_count`  | INC'd at hazard hits 3/5/7 + pod kills; `try_spawn_pickup` fires at 10 |
+  | `data_1710` | `hazard_pattern_len` | Wrap-around for `(zp_88),Y` in `L1B87`; written by `spawn_periodic_hazard` |
+  | `data_259F` | `pickup_count`       | INC'd on pickup collection; speeds up fire when it hits 1; plots +icon up to 8 |
+  | `data_268F` | `stage_clear_flag`   | Set by the starfield tail when all 8 enemy_type slots are 0; `main_loop` polls to advance |
+
+In CODE2.cfg.json's `labels`:
+
+  | was     | now        |
+  |---------|------------|
+  | `L2975` | `pod_fire` (twin-shot from the pod into player_bullet slots 6..3) |
+
+### Array-label decorations so mid-array writes render symbolically
+
+Added in CODE.cfg.json (so the death-anim no longer reads as
+`data_7A96/7A97/...`):
+
+  - `lev_explosion_ptr_lo[6]` at `&7A95`
+  - `lev_explosion_ptr_hi[6]` at `&7AD5`
+
+Added in CODE3.cfg.json (so the bonus-roll and countdown digit
+writes resolve as `str_xxx + N`):
+
+  - `str_level_x_completed[18]` at `&3639`
+  - `str_bonus_xnnn[11]` at `&364B`
+  - `str_two_digits[3]` at `&3682`
+  - `str_credits_nn[11]` at `&3685`
+
+### Pod collision (L2555) — the "immunity flag" hypothesis was wrong
+
+L2555 (now `pod_collide_hazard`) is gated on `pod_attached == 1`,
+not on any immunity timer. Its 3×&14 test box at
+`(player_x + 8, player_y − 11)` matches where `draw_player_pod`
+plots the pod sprite, and on hit it **adds score** + bumps the
+kill-milestone counter rather than calling `lose_a_life`. So this
+is the POD doing damage to nearby hazards, not the player being
+shielded from them. Documented in the cfg comment for L2555.
+
+### Open thread: pod state is unreachable
+
+While renaming I noticed that neither `pod_attached`,
+`force_pod_state`, nor `data_25A7` is ever written to `1` anywhere
+in CODE/CODE2/CODE3 — only zeroed in `init`. So the whole pod
+chain (draw → fire → hazard-kill → pickup-gate) is unreachable
+from the disassembled code. The activation must come from
+Loader2.bas POKEs, or from a code path I haven't decoded yet.
+Worth chasing in a separate session.
+
+### Data bytes left as `data_NNNN` (deliberately)
+
+  - `data_16F5/F6/F7` — multi-purpose: hazard direction state in
+    `update_hazards`/`L1B87`, X-save scratch in `check_bullet_hits`
+    and `enemy_bullet_alloc`. No honest single name.
+  - `data_25A7`, `data_25A9` — only zeroed; semantics unknown
+    without tracing whatever sets them.
+  - `data_28D5/D8` (CODE2), `data_29D8`, `data_2EFE`, `data_70FF`,
+    `data_16E7..16EC`, `data_1307/8`, `data_156F..1576` — unknown
+    purpose, won't guess.
+
+Build remains byte-identical across all four binaries.
+
+---
+
+## 2026-05-17 — Session 18: active-object pool constants; brush walkback
+
+### Active-object pools surfaced as named EQUs
+
+Walked through every `LDX #&NN / DEX / BNE` and `INX / CPX #&NN /
+BNE` loop in CODE/CODE2 to enumerate how many of each kind of
+moving object can exist simultaneously. The caps are not all 8 —
+each pool has its own slot range, sometimes with sub-ranges
+(hazards-only / pod-only / keyboard-only).
+
+Added 8 EQUs to `disasm/Nevryon.6502`:
+
+| Constant              | Value | Where used |
+|-----------------------|------:|------------|
+| `n_enemies`           | 8     | `update_enemies` CPX, `check_player_collisions` enemy loop, `spawn_check_step` round-robin |
+| `n_hazards`           | 8     | `update_hazards` LDX, `check_player_collisions` hazard predec (`n_hazards + 1`) |
+| `n_state_slots`       | 9     | `init` clear loop (covers union of enemy[0..7] ∪ hazard[1..8]) |
+| `n_enemy_bullets`     | 6     | `update_enemy_bullets`, `enqueue_enemy_bullet` (active range 1..6 of 7-wide array) |
+| `n_hazard_bullets`    | 4     | `enemy_bullet_alloc` (hazards only fire into slots 1..4 of shared pool) |
+| `n_enemy_missiles`    | 2     | (no loop — hard-coded `LDX #&00` / `LDX #&01`; constant only documents the cap) |
+| `n_player_bullets`    | 6     | `update_bullets`, pod fire `LDX` |
+| `n_player_fire_slots` | 4     | `on_fire_pressed` (keyboard fire only fills slots 1..4); pod fire's `CPX #&02` becomes `CPX #n_player_bullets - n_player_fire_slots` |
+
+Wired up 13 `immediate_overrides` entries (11 in CODE.cfg.json, 2 in
+CODE2.cfg.json) so the disassembly reads e.g. `LDX #n_enemies`
+instead of `LDX #&08`. **Gotcha**: the PC for an `immediate_override`
+key is the *opcode* byte, not the immediate-operand byte — first
+pass had every PC off by one and the overrides silently didn't
+apply (build was still byte-identical because the values matched).
+Spot-check by grep after re-running `build.sh` to confirm the
+constants actually rendered.
+
+Total simultaneous game objects (full theoretical cap):
+1 player + 6 player bullets + 8 enemies + 8 hazards + 6 enemy bullets
++ 2 enemy missiles + 1 force-field + 1 force-pod + 1 flame + 1 pickup
+= **35**.
+
+The dual indexing convention (enemies at [0..7], hazards at [1..8])
+explains the otherwise mysterious 9-wide width of the per-slot state
+arrays at &2052..&208A: it's the union of the two pools' active
+ranges so a single sweep clears both. Wrote this up in a new
+"Active-object pools" section at the end of `docs/memory_map.md`.
+
+### `lev_erase_brush` walkback
+
+Earlier in the session I'd convinced myself the 272-byte zero
+region at `&7D00` was actually 144 bytes of zeros followed by 128
+bytes of per-scenario sprite data (including a "per-level enemy
+bullet" at +&100). Added `lev_level_decor`, `lev_enemy_bullet`,
+`lev_enemy_bullet_trail` labels and a `tools/render_brush.py` that
+rendered a 4-panel PNG of the supposed sprites in each scenario's
+palette. The patterns looked legitimate — clear vertical-bar
+structure that varied per scenario.
+
+**They were wrong.** `render_brush.py` had `BRUSH_OFFSET = 0xA00`
+in LEVD2 — but LEVD2 loads at CPU `&7380`, so the brush at CPU
+`&7D00` is at file offset `&980`, not `&A00`. The render was
+showing the last 16 bytes of the brush (zeros, end of region) +
+the first 128 bytes of the lower tile-id stream at CPU `&7E10`.
+The "per-scenario decor" was just sparse map tile IDs (mostly tile 0
+= sky for the first ~9 rows, then varying tiles per stage); the
+"enemy bullet at +&100" was 6 bytes of tile IDs in the middle of
+the stream.
+
+Verified by re-reading file[`&980`..`&A8F`] in all 4 LEVD2s →
+272 bytes of pure zero across the board.
+
+Reverted: deleted `tools/render_brush.py`, removed the three
+spurious labels, restored the 8 affected `immediate_overrides` to
+`LO/HI(lev_erase_brush + N)`. Updated the `lev_erase_brush`
+preamble in `Nevryon.6502` to make the 272-byte zero claim
+explicit. Build still byte-identical (the changes were all
+labelling — no operand bytes moved).
+
+The actual enemy-bullet sprite must live somewhere else — probably
+GRAPHIX, or a per-LEVD location I haven't traced yet. Open thread.
+
+**Lesson**: the next time I think I've found per-level data of
+unknown purpose, first confirm the file-offset → CPU-address math
+against a known landmark in the same file. The LEVD2 layout in
+`docs/memory_map.md` is explicit about which CPU addresses map to
+which file offsets; I just didn't cross-reference.
+
+---
+
 ## 2026-05-17 — Session 17: game_step decoded; force_pod_anim sprite ref fixed
 
 ### `game_step` (was `L13D1`)

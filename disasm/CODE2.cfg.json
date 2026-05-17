@@ -38,7 +38,9 @@
     {"start": "0x2EF6", "end": "0x2EFE", "kind": "data", "width": 8,
      "comment": "OSWORD &07 param block for sfx_level_start: ch=&0011 amp=4 pitch=&FF dur=&0F"},
     {"start": "0x3041", "end": "0x30F8", "kind": "data", "width": 16,
-     "comment": "Starfield engine state — three parallel 61-byte arrays. Loop bound is X<60 (60 active stars; the 61st slot in each array is unused). Mutated in place every frame by starfield_update in CODE."}
+     "comment": "Starfield engine state — three parallel 61-byte arrays. Loop bound is X<60 (60 active stars; the 61st slot in each array is unused). Mutated in place every frame by starfield_update in CODE."},
+    {"start": "0x2A02", "end": "0x2A08", "kind": "data", "width": 1,
+     "comment": "Score: 6-byte BCD buffer, most-significant digit first. Bytes 0..3 are the four upper display digits (ten-thousands → tens of thousands → thousands → hundreds), byte 4 is the tens digit (which is what add_score_x1/x10 actually increment), byte 5 is always 0 (the trailing '0' that appears on screen — Nevryon awards score in multiples of 10). draw_score loops X=0..5 reading score,X. add_score_x1 / add_score_x10 in CODE add zp_score_acc (or zp_score_acc×10) at byte 4 / byte 3 with carry propagating upward through bytes 3..0."}
   ],
   "labels": {
     "0x2972": "force_pod_x",
@@ -56,7 +58,7 @@
     "0x284C": "shutter_fade",
     "0x28A9": "L28A9",
     "0x28D7": "force_pod_anim",
-    "0x2975": "L2975",
+    "0x2975": "pod_fire",
     "0x2998": "L2998",
     "0x29E7": "draw_score",
     "0x2A08": "draw_score_digit",
@@ -185,14 +187,10 @@
     "0x3432": "game_over_or_continue",
     "0x3513": "get_ready_overlay",
     "0x3560": "print_doubled_string",
-    "0x3620": "str_loading",
-
-    "0x2A02": "score_d3",
-    "0x2A03": "score_d2",
-    "0x2A04": "score_d1",
-    "0x2A05": "score_d0"
+    "0x3620": "str_loading"
   },
   "array_labels": {
+    "0x2A02": ["score", 6],
     "0x2B9A": ["enemy_missile_x", 2],
     "0x2B9C": ["enemy_missile_y", 2],
     "0x2B9E": ["enemy_missile_flip", 2],
@@ -204,6 +202,8 @@
     "0x28ED": "HI(lev_erase_brush + &80)",
     "0x2948": "LO(gfx_ball_frame0 - &18)",
     "0x2956": "HI(gfx_ball_frame0 - &18)",
+    "0x297D": "n_player_bullets",
+    "0x2987": "n_player_bullets - n_player_fire_slots",
     "0x2AD1": "LO(lev_erase_brush + &80)",
     "0x2AD6": "HI(lev_erase_brush + &80)",
     "0x2B31": "LO(gfx_icon_08)",

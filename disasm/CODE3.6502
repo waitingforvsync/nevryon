@@ -22,10 +22,7 @@
 \   lives_left = &2051
 \   sfx_fire = &2800
 \   draw_score = &29E7
-\   score_d3 = &2A02
-\   score_d2 = &2A03
-\   score_d1 = &2A04
-\   score_d0 = &2A05
+\   score = &2A02
 \   sfx_score_tick = &2E83
 \   play_death_sequence = &2E94
 \   save_score_to_loader = &30F8
@@ -71,8 +68,8 @@ ORG &3300
     LDA zp_level_num
     CLC
     ADC #&30
-    STA data_363F
-    STA data_3651
+    STA str_level_x_completed + 6
+    STA str_bonus_xnnn + 6
     LDA #LO(str_level_x_completed)
     STA zp_string_ptr_lo
     LDA #HI(str_level_x_completed)
@@ -99,18 +96,18 @@ ORG &3300
     BNE L3365
     LDX zp_level_num
 .L3373
-    DEC data_3651
+    DEC str_bonus_xnnn + 6
     LDA #&3A
-    STA data_3652
+    STA str_bonus_xnnn + 7
     LDY #&FF
 .L337D
-    DEC data_3652
+    DEC str_bonus_xnnn + 7
     INY
     STY KEY_UP
     STX zp_98
     JSR sfx_score_tick
     JSR draw_score
-    INC score_d0
+    INC score + 3
     LDA #LO(str_bonus_xnnn)
     STA zp_string_ptr_lo
     LDA #HI(str_bonus_xnnn)
@@ -121,24 +118,24 @@ ORG &3300
     JSR print_doubled_string
     LDY KEY_UP
     LDX zp_98
-    LDA score_d0
+    LDA score + 3
     CMP #&0A
     BNE L33D0
     LDA #&00
-    STA score_d0
-    INC score_d1
-    LDA score_d1
+    STA score + 3
+    INC score + 2
+    LDA score + 2
     CMP #&0A
     BNE L33D0
     LDA #&00
-    STA score_d1
-    INC score_d2
-    LDA score_d2
+    STA score + 2
+    INC score + 1
+    LDA score + 1
     CMP #&0A
     BNE L33D0
     LDA #&00
-    STA score_d2
-    INC score_d3
+    STA score + 1
+    INC score
 .L33D0
     CPY #&09
     BNE L337D
@@ -207,7 +204,7 @@ ORG &3300
     LDY #&05
     JSR print_doubled_string
     LDA #&30
-    STA data_3683
+    STA str_two_digits + 1
     LDA #&31
     STA str_two_digits
     LDA #LO(str_two_digits)
@@ -228,7 +225,7 @@ ORG &3300
     JSR print_doubled_string
     LDA zp_continues
     ADC #&30
-    STA data_368E
+    STA str_credits_nn + 9
     LDA #LO(str_credits_nn)
     STA zp_string_ptr_lo
     LDA #HI(str_credits_nn)
@@ -240,7 +237,7 @@ ORG &3300
     LDA #&30
     STA str_two_digits
     LDA #&39
-    STA data_3683
+    STA str_two_digits + 1
     JSR L34D7
 .L349F
     LDA #LO(str_two_digits)
@@ -258,8 +255,8 @@ ORG &3300
     JSR OSBYTE
     CPY #&FF
     BEQ L34EC
-    DEC data_3683
-    LDA data_3683
+    DEC str_two_digits + 1
+    LDA str_two_digits + 1
     CMP #&2F
     BEQ L34CD
     JMP L349F
@@ -458,16 +455,10 @@ print_str_src_hi = * + 2
     EQUS "WOW!", &0D
 .str_level_x_completed
     \ 'LEVEL X COMPLETED' — the 'X' at &363F is overwritten with the level digit (ASCII '1'..'8') before printing.
-    EQUS "LEVEL "
-.data_363F
-    EQUS "X COMPLETED", &0D
+    EQUS "LEVEL X COMPLETED", &0D
 .str_bonus_xnnn
     \ 'BONUS X000' — 'X' at &3651 overwritten with the level digit; the three '0' digits become an animated score roll-up at &3652..&3654 (carry chain mirrors the per-decimal-digit score store at &2A02..&2A05).
-    EQUS "BONUS "
-.data_3651
-    EQUS "X"
-.data_3652
-    EQUS "000", &0D
+    EQUS "BONUS X000", &0D
 .str_extra_ship
     \ '+ EXTRA SHIP!' (printed by stage_clear_screen only if the score has crossed an extra-ship threshold).
     EQUS "+ EXTRA SHIP!", &0D
@@ -479,11 +470,7 @@ print_str_src_hi = * + 2
     EQUS "CONTINUE PLAY!", &0D
 .str_two_digits
     \ '10' — first char at &3682 is the displayed seconds (set to '1' or '0' depending on the count), second char at &3683 rolls '0'..'9' during the per-second countdown.
-    EQUS "1"
-.data_3683
-    EQUS "0", &0D
+    EQUS "10", &0D
 .str_credits_nn
     \ 'CREDITS:00' — the trailing '00' at &368D/&368E shows the player's credit count, written before the print call.
-    EQUS "CREDITS:0"
-.data_368E
-    EQUS "0", &0D
+    EQUS "CREDITS:00", &0D

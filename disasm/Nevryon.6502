@@ -60,12 +60,30 @@ zp_continues              = &0091
 zp_game_speed             = &0092
 zp_string_ptr_lo          = &0095
 zp_string_ptr_hi          = &0096
+zp_score_acc              = &009B
 zp_irq_enable             = &009C
 zp_level_num              = &009D
 
 \ Interrupt vectors
 irq1v_lo                  = &0204
 irq1v_hi                  = &0205
+
+\ ---- Active-object pool sizes ------------------------------
+\ Caps on how many of each kind of game object can exist at
+\ once. See docs/memory_map.md "Active-object pools" for the
+\ full table (per-pool storage, iterator pattern, sharing).
+\ Singletons (force-pod, flame, force-field, pickup, player
+\ ship, player explosion) are not given a constant — they're
+\ scalars with no slot index.
+
+n_enemies                 = 8     \ Enemy slots, indexed 0..n_enemies-1. update_enemies iterates 0..7 (CPX #n_enemies), spawn_check_step round-robins via zp_7C.
+n_hazards                 = 8     \ Hazard slots, indexed 1..n_hazards. Iterators are predec loops (LDX #n_hazards / DEX / BNE), so slot 0 is unused. Shares the enemy_x/_y/_type/_hp/_step backing arrays with the enemies — hazards live at indices 1..8, enemies at 0..7, union 0..8 = n_state_slots wide.
+n_state_slots             = 9     \ Width of the combined enemy+hazard backing arrays (enemy_x at &2052 through hazard_state at &208A, each 9 bytes). init clears the union of [0..n_enemies-1] ∪ [1..n_hazards] = [0..8].
+n_enemy_bullets           = 6     \ Enemy bullet slots scanned by update_enemy_bullets and enqueue_enemy_bullet — indexed 1..n_enemy_bullets (predec loop). The backing arrays enemy_bullet_x/_y at &1A8B/&1A92 are 7 bytes wide; slot 0 is initialised to &FF but never used by either routine.
+n_hazard_bullets          = 4     \ Hazards (via enemy_bullet_alloc) only fire into the first n_hazard_bullets slots of the shared enemy_bullet pool — indices 1..4. Enemy-type-&04/&13 fires can use the full 1..6 range, so slots 5..6 are effectively reserved for enemies.
+n_enemy_missiles          = 2     \ Enemy missile slots, indexed 0..n_enemy_missiles-1 (no loop — hard-coded LDX #&00 / LDX #&01 in update_enemy_missiles).
+n_player_bullets          = 6     \ Player bullet slots, indexed 1..n_player_bullets. update_bullets predec-loops over all 6; on_fire_pressed only scans 1..n_player_fire_slots so the upper 2 slots (5,6) are reserved for the force-pod's twin shot.
+n_player_fire_slots       = 4     \ Number of in-flight bullets the fire button can put on screen. on_fire_pressed scans player_bullet_x[n_player_fire_slots..1] for a free slot.
 
 \ ---- Per-level data (LEVD1 / LEVD2 / LEVD3) ----------------
 \ Each scenario (and per stage) reloads these three files into
@@ -142,7 +160,7 @@ lev_spawn_col             = &7B00     \ 128-byte spawn-column schedule (sorted a
 lev_spawn_attr            = &7B80     \ 128-byte spawn attribute table, parallel with lev_spawn_col. Bits 0..4 = enemy type / dispatch (→ enemy_type_dispatch), bits 5..6 = Y row (0 = &DF, 1 = &BF, 2 = &9F, 3 = &7F), bit 7 = vertical-flip flag (mirrors the sprite, used to pair ceiling-hanging and floor-rising decoration enemies).
 lev_explosion_4           = &7C00     \ 4×32 (128 B) — frame 4 of the 6-frame explosion. Same bytes accessible via lev_enemy_ptr_*[25].
 lev_explosion_5           = &7C80     \ 4×32 (128 B) — frame 5 of the 6-frame explosion. Same bytes accessible via lev_enemy_ptr_*[26].
-lev_erase_brush           = &7D00     \ Dual-purpose region. First &90 bytes are zeros — sprite_plot from `+0` or `+&80` reads inside the zero zone (e.g. W=4 H=&20 = 128 zero bytes) and erases a screen rect. Next &80 bytes (offsets &90..&10F) hold REAL sprite data: small projectile / dart sprites used by update_enemy_bullets. So `+&100` with W=3 H=2 isn't an erase — it draws the 12×2-px enemy bullet.
+lev_erase_brush           = &7D00     \ 272 bytes of zeros (verified across all 4 LEVD2 files). Used as an erase brush by the sprite blitter: 29 call sites read W×H bytes column-major from `lev_erase_brush + offset` to plot a black (pixel 0) rectangle on screen. Observed offsets: 0, &80, &100, &102 — max W*H = 16 from offset &102, so reads end by &110 = exact end of the brush.
 \ Map tile-id streams. Each is 240 entries, one byte per scroll
 \ column, indexing into lev_tile_catalog. The upper band is
 \ rendered at char-row 0 with dir_flag = 0 (vertically mirrored,

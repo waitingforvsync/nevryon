@@ -396,6 +396,55 @@ regardless of which scenario is active.
 *Loader2 line 1030 explicitly forces all LEVD1s to load at `&4A00`,
 even for scenarios 3/4 whose catalog claims `&6000`.
 
+## Active-object pools
+
+The engine carries fixed-size slot pools for every kind of moving
+object on screen. The caps are deliberate — Nevryon never allocates
+at runtime; instead each routine scans a hard-coded slot range with
+an `LDX #N / DEX / BNE` (or `INX / CPX #N / BNE`) loop. Magic
+numbers for these caps are surfaced as named EQUs in
+`disasm/Nevryon.6502` and wired up via `immediate_overrides` in the
+per-binary cfgs, so the disassembly reads e.g. `LDX #n_enemies`
+instead of `LDX #&08`.
+
+| Pool                | Cap | Storage range                           | Iterator pattern               | Notes |
+|---------------------|----:|-----------------------------------------|--------------------------------|-------|
+| Player ship         |   1 | `zp_player_x`/`_y` (&81/&82) + `lives_left` (&2051)                                 | singleton                      | Per-life HP at `player_hp` (&2050), default 6 from `?&9A`. |
+| Player explosion    |   1 | none — 6-frame anim plays inline in `death_anim`                                    | singleton                      | Frames sourced from `lev_explosion_0..5` (LEVD1/LEVD2). |
+| Player bullets      |   6 | `player_bullet_x[6]` (&16E6), `player_bullet_y[6]` (&16ED)                          | `LDX #n_player_bullets / DEX BNE`  in `update_bullets` | Keyboard fire only scans slots 1..`n_player_fire_slots` (=4); slots 5..6 are reserved for the force-pod's twin shot (CODE2 `pod_fire` scans slots `n_player_bullets..n_player_bullets-n_player_fire_slots+1`). |
+| Enemies             |   8 | `enemy_x`/`_y`/`_type`/`_hp`/`_step`/`enemy_flip` at &2052..&207F (parallel 9-wide arrays — see `n_state_slots`) | `INX / CPX #n_enemies / BNE` (slots 0..7); spawn round-robins `zp_7C` mod `n_enemies` | Per-type behaviour dispatched by `enemy_type_dispatch`; slot 8 of each array is unused (see below). |
+| Hazards             |   8 | `hazard_x`/`_y`/`hazard_state` at &1A55/&1A60/&1A6B (8-wide each) PLUS `hazard_state` overlay at &206E..&2076 (the parallel-with-enemies array) | `LDX #n_hazards / DEX BNE` (slots 1..8 — slot 0 unused) | Hazards share a back-store with enemies via the parallel `hazard_state` array; the cap of 8 active hazards is independent of the 8 enemies, but the predec loop pattern means index 0 is always empty. The `LDX #n_hazards + 1` in `check_player_collisions` is the same loop body with a DEX-first prelude. |
+| Combined slot width |   9 | union of enemy[0..7] and hazard[1..8]                                                | `init` clear loop: `CPX #n_state_slots`                              | `n_state_slots = 9` is the array width chosen so a single `INX/CPX/BNE` sweep zeroes both pools' active ranges. |
+| Enemy bullets       |   6 | `enemy_bullet_x[7]` (&1A8B), `enemy_bullet_y[7]` (&1A92)                            | `LDX #n_enemy_bullets / DEX BNE` (slots 1..6) | Backing arrays are 7-wide; slot 0 is initialised to &FF by `init` but no routine ever touches it (predec loop falls off at X=0 before processing). |
+| Enemy bullets (hz)  |   4 | (shares the pool above)                                                              | `LDX #n_hazard_bullets / DEX BNE` (slots 1..4)              | Hazards fire (`hazard_try_fire_bullet`) only into the first 4 slots of the shared pool, leaving slots 5..6 for enemy-type-&04/&13 fires (`enqueue_enemy_bullet`). Plus a global 8-frame cooldown at `zp_7E`. |
+| Enemy missiles      |   2 | `enemy_missile_x[2]`/`_y[2]`/`_flip[2]`/`_homing_dir[2]` at &2B9A..&2BA3 (CODE2)    | hard-coded `LDX #&00` / `LDX #&01` — no loop | Spawned by enemy type &06 (`spawn_enemy_missile`); homes on the player by toggling sign each tick. |
+| Force-field         |   1 | `forcefield_x`/`_y`/`_active` at &23C5..&23C7                                       | singleton                      | Enemy-type &07 is a force-field slot; `forcefield_render` re-noises the strip every frame. |
+| Force pod           |   1 | `force_pod_x`/`_y`/`_frame` at &2972..&2974 (CODE2) + `force_pod_state` at &25A5 (CODE) | singleton                      | Orbits the player when state=1; can fire one bullet via `L2975` into player_bullet slots 5..6. |
+| Flame               |   1 | `flame_x`/`_y`/`flame_state` at &249A..&249C                                        | singleton                      | Spawned by enemy type &08; one-shot 6-frame 32×8 sprite — `spawn_flame` refuses while `flame_state != 0`. |
+| Power-up pickup     |   1 | `pickup_x`/`_y`/`pickup_state` at &2690..&2692                                      | singleton                      | Triggered every 10 hazard hits (`data_25A0 >= 10`); only one in flight at a time. |
+
+### Why hazards and enemies share storage
+
+The hazard arrays at &1A55..&1A72 are the *primary* per-frame state
+(per-slot position, direction, animation tick). The
+`hazard_state` byte at &206E..&2076 lives in the same parallel-with-
+enemies block specifically so that `init`'s clear loop
+(`STA hazard_state,X` interleaved with the enemy clears) can wipe
+both pools in one pass. The disjoint index conventions —
+enemies at [0..7], hazards at [1..8] — keep the two from clashing
+even though their parallel arrays overlap at indices 1..7.
+
+### Total moving objects on screen
+
+Cap (excluding scenery / starfield / scoreboard):
+
+  1 player + 6 player bullets + 8 enemies + 8 hazards + 6 enemy
+  bullets + 2 enemy missiles + 1 force-field + 1 force-pod + 1
+  flame + 1 pickup = **35 simultaneous game objects**.
+
+In practice the spawn schedule rarely fills more than ~12 slots at
+once.
+
 ## See also
 
 - `docs/file_layout.md` — per-file disk byte-map + named routine list

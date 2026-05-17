@@ -77,6 +77,13 @@
     "0x3682": "'10' — first char at &3682 is the displayed seconds (set to '1' or '0' depending on the count), second char at &3683 rolls '0'..'9' during the per-second countdown.",
     "0x3685": "'CREDITS:00' — the trailing '00' at &368D/&368E shows the player's credit count, written before the print call."
   },
+  "array_labels": {
+    "0x2A02": ["score", 6],
+    "0x3639": ["str_level_x_completed", 18],
+    "0x364B": ["str_bonus_xnnn", 11],
+    "0x3682": ["str_two_digits", 3],
+    "0x3685": ["str_credits_nn", 11]
+  },
   "extern_labels": {
     "0xFFF1": "OSWORD",
     "0xFFF4": "OSBYTE",
@@ -88,10 +95,7 @@
     "0x1236": "calc_screen_addr",
     "0x2800": "sfx_fire",
     "0x29E7": "draw_score",
-    "0x2A02": "score_d3",
-    "0x2A03": "score_d2",
-    "0x2A04": "score_d1",
-    "0x2A05": "score_d0",
+    "0x2A02": "score",
     "0x2E83": "sfx_score_tick",
     "0x2E94": "play_death_sequence",
     "0x30F8": "save_score_to_loader",
