@@ -746,7 +746,7 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- code &1577..&16FD -----
 .L1577
-    LDA data_25A7
+    LDA pickup_spawn_blocked
     CMP #&01
     BEQ L157F
     RTS
@@ -2128,11 +2128,11 @@ L1C21            = * + 1
     STA fire_cooldown_reload
     LDA #&00
     STA pickup_kill_count
-    STA tbl_25A1
+    STA pickup_tier_flag
     STA pod_attached
 L2016            = * + 1
     STA force_pod_state
-    STA data_25A7
+    STA pickup_spawn_blocked
     STA data_25A9
     STA pickup_count
     LDX data_16F5
@@ -2912,20 +2912,21 @@ L2016            = * + 1
     BRK
 
 \ ----- data &25A1..&25AA -----
-.tbl_25A1
+.pickup_tier_flag
+    \ 8-element pickup tier-flag array (&25A1..&25A8), indexed by `pickup_count - 1`. Set by `set_pickup_tier_flag` to mark each tier as reached. Three slots overlap with named flags whose meaning is consumed elsewhere: tier 3 (offset +2) = `pod_attached` (pod sprite + pod_collide_hazard kicks in), tier 5 (offset +4) = `force_pod_state` (pod_fire enabled + force_pod_anim runs), tier 7 (offset +6) = `pickup_spawn_blocked` (try_spawn_pickup refuses further spawns). Tiers 2, 4, 6, 8 (offsets +1, +3, +5, +7) ARE written but nothing reads them — orphan flags, presumably scaffolding for power-ups that were planned but never implemented (no consumer code).
     EQUB &EA, &EA
 .pod_attached
     EQUB &EA, &EA
 .force_pod_state
     EQUB &EA, &EA
-.data_25A7
+.pickup_spawn_blocked
     EQUB &EA, &EA
 .data_25A9
     EQUB &EA
 
 \ ----- code &25AA..&268F -----
 .try_spawn_pickup
-    LDA pickup_kill_count  \ Try to start a power-up pickup. Triggered when pickup_kill_count (the kill-milestone counter — INC'd in check_bullet_hits at hazard-hit values 3/5/7) reaches &0A. Requires no pickup already active (pickup_state == 0) and `data_25A7 != 1` (some other gate, TODO). On success: stash player_y in pickup_y, set pickup_x = &27 (right edge col 39), pickup_state = 1 (animation start), play sfx_level_start.
+    LDA pickup_kill_count  \ Try to start a power-up pickup. Triggered when pickup_kill_count (the kill-milestone counter — INC'd in check_bullet_hits at hazard-hit values 3/5/7) reaches &0A. Requires no pickup already active (pickup_state == 0) and `pickup_spawn_blocked != 1` (= the 7th-pickup ceiling — once the player has collected 7 power-ups, no more spawn). On success: stash player_y in pickup_y, set pickup_x = &27 (right edge col 39), pickup_state = 1 (animation start), play sfx_level_start.
     CMP #&0A
     BCS L25B2
     RTS
@@ -2936,7 +2937,7 @@ L2016            = * + 1
     BEQ L25BD
     RTS
 .L25BD
-    LDA data_25A7
+    LDA pickup_spawn_blocked
     CMP #&01
     BNE L25C5
     RTS
@@ -3076,7 +3077,7 @@ L2016            = * + 1
     BNE L2699
     RTS
 .L2699
-    JSR L275F
+    JSR pickup_collected
     LDA pickup_state
     BNE L26A2
     RTS
@@ -3166,8 +3167,8 @@ L2016            = * + 1
 .L275E
     RTS
 
-.L275F
-    LDX zp_player_x
+.pickup_collected
+    LDX zp_player_x  \ Per-subframe pickup ↔ player collision test + tier ladder. Box-test the player against (pickup_x, pickup_y) with a (6 × &1C) hit window; miss → RTS. On hit: clear pickup_state, erase the pickup sprite (3×&10 brush), play sfx_level_start, add 100 to score (add_score_x10 with zp_score_acc=10? — TODO confirm), INC pickup_count, plot the +1 icon on the status row, then dispatch to `apply_pickup_tier`. Effects ladder (cumulative per game/life): #1 → fast fire (fire_cooldown_reload = 3); #2 → pickup_tier_flag+1 (unused); #3 → pod_attached = 1; #4 → unused; #5 → force_pod_state = 1 AND reset fire timer zp_8A = 8; #6 → unused; #7 → pickup_spawn_blocked = 1; #8+ → no effect (count clamped). Called from update_pickup every active subframe.
     DEX
     TXA
     CMP pickup_x
@@ -3213,19 +3214,21 @@ L2016            = * + 1
 .L27C5
     LDA pickup_count
     CMP #&01
-    BNE L27D2
+    BNE apply_pickup_tier
     LDA #&03
     STA fire_cooldown_reload
     RTS
-.L27D2
-    TAX
+
+.apply_pickup_tier
+    TAX  \ Tier-flag dispatcher. X = pickup_count, decrement to get the tier index (0-based), then jump to `set_pickup_tier_flag` if X < 7. Falls through to RTS for tier indices >= 7 (i.e. pickup_count >= 8).
     DEX
     CPX #&07
-    BCC L27D9
+    BCC set_pickup_tier_flag
     RTS
-.L27D9
-    LDA #&01
-    STA tbl_25A1,X
+
+.set_pickup_tier_flag
+    LDA #&01  \ Set the per-tier pickup flag at `pickup_tier_flag,X`. The interesting tiers are X=2 (= pod_attached), X=4 (= force_pod_state, also resets zp_8A), X=6 (= pickup_spawn_blocked). Tiers X=1/3/5/7 write to dead slots.
+    STA pickup_tier_flag,X
     CPX #&04
     BNE L27E6
     LDA #&08

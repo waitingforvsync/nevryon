@@ -4,6 +4,93 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-17 — Session 20: pickup tier ladder (correcting Session 19)
+
+### The pod IS reachable — Session 19's "dead code" claim was wrong
+
+Session 19 concluded that `pod_attached` / `force_pod_state` /
+`data_25A7` were never written to 1 anywhere, making the entire
+force-pod feature "unreachable from the disassembled code". That
+was based on a raw-byte search for absolute-mode writes
+(`8D A3 25` etc.) which found only the init zeroing. The search
+**missed indexed writes**.
+
+Catalyst: Rich noticed the only POKE in any loader into
+CODE/CODE2/CODE3 is `?&283D = 256 - V%` in `LOADER3` (= the
+sfx_explode amplitude byte, from the volume slider in
+`options.BAS` where V% ∈ [1, 15]). With no loader-POKE candidate
+for the pod activation, the conclusion was "either we missed it,
+or it's a bug". A fresh search for indexed writes (`9D xx xx`)
+into the &25A0..&25B0 cluster turned up exactly one hit:
+
+```
+&27DB:  STA &25A1,X         ; STA pickup_tier_flag,X
+```
+
+— buried in the pickup-collected handler (now named
+`pickup_collected` at `&275F`). The base &25A1 is `tbl_25A1`,
+which turns out to be an 8-element array `pickup_tier_flag[8]`
+overlapping the named flags I'd already documented.
+
+### The pickup tier ladder
+
+Each pickup-collected event runs:
+
+  1. Erase pickup sprite, play `sfx_level_start`, add +100 to score.
+  2. `INC pickup_count`; plot the +1 icon on the status row (up to 8).
+  3. Dispatch on the new `pickup_count`:
+
+| #    | Effect                                                                 |
+|-----:|------------------------------------------------------------------------|
+| 1    | `fire_cooldown_reload = 3` (fast fire — special-cased; skips the tbl)  |
+| 2    | `pickup_tier_flag + 1 = 1` — **orphan write** (no consumer)            |
+| 3    | `pod_attached = 1` → pod draws + `pod_collide_hazard` scores damage    |
+| 4    | `pickup_tier_flag + 3 = 1` — **orphan**                                |
+| 5    | `force_pod_state = 1` → `pod_fire` twin-shot + `force_pod_anim` runs; also resets `zp_8A = 8` |
+| 6    | `pickup_tier_flag + 5 = 1` — **orphan**                                |
+| 7    | `pickup_spawn_blocked = 1` → `try_spawn_pickup` refuses further spawns |
+| 8+   | clamped via `CPX #&07 / BCC` — no effect                               |
+
+So the game IS playable as advertised: 30 hazard kills earns 3
+pickups (= ~10 kills each via `pickup_kill_count`), which attaches
+the pod; another 20 kills + 2 pickups (= 5 total) earns the
+twin-shot. The orphan slots (tiers 2, 4, 6, and the would-be 8)
+are almost certainly leftover scaffolding from a design that had
+7 distinct power-ups — only 3 made it into the consumer code; the
+other 4 slots accumulate dead writes.
+
+### Renames in CODE.cfg.json
+
+  - `tbl_25A1` → `pickup_tier_flag` + new `array_labels` entry
+    declaring it as 8 bytes wide.
+  - `data_25A7` → `pickup_spawn_blocked` (clears Session 19's
+    "TODO" note on try_spawn_pickup).
+  - `L275F` → `pickup_collected` (with full ladder comment).
+  - `L27D2` → `apply_pickup_tier` (the `CPX #&07 / BCC` dispatcher).
+  - `L27D9` → `set_pickup_tier_flag` (the indexed-STA into the array).
+
+### `?&283D = 256 - V%` (the only loader → CODE POKE)
+
+`&283D` is the amplitude-LO byte (offset +2) of the OSWORD &07
+parameter block for `sfx_explode` (sound A — the noise channel)
+at `&283B..&2842`. `V%` is the volume option set by the
+volume-up/down PROCs in `options.BAS` (range 1..15, default 11);
+`256 - V%` is the BBC SOUND negative-amplitude form. Only the
+explosion volume gets patched — the other four sound effects
+(`sfx_fire`, `sfx_hit_lo`, `sfx_score_tick`,
+`sfx_level_start`) keep their hardcoded amplitudes.
+
+### Lesson
+
+A raw-byte search for absolute writes is **not** enough to prove a
+flag is "unreachable" — also need to enumerate indexed writes
+(`9D`, `99`) whose base is within range of the target. If I'd
+checked for `9D ?? 25` hits anywhere in the pod-state cluster
+right after the absolute-mode scan, the `STA pickup_tier_flag,X`
+at `&27DB` would have jumped out immediately.
+
+---
+
 ## 2026-05-17 — Session 19: score buffer; hazard data; renames
 
 ### Score as a 6-byte buffer
