@@ -4,6 +4,109 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-18 — Session 23: enemy hit-frame names + NPC bullets are Loader2 POKEs
+
+### `enemy_hit_frame1..3` + `enemy_hit_erase`
+
+`enemy_anim_dispatch` (L1BE3) routes enemy_state values &0A..&0D to
+four tiny per-state handlers that were still unnamed L-labels.
+Renamed them and replaced the hardcoded sprite addresses with
+level-data references via `immediate_overrides`:
+
+| was   | now                  | does |
+|-------|----------------------|------|
+| `L1C1A` | `enemy_hit_frame1` | state &0A → &0B, `sprite_src = lev_enemy_hit_1` |
+| `L1C2B` | `enemy_hit_frame2` | state &0B → &0C, `sprite_src = lev_enemy_hit_2` |
+| `L1C3C` | `enemy_hit_frame3` | state &0C → &0D, `sprite_src = lev_enemy_hit_3` |
+| `L1C4D` | `enemy_hit_erase`  | state &0D → 0, `sprite_src = lev_erase_brush + &80`, enemy_state cleared |
+
+Curiosity in `enemy_hit_frame3`: the original `LDA #&B0` for the
+LO byte was annotated `LO(lev_erase_brush + &B0)` (since `lev_
+erase_brush = &7D00` → LO of `&7DB0` is `&B0`, which happens to
+equal LO of `lev_enemy_hit_3 = &4CB0`). Looks like the author used
+the brush expression as a typing shortcut — we render the level-
+data form for clarity.
+
+### NPC bullets are Loader2 POKEs, not data-file content
+
+Rich pointed out the actual NPC bullets are clearly visible
+coloured rectangles (4×2 px) — not the black blob I'd expected
+from a "read zeros from the brush" plot path. That was the
+contradiction that led us to look outside the data files.
+
+`Loader2` line 1060:
+
+```
+?&7E00 = ?&7E01 = 119  : ?&7E06 = ?&7E07 = 112
+```
+
+This pokes 4 non-zero bytes into the brush's tail region after the
+LEVD2 load has filled `&7D00..&7E0F` with zeros. So:
+
+  - `&7E00..&7E01` = &77 &77 = pixels (0, 3, 3, 3) = **hazard_bullet_sprite**.
+    Pixel value 3 = white in all four palette sets.
+  - `&7E06..&7E07` = &70 &70 = pixels (0, 2, 2, 2) = **player_bullet_sprite**.
+    Pixel value 2 = yellow (L1) / cyan (L2) / green (L3) / magenta (L4).
+
+The `3×2 sprite_plot_xy` calls in `update_bullets` and
+`update_hazard_bullets` aren't bullets-with-an-erase: they're a
+**combined "draw + erase trail" sprite** that exploits motion
+direction.
+
+  - Player bullets move +2 px **right** per frame, so the plot
+    reads from `&7E02` (= `player_bullet_sprite - &4`): cols 0..1
+    are the 4-byte zero pad (`&7E02..&7E05`) that erases the
+    previous frame's visible col, col 2 (`&7E06..&7E07`) is the
+    yellow sprite.
+  - Hazard bullets move −2 px **left** per frame, so the plot
+    reads from `&7E00` (= `hazard_bullet_sprite`): col 0 is the
+    white sprite, cols 1..2 are the zero pad that erases the
+    previous frame's trailing edge.
+
+Net of this: one sprite_plot_xy call per bullet per frame both
+draws the new bullet and erases the old. No separate erase pass.
+
+### Labels + cfg changes
+
+In `Nevryon.6502`:
+
+  - `lev_erase_brush` comment expanded: the region is 256 B of
+    zeros at `&7D00..&7DFF` PLUS a 16-B tail at `&7E00..&7E0F`
+    that holds the NPC bullet sprites poked at game-load.
+  - Added `hazard_bullet_sprite = &7E00` and `player_bullet_sprite
+    = &7E06` with full per-byte comments.
+
+In `CODE.cfg.json`:
+
+  - `immediate_override` at `&1D84/&1D89` (hazard bullet plot)
+    changed from `LO/HI(lev_erase_brush + &100)` to `LO/HI(hazard_
+    bullet_sprite)`.
+  - New `immediate_override` at `&182F` (player bullet plot's HI
+    byte) → `HI(player_bullet_sprite - &4)`. The LO byte is a
+    `TYA` (implicit &02), so it can't be symbolic — the resulting
+    address `&7E02` is documented inline.
+  - The `lev_erase_brush + &102` overrides on the deactivate /
+    out-of-band erase calls stayed as-is (they really do read from
+    the genuine 4-byte zero pad).
+  - Routine comments for `update_bullets`, `update_hazard_bullets`,
+    `enqueue_hazard_bullet`, and `hazard_type_dispatch` updated:
+    "12×2-px red dart" → "4×2-px white" (hazard) / "4×2-px yellow"
+    (player), with the trail-erase mechanism explained.
+
+### Why this matters
+
+The "lev_erase_brush is just 272 zeros" view was wrong about the
+last 8 bytes. The Loader2 POKE is the **only** runtime patch into
+the CODE/CODE2/CODE3/GRAPHIX address space (other than the well-
+known `?&283D = 256 - V%` explosion volume from LOADER3 — see
+Session 20). Before this discovery the disassembled NPC bullet
+plot looked like it'd produce invisible black rectangles, which
+doesn't match the actual game.
+
+Build remains byte-identical.
+
+---
+
 ## 2026-05-18 — Session 22: wholesale enemy ↔ hazard pool rename + tooling
 
 ### Why

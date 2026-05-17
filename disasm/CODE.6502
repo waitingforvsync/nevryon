@@ -1105,7 +1105,7 @@ scroll_upper_dst_hi = * + 2
     JMP pod_fire
 
 .update_bullets
-    LDX #n_player_bullets  \ Update player bullets: iterate the 6 player_bullet slots; for each active one (player_bullet_x != 0) move +2 px right, erase + clear if it has crossed col &25 (off-screen right), else replot the 3x2 bullet sprite and run check_bullet_hits. Finally decrement zp_8A (the fire cooldown).
+    LDX #n_player_bullets  \ Update player bullets: iterate the 6 player_bullet slots; for each active one (player_bullet_x != 0) move +2 px right, erase + clear if it has crossed col &25 (off-screen right), else replot the bullet via a 3×2 read from `lev_erase_brush + &102` (two zero cols of leading erase-trail + the visible 4×2-px `player_bullet_sprite` byte at col 2 — yellow on L1, cyan/green/magenta on L2/L3/L4). Then run check_bullet_hits. Finally decrement zp_8A (the fire cooldown).
 .L17E9
     LDA player_bullet_x,X
     BEQ L183D
@@ -1136,7 +1136,7 @@ scroll_upper_dst_hi = * + 2
     LDY #&02
     TYA
     STA sprite_src_lo
-    LDA #&7E
+    LDA #HI(player_bullet_sprite - &4)
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR check_bullet_hits
@@ -1613,17 +1613,17 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .enemy_anim_dispatch
-    LDX data_16F5  \ Enemy sprite-frame dispatcher (X = data_16F5 = current enemy slot). For enemy_state in 0..6 it indexes into the parallel `enemy_anim_ptr_lo` / `enemy_anim_ptr_hi` LUT: slots 1..4 → `lev_enemy_0..3` (LEVD1), slots 5..6 → `gfx_enemy_small_frame0/1` (GRAPHIX, two 4×24 winged-creature frames). For state >= &0A it dispatches to one of the hit-animation routines: &0A → L1C1A (sprite_src = &4C20 = lev_enemy_hit_1), &0B → L1C2B (lev_enemy_hit_2), &0C → L1C3C (lev_enemy_hit_3), &0D → L1C4D (final). Sets sprite_src_lo/hi for the caller to plot.
+    LDX data_16F5  \ Enemy sprite-frame dispatcher (X = data_16F5 = current enemy slot). For enemy_state in 0..6 it indexes into the parallel `enemy_anim_ptr_lo` / `enemy_anim_ptr_hi` LUT: slots 1..4 → `lev_enemy_0..3` (LEVD1), slots 5..6 → `gfx_enemy_small_frame0/1` (GRAPHIX, two 4×24 winged-creature frames). For state >= &0A it dispatches to one of the hit-animation routines, each of which advances the state by 1 and sets sprite_src for the caller's plot: &0A → enemy_hit_frame1 (lev_enemy_hit_1), &0B → enemy_hit_frame2 (lev_enemy_hit_2), &0C → enemy_hit_frame3 (lev_enemy_hit_3), &0D → enemy_hit_erase (sprite_src = lev_erase_brush + &80, and enemy_state = 0 — clears the slot).
     LDA enemy_state,X
     CMP #&0A
     BCC L1BFB
-    BEQ L1C1A
+    BEQ enemy_hit_frame1
     CMP #&0B
-    BEQ L1C2B
+    BEQ enemy_hit_frame2
     CMP #&0C
-    BEQ L1C3C
+    BEQ enemy_hit_frame3
     CMP #&0D
-    BEQ L1C4D
+    BEQ enemy_hit_erase
 .L1BFB
     TAX
     LDA enemy_anim_ptr_lo,X
@@ -1653,38 +1653,41 @@ scroll_upper_dst_hi = * + 2
     EQUB HI(gfx_enemy_small_frame1)
 
 \ ----- code &1C1A..&1E46 -----
-.L1C1A
-    TAY
+.enemy_hit_frame1
+    TAY  \ Per-frame plot setup for enemy_state &0A → advances state to &0B and points sprite_src at lev_enemy_hit_1 (&4C20). The caller (update_enemy_slot) then performs the actual sprite_plot_xy with the standard 4×24 dimensions. First of three hit-animation frames played when an enemy has just been killed.
     INY
     TYA
     STA enemy_state,X
-    LDA #&4C
+    LDA #HI(lev_enemy_hit_1)
     STA sprite_src_hi
-    LDA #&20
+    LDA #LO(lev_enemy_hit_1)
     STA sprite_src_lo
     RTS
-.L1C2B
-    TAY
+
+.enemy_hit_frame2
+    TAY  \ Per-frame plot setup for enemy_state &0B → advances to &0C, sprite_src = lev_enemy_hit_2 (&4C68). Second hit-animation frame.
     INY
     TYA
     STA enemy_state,X
-    LDA #&4C
+    LDA #HI(lev_enemy_hit_2)
     STA sprite_src_hi
-    LDA #&68
+    LDA #LO(lev_enemy_hit_2)
     STA sprite_src_lo
     RTS
-.L1C3C
-    TAY
+
+.enemy_hit_frame3
+    TAY  \ Per-frame plot setup for enemy_state &0C → advances to &0D, sprite_src = lev_enemy_hit_3 (&4CB0). Third (final visible) hit-animation frame. Note: the LSB constant `&B0` is written as `LO(lev_enemy_hit_3)` (the byte happens to equal `LO(lev_erase_brush + &B0)` too — the original author may have used the brush form as a typing shortcut; we render the level-data form for clarity).
     INY
     TYA
     STA enemy_state,X
-    LDA #&4C
+    LDA #HI(lev_enemy_hit_3)
     STA sprite_src_hi
-    LDA #LO(lev_erase_brush + &B0)
+    LDA #LO(lev_enemy_hit_3)
     STA sprite_src_lo
     RTS
-.L1C4D
-    LDA #LO(lev_erase_brush + &80)
+
+.enemy_hit_erase
+    LDA #LO(lev_erase_brush + &80)  \ Per-frame plot setup for enemy_state &0D → ERASE the enemy: points sprite_src at lev_erase_brush + &80 (the all-zeros erase brush) and clears enemy_state to 0 (releases the slot for re-spawn). The caller plots a 4×24 black rectangle over the last hit-frame position. This is the final step of the enemy-death animation chain &0A → &0B → &0C → &0D.
     STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
@@ -1805,7 +1808,7 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .update_hazard_bullets
-    LDX #n_hazard_bullets  \ Per-frame mover for the 6-slot hazard_bullet pool. For each active slot (hazard_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00, or new X <= 1) or re-plot the 12×2-px red dart at the new position. Each active slot then runs hazard_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global enemy-fire cooldown zp_7E.
+    LDX #n_hazard_bullets  \ Per-frame mover for the 6-slot hazard_bullet pool. For each active slot (hazard_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00 or new X <= 1) or re-plot the 4×2-px white bullet at the new position via a 3×2 read of `hazard_bullet_sprite` (visible col + 2-col zero trail). Each active slot then runs hazard_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global enemy-fire cooldown zp_7E.
 .L1D37
     LDA hazard_bullet_x,X
     CMP #&FF
@@ -1841,9 +1844,9 @@ scroll_upper_dst_hi = * + 2
     JSR calc_screen_addr
     LDX #&03
     LDY #&02
-    LDA #LO(lev_erase_brush + &100)
+    LDA #LO(hazard_bullet_sprite)
     STA sprite_src_lo
-    LDA #HI(lev_erase_brush + &100)
+    LDA #HI(hazard_bullet_sprite)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX data_16F5
@@ -2484,7 +2487,7 @@ L2016            = * + 1
 
 .hazard_type_dispatch
     \ Hazard per-type IMMEDIATE action — called once per frame per active slot from update_hazard_slot, before frame-advance. Dispatch table by hazard_type[X]:
-    \ type &04 → enqueue_hazard_bullet (hazard fires a leftward 12×2-px red bullet; pool at hazard_bullet_x/_y, 7 slots)
+    \ type &04 → enqueue_hazard_bullet (hazard fires a leftward 4×2-px white bullet; pool at hazard_bullet_x/_y, 7 slots)
     \ type &06 → spawn_hazard_missile (CODE2: launch a vertical 4×6-px yellow-red rocket that horizontally homes on the player; pool at hazard_missile_x/_y, 2 slots)
     \ type &07 → forcefield_render (this slot IS a force-field — re-noise the strip every frame)
     \ type &08 → spawn_flame (start the one-shot 32×8-px flame projectile; auto-mutates to type 9 on success)
@@ -2524,7 +2527,7 @@ L2016            = * + 1
     RTS
 
 .enqueue_hazard_bullet
-    LDA zp_get_ready_erase  \ Enqueue a hazard bullet — called from hazard_type_dispatch for hazard types &04 and &13. Scans hazard_bullet_x[6..1] for a &FF (free) slot; on found, stores `hazard_x[firer] - 1` at hazard_bullet_x[slot] and `hazard_y[firer] - &10` at hazard_bullet_y[slot] (Y lifted by 16 px to fire from above the hazard). Plays sfx_fire. If the firer is already at hazard_x < &08 (almost off-screen left) the bullet is suppressed — there's not enough screen left for it to fly. Per-frame mover: update_hazard_bullets. The bullet sprite is a 12×2-px red dart (3-byte-col × 2-line block at lev_erase_brush+&100); the deactivation erase brush is at +&102.
+    LDA zp_get_ready_erase  \ Enqueue a hazard bullet — called from hazard_type_dispatch for hazard types &04 and &13. Scans hazard_bullet_x[6..1] for a &FF (free) slot; on found, stores `hazard_x[firer] - 1` at hazard_bullet_x[slot] and `hazard_y[firer] - &10` at hazard_bullet_y[slot] (Y lifted by 16 px to fire from above the hazard). Plays sfx_fire. If the firer is already at hazard_x < &08 (almost off-screen left) the bullet is suppressed — there's not enough screen left for it to fly. Per-frame mover: update_hazard_bullets. The bullet sprite is a 4×2-px white block at `hazard_bullet_sprite` (= &7E00, two bytes &77 poked by Loader2 line 1060). The per-frame mover plots a 3×2 sprite from `hazard_bullet_sprite` (= the visible white col 0 + two zero erase-trail cols 1..2 that blank the bullet's previous position since hazards bullets move LEFT 2 px/frame). The deactivation erase is a 2×2 stamp from `lev_erase_brush + &102` (4 zero bytes).
     CMP #&02
     BEQ L22EC
     RTS
