@@ -79,8 +79,8 @@ irq1v_hi                  = &0205
 n_hazards                 = 8     \ Hazard slots, indexed 0..n_hazards-1. update_hazards iterates 0..7 (CPX #n_hazards), spawn_check_step round-robins via zp_7C.
 n_enemies                 = 8     \ Enemy slots, indexed 1..n_enemies. Iterators are predec loops (LDX #n_enemies / DEX / BNE), so slot 0 is unused. Shares the hazard_x/_y/_type/_hp/_step backing arrays with the hazards — enemies live at indices 1..8, hazards at 0..7, union 0..8 = n_state_slots wide.
 n_state_slots             = 9     \ Width of the combined hazard+enemy backing arrays (hazard_x at &2052 through enemy_state at &208A, each 9 bytes). init clears the union of [0..n_hazards-1] ∪ [1..n_enemies] = [0..8].
-n_hazard_bullets           = 6     \ Hazard bullet slots scanned by update_hazard_bullets and enqueue_hazard_bullet — indexed 1..n_hazard_bullets (predec loop). The backing arrays hazard_bullet_x/_y at &1A8B/&1A92 are 7 bytes wide; slot 0 is initialised to &FF but never used by either routine.
-n_enemy_bullets          = 4     \ Enemies (via hazard_bullet_alloc) only fire into the first n_enemy_bullets slots of the shared hazard_bullet pool — indices 1..4. Hazard-type-&04/&13 fires can use the full 1..6 range, so slots 5..6 are effectively reserved for hazards.
+n_npc_bullets           = 6     \ NPC bullet slots scanned by update_npc_bullets and enqueue_npc_bullet — indexed 1..n_npc_bullets (predec loop). The backing arrays npc_bullet_x/_y at &1A8B/&1A92 are 7 bytes wide; slot 0 is initialised to &FF but never used by either routine.
+n_enemy_npc_bullets          = 4     \ Enemies (via npc_bullet_alloc) only fire into the first n_enemy_npc_bullets slots of the shared npc_bullet pool — indices 1..4. Hazard-type-&04/&13 fires can use the full 1..6 range, so slots 5..6 are effectively reserved for hazards.
 n_hazard_missiles          = 2     \ Hazard missile slots, indexed 0..n_hazard_missiles-1 (no loop — hard-coded LDX #&00 / LDX #&01 in update_hazard_missiles).
 n_player_bullets          = 6     \ Player bullet slots, indexed 1..n_player_bullets. update_bullets predec-loops over all 6; on_fire_pressed only scans 1..n_player_fire_slots so the upper 2 slots (5,6) are reserved for the force-pod's twin shot.
 n_player_fire_slots       = 4     \ Number of in-flight bullets the fire button can put on screen. on_fire_pressed scans player_bullet_x[n_player_fire_slots..1] for a free slot.
@@ -120,10 +120,10 @@ lev_explosion_1           = &4A80
 lev_explosion_2           = &4B00
 lev_explosion_3           = &4B80
 \ &4C00..&4C1F            \ 32 B zero pad
-lev_enemy_hit_1           = &4C20     \ 4×24 (96 B) — first of 3 hazard hit/destruction frames (state machine in L1BE3)
+lev_enemy_hit_1           = &4C20     \ 4×24 (96 B) — first of 3 enemy hit/destruction frames (state machine in L1BE3)
 lev_enemy_hit_2           = &4C68
 lev_enemy_hit_3           = &4CB0
-lev_enemy_0               = &4D00     \ 4×24 (96 B) — first of 4 normal hazard frames (state machine in L1BE3)
+lev_enemy_0               = &4D00     \ 4×24 (96 B) — first of 4 normal enemy frames (state machine in L1BE3)
 lev_enemy_1               = &4D48
 \ &4DA8..&4DAF            \ 8 B zero pad
 lev_enemy_2               = &4DB0
@@ -161,7 +161,7 @@ lev_spawn_attr            = &7B80     \ 128-byte spawn attribute table, parallel
 lev_explosion_4           = &7C00     \ 4×32 (128 B) — frame 4 of the 6-frame explosion. Same bytes accessible via lev_hazard_ptr_*[25].
 lev_explosion_5           = &7C80     \ 4×32 (128 B) — frame 5 of the 6-frame explosion. Same bytes accessible via lev_hazard_ptr_*[26].
 lev_erase_brush           = &7D00     \ 256 bytes of zeros (genuine erase brush) at &7D00..&7DFF + 16-byte tail at &7E00..&7E0F that holds the NPC bullet sprites (poked at game-load by Loader2 line 1060, NOT shipped in any LEVD2 file — the on-disk bytes are zero and Loader2 patches them in RAM after load). Read by sprite_plot_xy: erase calls at offsets 0 / &80 produce a black rectangle; bullet plots at offsets &100 (hazard) / &102 (player) read 6 bytes (3×2) that include the visible sprite byte plus 4 zero bytes of trailing-erase pad in the direction of motion.
-hazard_bullet_sprite      = &7E00     \ 1-col × 2-line (4×2 px) hazard bullet sprite, two bytes &77 = pixels (black, white, white, white) — palette value 3 (always white). Loader2 line 1060: `?&7E00 = ?&7E01 = 119`. Plotted by update_hazard_bullets via a 3×2 sprite_plot_xy from `lev_erase_brush + &100` (= here): col 0 = the visible white strip, cols 1-2 = zero pad that erases the trail since hazard bullets move LEFT 2 px per frame.
+npc_bullet_sprite      = &7E00     \ 1-col × 2-line (4×2 px) NPC bullet sprite, two bytes &77 = pixels (black, white, white, white) — palette value 3 (always white). Loader2 line 1060: `?&7E00 = ?&7E01 = 119`. Plotted by update_npc_bullets via a 3×2 sprite_plot_xy from `lev_erase_brush + &100` (= here): col 0 = the visible white strip, cols 1-2 = zero pad that erases the trail since NPC bullets move LEFT 2 px per frame.
 player_bullet_sprite      = &7E06     \ 1-col × 2-line (4×2 px) player bullet sprite, two bytes &70 = pixels (black, palette-2, palette-2, palette-2). Per-scenario palette value 2 = yellow (L1) / cyan (L2) / green (L3) / magenta (L4). Loader2 line 1060: `?&7E06 = ?&7E07 = 112`. Plotted by update_bullets via a 3×2 sprite_plot_xy from `lev_erase_brush + &102` (= here − 4): cols 0-1 = zero pad that erases the trail (player bullets move RIGHT 2 px per frame), col 2 = the visible coloured strip.
 \ Map tile-id streams. Each is 240 entries, one byte per scroll
 \ column, indexing into lev_tile_catalog. The upper band is

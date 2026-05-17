@@ -1437,14 +1437,14 @@ scroll_upper_dst_hi = * + 2
     \ Enemy per-slot pattern ID — selects which motion pattern the slot follows. Set at spawn by spawn_periodic_enemy (cycles 1..6 via zp_86). Values 5 and 6 are special-cased in L1B87 (player-homing: pattern 5 toggles horizontal dir based on player_x; pattern 6 = straight at the player). Other values walk the table at (zp_88) verbatim. Slot 0 unused, slots 1..n_enemies (1..8) active; only 10 bytes wide (vs 11 for the position/state arrays) because enemy_pattern_id slot 10 wasn't allocated.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA
-.hazard_bullet_x
+.npc_bullet_x
     EQUB &FF, &FF, &FF, &FF, &FF, &FF, &FF
-.hazard_bullet_y
+.npc_bullet_y
     EQUB &00, &00, &00, &00, &00, &00, &00
 
 \ ----- code &1A99..&1C0C -----
 .enemy_try_fire_bullet
-    JSR lfsr_random  \ Enemy 'try to fire a bullet' hook — called from update_enemies after plotting each active enemy slot. Random chance (rndval32 == 2 → 1/16) gates each call; further requires the enemy to be near the left edge (enemy_x < &10), the global cooldown zp_7E to be 0, and a free slot in hazard_bullet_x[4..1]. On success: stores enemy_x+2 / enemy_y-8 into the chosen slot, sets zp_7E = 8 (8-frame cooldown), plays sfx_hit_lo. Shares the hazard_bullet_x/_y pool with enqueue_hazard_bullet — enemies and hazards fire the same bullet sprite.
+    JSR lfsr_random  \ Enemy 'try to fire a bullet' hook — called from update_enemies after plotting each active enemy slot. Random chance (rndval32 == 2 → 1/16) gates each call; further requires the enemy to be near the left edge (enemy_x < &10), the global cooldown zp_7E to be 0, and a free slot in npc_bullet_x[4..1]. On success: stores enemy_x+2 / enemy_y-8 into the chosen slot, sets zp_7E = 8 (8-frame cooldown), plays sfx_hit_lo. Shares the npc_bullet_x/_y pool with enqueue_npc_bullet — enemies and hazards fire the same bullet sprite.
     LDA rndval32
     CMP #&02
     BEQ L1AA4
@@ -1459,13 +1459,13 @@ scroll_upper_dst_hi = * + 2
 .L1AAF
     LDA zp_7E
     CMP #&00
-    BEQ hazard_bullet_alloc
+    BEQ npc_bullet_alloc
     RTS
 
-.hazard_bullet_alloc
-    LDX #n_enemy_bullets
+.npc_bullet_alloc
+    LDX #n_enemy_npc_bullets
 .L1AB8
-    LDA hazard_bullet_x,X
+    LDA npc_bullet_x,X
     CMP #&FF
     BEQ L1AC3
     DEX
@@ -1478,13 +1478,13 @@ scroll_upper_dst_hi = * + 2
     CLC
     ADC #&02
     LDX data_16F6
-    STA hazard_bullet_x,X
+    STA npc_bullet_x,X
     LDX data_16F5
     LDA enemy_y,X
     SEC
     SBC #&08
     LDX data_16F6
-    STA hazard_bullet_y,X
+    STA npc_bullet_y,X
     LDA #&08
     STA zp_7E
     JMP sfx_hit_lo
@@ -1496,7 +1496,7 @@ scroll_upper_dst_hi = * + 2
     BNE L1AF8
     DEX
     BNE L1AED
-    JMP update_hazard_bullets
+    JMP update_npc_bullets
 .L1AF8
     INC zp_frame_progress
     INC zp_frame_progress
@@ -1563,7 +1563,7 @@ scroll_upper_dst_hi = * + 2
     BEQ L1B84
     JMP L1AED
 .L1B84
-    JMP update_hazard_bullets
+    JMP update_npc_bullets
 
 .L1B87
     LDA enemy_pattern_id,X
@@ -1807,16 +1807,16 @@ scroll_upper_dst_hi = * + 2
     INC pickup_kill_count
     RTS
 
-.update_hazard_bullets
-    LDX #n_hazard_bullets  \ Per-frame mover for the 6-slot hazard_bullet pool. For each active slot (hazard_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00 or new X <= 1) or re-plot the 4×2-px white bullet at the new position via a 3×2 read of `hazard_bullet_sprite` (visible col + 2-col zero trail). Each active slot then runs hazard_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global enemy-fire cooldown zp_7E.
+.update_npc_bullets
+    LDX #n_npc_bullets  \ Per-frame mover for the 6-slot npc_bullet pool. For each active slot (npc_bullet_x[X] != &FF): DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00 or new X <= 1) or re-plot the 4×2-px white bullet at the new position via a 3×2 read of `npc_bullet_sprite` (visible col + 2-col zero trail). Each active slot then runs npc_bullet_collide_player to test against the player ship and trigger lose_a_life on hit. Also DECs the global enemy-fire cooldown zp_7E.
 .L1D37
-    LDA hazard_bullet_x,X
+    LDA npc_bullet_x,X
     CMP #&FF
     BEQ L1D94
-    LDY hazard_bullet_y,X
-    DEC hazard_bullet_x,X
-    DEC hazard_bullet_x,X
-    LDA hazard_bullet_x,X
+    LDY npc_bullet_y,X
+    DEC npc_bullet_x,X
+    DEC npc_bullet_x,X
+    LDA npc_bullet_x,X
     STX data_16F5
     TAX
     CMP #&27
@@ -1826,7 +1826,7 @@ scroll_upper_dst_hi = * + 2
     JSR calc_screen_addr
     LDX data_16F5
     LDA #&FF
-    STA hazard_bullet_x,X
+    STA npc_bullet_x,X
     LDX #&02
     LDY #&02
     LDA #LO(lev_erase_brush + &102)
@@ -1844,14 +1844,14 @@ scroll_upper_dst_hi = * + 2
     JSR calc_screen_addr
     LDX #&03
     LDY #&02
-    LDA #LO(hazard_bullet_sprite)
+    LDA #LO(npc_bullet_sprite)
     STA sprite_src_lo
-    LDA #HI(hazard_bullet_sprite)
+    LDA #HI(npc_bullet_sprite)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX data_16F5
 .L1D94
-    JSR hazard_bullet_collide_player
+    JSR npc_bullet_collide_player
     DEX
     BNE L1D37
     LDA zp_7E
@@ -1860,10 +1860,10 @@ scroll_upper_dst_hi = * + 2
 .L1DA0
     RTS
 
-.hazard_bullet_collide_player
-    LDA hazard_bullet_x,X  \ Box-collision test for one hazard_bullet against the player. Hit window: player_x in [bullet_x, bullet_x+5] AND player_y in [bullet_y, bullet_y+&10]. On hit: erase the 2×2 bullet trail with lev_erase_brush+&102, mark the slot inactive (&FF), and fall through into lose_a_life.
+.npc_bullet_collide_player
+    LDA npc_bullet_x,X  \ Box-collision test for one npc_bullet against the player. Hit window: player_x in [bullet_x, bullet_x+5] AND player_y in [bullet_y, bullet_y+&10]. On hit: erase the 2×2 bullet trail with lev_erase_brush+&102, mark the slot inactive (&FF), and fall through into lose_a_life.
     STA zp_test_x
-    LDA hazard_bullet_y,X
+    LDA npc_bullet_y,X
     STA zp_test_y
     LDA zp_player_x
     CMP zp_test_x
@@ -1886,8 +1886,8 @@ scroll_upper_dst_hi = * + 2
     BCC L1DCB
     RTS
 .L1DCB
-    LDY hazard_bullet_y,X
-    LDA hazard_bullet_x,X
+    LDY npc_bullet_y,X
+    LDA npc_bullet_x,X
     TAX
     JSR calc_screen_addr
     LDX #&02
@@ -1899,7 +1899,7 @@ scroll_upper_dst_hi = * + 2
     JSR sprite_plot_xy
     LDX data_16F5
     LDA #&FF
-    STA hazard_bullet_x,X
+    STA npc_bullet_x,X
 
 .lose_a_life
     STX data_16F5  \ Per-hit handler — runs once each time the player ship is touched by a enemy / hazard / bullet (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F, using gfx_icon_03 (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0 AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).
@@ -2082,7 +2082,7 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .init
-    LDA #&01  \ Per-level init. Sets player start position (&05, &C8), zero-fills the six 9-slot hazard state tables (hazard_x, hazard_y, hazard_type, hazard_hp, hazard_step, enemy_state), clears single-byte state (player bullets, force-pod registers), sets fire_cooldown_reload=6, and marks all 7 hazard_bullet_x slots inactive (&FF).
+    LDA #&01  \ Per-level init. Sets player start position (&05, &C8), zero-fills the six 9-slot hazard state tables (hazard_x, hazard_y, hazard_type, hazard_hp, hazard_step, enemy_state), clears single-byte state (player bullets, force-pod registers), sets fire_cooldown_reload=6, and marks all 7 npc_bullet_x slots inactive (&FF).
     STA lives_blink_state
     LDA #&05
     STA zp_player_x
@@ -2147,13 +2147,13 @@ L2016            = * + 1
     LDX data_16F5
     LDY #&00
     LDA #&FF
-    STA hazard_bullet_x
-    STA hazard_bullet_x + 1
-    STA hazard_bullet_x + 2
-    STA hazard_bullet_x + 3
-    STA hazard_bullet_x + 5
-    STA hazard_bullet_x + 6
-    STA hazard_bullet_x + 4
+    STA npc_bullet_x
+    STA npc_bullet_x + 1
+    STA npc_bullet_x + 2
+    STA npc_bullet_x + 3
+    STA npc_bullet_x + 5
+    STA npc_bullet_x + 6
+    STA npc_bullet_x + 4
     LDA zp_9A
     STA player_hp
     LDA #&00
@@ -2487,20 +2487,20 @@ L2016            = * + 1
 
 .hazard_type_dispatch
     \ Hazard per-type IMMEDIATE action — called once per frame per active slot from update_hazard_slot, before frame-advance. Dispatch table by hazard_type[X]:
-    \ type &04 → enqueue_hazard_bullet (hazard fires a leftward 4×2-px white bullet; pool at hazard_bullet_x/_y, 7 slots)
+    \ type &04 → enqueue_npc_bullet (hazard fires a leftward 4×2-px white bullet; pool at npc_bullet_x/_y, 7 slots)
     \ type &06 → spawn_hazard_missile (CODE2: launch a vertical 4×6-px yellow-red rocket that horizontally homes on the player; pool at hazard_missile_x/_y, 2 slots)
     \ type &07 → forcefield_render (this slot IS a force-field — re-noise the strip every frame)
     \ type &08 → spawn_flame (start the one-shot 32×8-px flame projectile; auto-mutates to type 9 on success)
-    \ type &13 → enqueue_hazard_bullet (same as type 4 — second hazard variant that fires a bullet)
+    \ type &13 → enqueue_npc_bullet (same as type 4 — second hazard variant that fires a bullet)
     \ else     → RTS (no per-frame action; the slot just gets drawn and frame-advanced).
     LDA hazard_type,X
     CMP #&04
     BNE L22BC
-    JMP enqueue_hazard_bullet
+    JMP enqueue_npc_bullet
 .L22BC
     CMP #&13
     BNE L22CF
-    JMP enqueue_hazard_bullet
+    JMP enqueue_npc_bullet
 
 .anim_set_type_10
     LDA #&10  \ Frame-advance for type-&0F hazards → set hazard_type = &10. Pairs with anim_set_type_F to form a 2-frame ping-pong (F↔10) for whichever hazard type this is (likely a 2-frame animated decor / persistent enemy with no death state).
@@ -2526,15 +2526,15 @@ L2016            = * + 1
 .L22E4
     RTS
 
-.enqueue_hazard_bullet
-    LDA zp_get_ready_erase  \ Enqueue a hazard bullet — called from hazard_type_dispatch for hazard types &04 and &13. Scans hazard_bullet_x[6..1] for a &FF (free) slot; on found, stores `hazard_x[firer] - 1` at hazard_bullet_x[slot] and `hazard_y[firer] - &10` at hazard_bullet_y[slot] (Y lifted by 16 px to fire from above the hazard). Plays sfx_fire. If the firer is already at hazard_x < &08 (almost off-screen left) the bullet is suppressed — there's not enough screen left for it to fly. Per-frame mover: update_hazard_bullets. The bullet sprite is a 4×2-px white block at `hazard_bullet_sprite` (= &7E00, two bytes &77 poked by Loader2 line 1060). The per-frame mover plots a 3×2 sprite from `hazard_bullet_sprite` (= the visible white col 0 + two zero erase-trail cols 1..2 that blank the bullet's previous position since hazards bullets move LEFT 2 px/frame). The deactivation erase is a 2×2 stamp from `lev_erase_brush + &102` (4 zero bytes).
+.enqueue_npc_bullet
+    LDA zp_get_ready_erase  \ Enqueue a NPC bullet — called from hazard_type_dispatch for hazard types &04 and &13. Scans npc_bullet_x[6..1] for a &FF (free) slot; on found, stores `hazard_x[firer] - 1` at npc_bullet_x[slot] and `hazard_y[firer] - &10` at npc_bullet_y[slot] (Y lifted by 16 px to fire from above the hazard). Plays sfx_fire. If the firer is already at hazard_x < &08 (almost off-screen left) the bullet is suppressed — there's not enough screen left for it to fly. Per-frame mover: update_npc_bullets. The bullet sprite is a 4×2-px white block at `npc_bullet_sprite` (= &7E00, two bytes &77 poked by Loader2 line 1060). The per-frame mover plots a 3×2 sprite from `npc_bullet_sprite` (= the visible white col 0 + two zero erase-trail cols 1..2 that blank the bullet's previous position since hazards bullets move LEFT 2 px/frame). The deactivation erase is a 2×2 stamp from `lev_erase_brush + &102` (4 zero bytes).
     CMP #&02
     BEQ L22EC
     RTS
 .L22EC
-    LDX #n_hazard_bullets
+    LDX #n_npc_bullets
 .L22EE
-    LDA hazard_bullet_x,X
+    LDA npc_bullet_x,X
     CMP #&FF
     BEQ L22FC
     DEX
@@ -2551,14 +2551,14 @@ L2016            = * + 1
     RTS
 .L230D
     LDX data_16F6
-    STA hazard_bullet_x,X
-    DEC hazard_bullet_x,X
+    STA npc_bullet_x,X
+    DEC npc_bullet_x,X
     LDX data_16F5
     LDA hazard_y,X
     LDX data_16F6
     SEC
     SBC #&10
-    STA hazard_bullet_y,X
+    STA npc_bullet_y,X
     JSR sfx_fire
     LDX data_16F5
     RTS

@@ -4,6 +4,48 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-18 — Session 24: rename hazard_bullet_* → npc_bullet_* (shared pool)
+
+After Session 22's wholesale enemy↔hazard swap, the previously-named
+`enemy_bullet_*` pool mechanically became `hazard_bullet_*`. Rich
+flagged the mis-naming: the pool is actually **shared** between both
+NPC types — `enemy_try_fire_bullet` (called by `update_enemies`) and
+`enqueue_hazard_bullet` (called by `hazard_type_dispatch`) BOTH
+write into the same `hazard_bullet_x[7]` array, and both plot via
+the same single white sprite at `&7E00`.
+
+Renamed everywhere to `npc_bullet_*`:
+
+  | was                              | now                          |
+  |----------------------------------|------------------------------|
+  | `hazard_bullet_x` / `_y`         | `npc_bullet_x` / `_y`        |
+  | `hazard_bullet_sprite`           | `npc_bullet_sprite`          |
+  | `hazard_bullet_alloc` (L1AB6)    | `npc_bullet_alloc`           |
+  | `hazard_bullet_collide_player` (L1DA1) | `npc_bullet_collide_player` |
+  | `update_hazard_bullets` (L1D35)  | `update_npc_bullets`         |
+  | `enqueue_hazard_bullet` (L22E5)  | `enqueue_npc_bullet`         |
+  | `n_hazard_bullets = 6`           | `n_npc_bullets`              |
+  | `n_enemy_bullets = 4`            | `n_enemy_npc_bullets` (sub-cap for the enemy fire path) |
+
+Affects 30-odd references across `Nevryon.6502`, `CODE.cfg.json`,
+`docs/memory_map.md`. Cap distinction now reads:
+
+  - `n_npc_bullets` = 6 (full pool — slot-1..6 scan in `update_npc_bullets` and `enqueue_npc_bullet`)
+  - `n_enemy_npc_bullets` = 4 (enemy-fires-only quota — slot-1..4 scan in `npc_bullet_alloc`)
+
+`hazard_missile_*` stays unchanged — that pool is genuinely
+hazard-only (fired only by `hazard_type &06`).
+
+Also fixed two residual sprite-category mis-swaps in Nevryon.6502
+that escaped Session 22's prose cleanup (lev_enemy_hit_* and
+lev_enemy_* comments calling them "hazard frames" instead of
+"enemy frames" — the sprites depict moving creatures, i.e.
+enemies under the new convention).
+
+Build remains byte-identical.
+
+---
+
 ## 2026-05-18 — Session 23: enemy hit-frame names + NPC bullets are Loader2 POKEs
 
 ### `enemy_hit_frame1..3` + `enemy_hit_erase`
