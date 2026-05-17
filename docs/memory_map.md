@@ -250,7 +250,7 @@ Sprite atlas at `&3680..&48FF` (4736 B). Every named sprite has the
 | `&4410..&44D7` | `gfx_missile_0..4`                          |
 | `&4500..&474F` | `gfx_orphan_4500` (592 B — dead data, no references) |
 | `&4750..&47FD` | `gfx_pickup_white / _pause`                 |
-| `&4800..&484F` | `gfx_icon_10..17` + `gfx_bomb`              |
+| `&4800..&484F` | `gfx_icon_lives_intro..17` + `gfx_bomb`              |
 | `&4858..&48E7` | `gfx_enemy_small_frame0/1`                  |
 
 Beyond the atlas (`&4900..&49FF`):

@@ -4,6 +4,57 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-18 — Session 25: icon renames + DFS-format correction
+
+### Semantic names for the four "well-known" icons
+
+Per-cfg-comment usage gave clear names to four of the generic
+`gfx_icon_NN` sprites in GRAPHIX:
+
+  | was            | now                          | used by |
+  |----------------|------------------------------|---------|
+  | `gfx_icon_01`  | `gfx_icon_pickup_collected`  | `pickup_collected` (the +1 indicator drawn on the status row) |
+  | `gfx_icon_03`  | `gfx_icon_lives`             | `lose_a_life` (the lives icon at column `player_hp + &1F`, paired with the alternate sprite at `&48B8` for the damage-blink) |
+  | `gfx_icon_08`  | `gfx_icon_missile_rocket`    | `step_hazard_missile` (the 4×6 yellow-red rocket sprite for `hazard_type &06`) |
+  | `gfx_icon_10`  | `gfx_icon_lives_intro`       | `intro_get_ready` (the 7 lives sprites plotted in a row at `&57` during the level-start sequence) |
+
+Touches `GRAPHIX.cfg.json`, `CODE.cfg.json`, `CODE2.cfg.json`,
+`docs/memory_map.md`, and `tools/render_graphix_sprites.py`
+CATALOG. Stale PNGs cleaned and regenerated. The other ~14
+`icon_NN` sprites still have generic names — semantic identity not
+yet confirmed.
+
+### Correction to Session 1 part 4: there's only ONE DFS catalog format
+
+The 2026-05-14 entry claimed Nevryon's `.ssd` "uses Watford /
+1770-DFS byte-6 encoding, not Acorn DFS" — framing the bug as a
+disk-format incompatibility. **That framing was wrong.** Acorn DFS,
+Watford DFS, and 1770-DFS all share the same on-disk catalog
+layout — they're compatible by design. The standard byte-6 packing
+is:
+
+```
+bits 0-1 → start-sector bits 9-8
+bits 2-3 → load-address bits 17-16
+bits 4-5 → file-length bits 17-16
+bits 6-7 → exec-address bits 17-16
+```
+
+The original `dfs_extract.py` bug was a mis-packed bit layout (we
+had load/exec/length/start in a wrong order), almost certainly due
+to bad / partial online documentation that described "Acorn" using
+some inverted ordering. Once corrected, the parser is just a
+**standard DFS** parser — it would work against any DFS disk, not
+a Watford-specific variant.
+
+CLAUDE.md updated to drop the misleading "Watford / 1770-DFS byte-6
+encoding, not Acorn DFS" heading. The Session 1 entry is left as
+historical record (with a forward pointer to this correction).
+
+Build remains byte-identical.
+
+---
+
 ## 2026-05-18 — Session 24: rename hazard_bullet_* → npc_bullet_* (shared pool)
 
 After Session 22's wholesale enemy↔hazard swap, the previously-named
@@ -2443,6 +2494,15 @@ tools/render_map.py          # LEVD1 tiles + LEVD2/LEVD3 column tables
 ## 2026-05-14 — Session 1, part 4: PAYOFF — player ship & GRAPHIX text decoded
 
 ### Major fix: catalog parser was wrong (byte-6 packing)
+
+> **Correction (Session 25, 2026-05-18):** the "Acorn vs Watford /
+> 1770-DFS" framing below is *wrong*. All three formats share a
+> single catalog layout — they're compatible by design. The bug
+> was a mis-packed bit layout in `dfs_extract.py`, almost
+> certainly due to bad online documentation describing "Acorn" with
+> an inverted ordering. Once corrected, the parser is just a
+> standard DFS parser. The original narrative is preserved below
+> for history.
 
 While trying to render the player ship from `1.LEVD1` I noticed the file
 content was 92% ASCII text (lines of NEVRYON.BAS instructions). The user

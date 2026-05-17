@@ -232,8 +232,8 @@
     "0x14B5": "Draw the player's force-pod (the rotating saucer that orbits the ship after a power-up). Selects one of three frames at gfx_pod_frame0/1/2 (&3900/&3960/&39C0) based on pod_anim_frame (= data_14D8, cycles 1/2/3 driven by vertical movement: move_player_down does INC, move_player_up does DEC, both wrap 1<->3). Falls through into sprite_plot_xy with X=4 byte-cols, Y=&18 lines.",
     "0x198B": "Per-frame player collision check. Two loops: (a) X=8..1 over the enemy slots at enemy_x/_y/_state — for any slot whose enemy_state is in 1..9 (active), test the player against a 6×&18 bounding box; on hit, mark the slot &0A (expired) and JSR lose_a_life. (b) X=0..7 over the hazard slots (hazard_x, hazard_y, hazard_type < &14) — same test. Each hit triggers a `OSWRCH &07` (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be a short non-musical blip used as the in-game collision sound).",
     "0x1E47": "Player death animation. Plays sfx_explode then plots 6 frames of a 4×32 explosion sprite (`lev_explosion_0..5`) at the player position with `frame_delay` between frames. The source pointer pairs live in slots 21..26 of `lev_hazard_ptr_*` (aliased as `lev_explosion_ptr_lo` / `_hi` at &7A95 / &7AD5). Frames 0..3 are in LEVD1 (`lev_explosion_0..3` at &4A00 / &4A80 / &4B00 / &4B80); frames 4..5 are in LEVD2 (`lev_explosion_4..5` at &7C00 / &7C80). After the last frame, DEC `lives_left` and redraw the lives-remaining indicator at row &57; if any lives are left, also plays intro_get_ready and re-runs init to start the next ship.",
-    "0x1DEE": "Per-hit handler — runs once each time the player ship is touched by a enemy / hazard / bullet (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F, using gfx_icon_03 (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0 AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).",
-    "0x1E46": "Lives-icon blink-state — 0/1 toggle stepped by lose_a_life. Used both to swap the lives-icon sprite (gfx_icon_03 vs &48B8) and to halve the rate at which player_hp drops (DEC only on alternate calls).",
+    "0x1DEE": "Per-hit handler — runs once each time the player ship is touched by a enemy / hazard / bullet (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F, using gfx_icon_lives (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0 AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).",
+    "0x1E46": "Lives-icon blink-state — 0/1 toggle stepped by lose_a_life. Used both to swap the lives-icon sprite (gfx_icon_lives vs &48B8) and to halve the rate at which player_hp drops (DEC only on alternate calls).",
     "0x2050": "Per-life HP — how many lose_a_life calls the current ship can absorb before it explodes. Reset to zp_9A by init (= zp_9A default 6, configurable from options.BAS as `?&9A = X%`). DEC'd in pairs by lose_a_life (every other call); when it hits 0 the next lose_a_life jumps to death_anim. Also used as the X-position of the lives icon in the bottom-status row (col player_hp + &1F).",
     "0x2051": "Lives counter — number of ships remaining BEFORE the current one (i.e. continues / extra lives). Initialised by restore_score_from_loader from loader_lives_save (= 3 at game start; preserved across levels). DEC'd by death_anim after the explosion plays. main_loop polls this each game_step: when it reaches 0 → JMP game_over_or_continue.",
     "0x14D8": "Force-pod animation frame (1 / 2 / 3). Selects which of the three gfx_pod_frame0/1/2 sprites draw_player_pod renders. Cycled by player vertical motion: each move_player_down INCs it (wraps 4→1), each move_player_up DECs it (wraps 0→3). Disk-initial value is 1.",
@@ -422,8 +422,8 @@
     "0x1D89": "HI(npc_bullet_sprite)",
     "0x1DD9": "LO(lev_erase_brush + &102)",
     "0x1DDE": "HI(lev_erase_brush + &102)",
-    "0x1E15": "LO(gfx_icon_03)",
-    "0x1E21": "HI(gfx_icon_03)",
+    "0x1E15": "LO(gfx_icon_lives)",
+    "0x1E21": "HI(gfx_icon_lives)",
     "0x211A": "LO(lev_erase_brush + &80)",
     "0x211F": "HI(lev_erase_brush + &80)",
     "0x21D7": "LO(lev_erase_brush + &80)",
@@ -454,7 +454,7 @@
     "0x2756": "HI(gfx_pickup_white)",
     "0x278E": "LO(lev_erase_brush + &80)",
     "0x2793": "HI(lev_erase_brush + &80)",
-    "0x27AC": "LO(gfx_icon_01)",
-    "0x27B1": "HI(gfx_icon_01)"
+    "0x27AC": "LO(gfx_icon_pickup_collected)",
+    "0x27B1": "HI(gfx_icon_pickup_collected)"
   }
 }

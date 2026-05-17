@@ -61,11 +61,11 @@ CATALOG = [
     # Small chars at &3A20..&3AFF: 28 cells of 4×8 col-major.
     # Non-blank ones (20 total) get their own files; blanks skipped.
     (0x3A20, "small_char", 1, 8, [
-        "icon_00", "icon_01", "icon_02", "icon_03",
+        "icon_00", "icon_pickup_collected", "icon_02", "icon_lives",
         "icon_04", "icon_05", "icon_06", "icon_07",
         "digit_0", "digit_1", "digit_2", "digit_3",
         "digit_4", "digit_5", "digit_6", "digit_7",
-        "digit_8", "digit_9", "icon_08", "icon_09",
+        "digit_8", "digit_9", "icon_missile_rocket", "icon_09",
         None, None, None, None, None, None, None, None,
     ]),
 
@@ -119,7 +119,7 @@ CATALOG = [
     (0x4780, "text_pause",            9, 14),
     # &4800..&483F: 8 small icons (1×8 each = 8 B), generic naming
     (0x4800, "icon_seq", 1, 8, [
-        "icon_10", "icon_11", "icon_12", "icon_13",
+        "icon_lives_intro", "icon_11", "icon_12", "icon_13",
         "icon_14", "icon_15", "icon_16", "icon_17",
     ]),
     # &4840..&48FF: two 4×24 enemy animation frames (96 B each), back-to-back

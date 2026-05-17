@@ -1902,7 +1902,7 @@ scroll_upper_dst_hi = * + 2
     STA npc_bullet_x,X
 
 .lose_a_life
-    STX data_16F5  \ Per-hit handler — runs once each time the player ship is touched by a enemy / hazard / bullet (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F, using gfx_icon_03 (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0 AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).
+    STX data_16F5  \ Per-hit handler — runs once each time the player ship is touched by a enemy / hazard / bullet (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F, using gfx_icon_lives (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0 AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).
     LDA #&07
     JSR OSWRCH
     LDA lives_blink_state
@@ -1919,12 +1919,12 @@ scroll_upper_dst_hi = * + 2
     JSR calc_screen_addr
     LDA #&48
     STA sprite_src_hi
-    LDA #LO(gfx_icon_03)
+    LDA #LO(gfx_icon_lives)
     STA sprite_src_lo
     LDY lives_blink_state
     CPY #&00
     BNE L1E2B
-    LDA #HI(gfx_icon_03)
+    LDA #HI(gfx_icon_lives)
     STA sprite_src_hi
     LDA #&B8
     STA sprite_src_lo
@@ -1945,7 +1945,7 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- data &1E46..&1E47 -----
 .lives_blink_state
-    \ Lives-icon blink-state — 0/1 toggle stepped by lose_a_life. Used both to swap the lives-icon sprite (gfx_icon_03 vs &48B8) and to halve the rate at which player_hp drops (DEC only on alternate calls).
+    \ Lives-icon blink-state — 0/1 toggle stepped by lose_a_life. Used both to swap the lives-icon sprite (gfx_icon_lives vs &48B8) and to halve the rate at which player_hp drops (DEC only on alternate calls).
     EQUB &EA
 
 \ ----- code &1E47..&2050 -----
@@ -3211,9 +3211,9 @@ L2016            = * + 1
     LDX #&08
     LDY #&57
     JSR calc_screen_addr
-    LDA #LO(gfx_icon_01)
+    LDA #LO(gfx_icon_pickup_collected)
     STA sprite_src_lo
-    LDA #HI(gfx_icon_01)
+    LDA #HI(gfx_icon_pickup_collected)
     STA sprite_src_hi
     INC pickup_count
     LDX pickup_count

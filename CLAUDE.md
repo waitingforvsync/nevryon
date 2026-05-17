@@ -20,7 +20,7 @@ extracted/                   # files unpacked from the disk image
   $.<NAME> / N.<NAME>        # extracted file payloads (dir letter prefix)
 
 tools/                       # Python utilities (DFS, sprite, map decode)
-  dfs_extract.py             # parses SSD catalog, extracts files (Watford-DFS variant)
+  dfs_extract.py             # parses SSD catalog, extracts files (standard DFS byte-6 packing)
   bbcbasic_detoken.py        # BBC BASIC II/IV detokeniser (handles junk preamble)
   disasm6502.py              # 6502 → BeebAsm disassembler with annotations
   render_screen.py           # MODE 1 / 2 / 5 raw bitmap → PNG
@@ -63,16 +63,20 @@ JOURNAL.md                   # running log of discoveries & decisions
 
 ## Hard-won lessons (read before editing)
 
-### Catalog uses Watford / 1770-DFS byte-6 encoding, not Acorn DFS
+### DFS catalog byte-6 packing
 Byte 6 of each file's metadata in catalog sector 1 packs the high bits
-of load/exec/length/start_sector. The Nevryon disk uses:
+of load/exec/length/start_sector. The standard DFS packing is:
   - bits 0-1: start-sector bits 9-8
   - bits 2-3: load-address bits 17-16
   - bits 4-5: file-length bits 17-16
   - bits 6-7: exec-address bits 17-16
-*Not* the Acorn convention (which puts load at bits 0-1 and start at
-6-7). If a freshly-extracted file looks like text where you expect
-binary (or vice-versa), this is the first thing to check.
+
+There is only ONE DFS catalog format — Watford / 1770 / Acorn DFS all
+share it for compatibility. The early "Acorn vs Watford" framing in
+Session 1 was wrong (see Session 25 correction); the initial
+`dfs_extract.py` bug was a mis-packed bit layout, not a separate
+format variant. If a freshly-extracted file looks like text where you
+expect binary (or vice versa), suspect the bit packing.
 
 ### Disassembly target is BeebAsm, not da65
 `tools/disasm6502.py` emits BeebAsm syntax (`&hex`, `.label`, `EQUB`,

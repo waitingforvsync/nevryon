@@ -165,11 +165,11 @@ ORG &3680
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
 .gfx_icon_00
     EQUB &70, &B8, &DC, &EC, &C9, &83, &00, &00
-.gfx_icon_01
+.gfx_icon_pickup_collected
     EQUB &70, &B8, &DC, &EC, &C9, &83, &00, &00
 .gfx_icon_02
     EQUB &D0, &A2, &3B, &B3, &3A, &28, &00, &00
-.gfx_icon_03
+.gfx_icon_lives
     EQUB &B0, &54, &54, &C5, &45, &45, &00, &00
 .gfx_icon_04
     EQUB &D0, &A2, &77, &76, &72, &28, &00, &00
@@ -199,7 +199,7 @@ ORG &3680
     EQUB &60, &AA, &AA, &EE, &AA, &A0, &0E, &00
 .gfx_digit_9
     EQUB &60, &AA, &AA, &EE, &22, &20, &02, &00
-.gfx_icon_08
+.gfx_icon_missile_rocket
     EQUB &60, &F4, &E5, &E1, &C3, &06, &00, &00
 .gfx_icon_09
     EQUB &00, &00, &F0, &00, &EE, &EE, &0E, &00
@@ -661,7 +661,7 @@ ORG &3680
     EQUB &00, &00, &00, &00, &0E, &0E
 .gfx_pad_47FE
     EQUB &00, &00
-.gfx_icon_10
+.gfx_icon_lives_intro
     EQUB &F0, &F0, &5A, &A5, &0F, &0F, &00, &00
 .gfx_icon_11
     EQUB &00, &EE, &EE, &EE, &EC, &C2, &0E, &00

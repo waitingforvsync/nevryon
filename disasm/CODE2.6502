@@ -417,7 +417,7 @@ data_28D8        = * + 1
     JMP sprite_plot_xy
 
 .spawn_hazard_missile
-    LDA zp_get_ready_erase  \ Try to spawn a new hazard missile in one of the two slots (hazard_missile_x[0..1] == &FF = free). Called from CODE's hazard_type_dispatch for hazard_type &06. Validates the firer's hazard_x is in [&08, &25] (on-screen), copies hazard_x+2 / hazard_y into the missile slot, mirrors hazard_flip into hazard_missile_flip (controls vertical direction in step_hazard_missile), and sets hazard_missile_homing_dir from a player-X comparison: 1 if player_x+3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise (home leftward). Plays sfx_score_tick to mark the launch. The missile sprite is gfx_icon_08, a 4×6-px yellow-and-red rocket pointing vertically.
+    LDA zp_get_ready_erase  \ Try to spawn a new hazard missile in one of the two slots (hazard_missile_x[0..1] == &FF = free). Called from CODE's hazard_type_dispatch for hazard_type &06. Validates the firer's hazard_x is in [&08, &25] (on-screen), copies hazard_x+2 / hazard_y into the missile slot, mirrors hazard_flip into hazard_missile_flip (controls vertical direction in step_hazard_missile), and sets hazard_missile_homing_dir from a player-X comparison: 1 if player_x+3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise (home leftward). Plays sfx_score_tick to mark the launch. The missile sprite is gfx_icon_missile_rocket, a 4×6-px yellow-and-red rocket pointing vertically.
     CMP #&02
     BNE L2A3E
     STX scratch_28D4
@@ -498,7 +498,7 @@ data_28D8        = * + 1
     JMP missile_player_collide
 
 .step_hazard_missile
-    STX scratch_28D3  \ Step one hazard missile (X = slot index 0..1). Erases the old 1×6 position with lev_erase_brush+&80, then advances: horizontally by hazard_missile_homing_dir (1 = INC X by 1 → home rightward, else DEC X by 2 → home leftward), vertically by hazard_missile_flip (1 = Y+=2, else Y-=2). Bounds-checks the new (X, Y) against the playfield; out-of-bounds → mark slot inactive. Plots gfx_icon_08 (4×6-px rocket) at the new position.
+    STX scratch_28D3  \ Step one hazard missile (X = slot index 0..1). Erases the old 1×6 position with lev_erase_brush+&80, then advances: horizontally by hazard_missile_homing_dir (1 = INC X by 1 → home rightward, else DEC X by 2 → home leftward), vertically by hazard_missile_flip (1 = Y+=2, else Y-=2). Bounds-checks the new (X, Y) against the playfield; out-of-bounds → mark slot inactive. Plots gfx_icon_missile_rocket (4×6-px rocket) at the new position.
     LDA hazard_missile_x,X
     LDY hazard_missile_y,X
     TAX
@@ -547,9 +547,9 @@ data_28D8        = * + 1
     LDY hazard_missile_y,X
     TAX
     JSR calc_screen_addr
-    LDA #LO(gfx_icon_08)
+    LDA #LO(gfx_icon_missile_rocket)
     STA sprite_src_lo
-    LDA #HI(gfx_icon_08)
+    LDA #HI(gfx_icon_missile_rocket)
     STA sprite_src_hi
     LDX #&01
     LDY #&06
@@ -619,9 +619,9 @@ data_28D8        = * + 1
     LDX scratch_28D3
     LDY #&57
     JSR calc_screen_addr
-    LDA #LO(gfx_icon_10)
+    LDA #LO(gfx_icon_lives_intro)
     STA sprite_src_lo
-    LDA #HI(gfx_icon_10)
+    LDA #HI(gfx_icon_lives_intro)
     STA sprite_src_hi
     LDX #&01
     LDY #&08
@@ -748,9 +748,9 @@ data_28D8        = * + 1
     LDX scratch_28D3
     LDY #&57
     JSR calc_screen_addr
-    LDA #LO(gfx_icon_10)
+    LDA #LO(gfx_icon_lives_intro)
     STA sprite_src_lo
-    LDA #HI(gfx_icon_10)
+    LDA #HI(gfx_icon_lives_intro)
     STA sprite_src_hi
     LDX #&01
     LDY #&08
@@ -1246,9 +1246,9 @@ L2FF0            = * + 1
     LDX scratch_28D3
     LDY #&57
     JSR calc_screen_addr
-    LDA #LO(gfx_icon_10)
+    LDA #LO(gfx_icon_lives_intro)
     STA sprite_src_lo
-    LDA #HI(gfx_icon_10)
+    LDA #HI(gfx_icon_lives_intro)
     STA sprite_src_hi
     LDX #&01
     LDY #&08
