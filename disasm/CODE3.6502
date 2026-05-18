@@ -301,7 +301,8 @@ ORG &3300
 \ ----- data &3501..&350A -----
 \ OSWORD &0A parameter block: [0]=ASCII char in/out, [1..8]=8 bytes of font bitmap returned
 .chardef_buf
-    \ OSWORD &0A parameter block. [0]=ASCII code in / unused on out; [1..8] = 8 rows of the OS font bitmap returned. (Bytes shown as NOPs are just zero/EA placeholders — the OS overwrites them.)
+    \ OSWORD &0A parameter block. [0]=ASCII code in / unused on out; [1..8] = 8 rows of the OS font
+    \ bitmap returned. (Bytes shown as NOPs are just zero/EA placeholders — the OS overwrites them.)
     EQUB &EA
 .chardef_r0
     EQUB &EA
@@ -483,13 +484,17 @@ print_str_src_hi = * + 2
     \ 'WOW!' (stage_clear_screen header).
     EQUS "WOW!", &0D
 .str_level_x_completed
-    \ 'LEVEL X COMPLETED' — the 'X' at &363F is overwritten with the level digit (ASCII '1'..'8') before printing.
+    \ 'LEVEL X COMPLETED' — the 'X' at &363F is overwritten with the level digit (ASCII '1'..'8')
+    \ before printing.
     EQUS "LEVEL X COMPLETED", &0D
 .str_bonus_xnnn
-    \ 'BONUS X000' — 'X' at &3651 overwritten with the level digit; the three '0' digits become an animated score roll-up at &3652..&3654 (carry chain mirrors the per-decimal-digit score store at &2A02..&2A05).
+    \ 'BONUS X000' — 'X' at &3651 overwritten with the level digit; the three '0' digits become an
+    \ animated score roll-up at &3652..&3654 (carry chain mirrors the per-decimal-digit score store
+    \ at &2A02..&2A05).
     EQUS "BONUS X000", &0D
 .str_extra_ship
-    \ '+ EXTRA SHIP!' (printed by stage_clear_screen only if the score has crossed an extra-ship threshold).
+    \ '+ EXTRA SHIP!' (printed by stage_clear_screen only if the score has crossed an extra-ship
+    \ threshold).
     EQUS "+ EXTRA SHIP!", &0D
 .str_press_space_to
     \ 'PRESS SPACE TO' (game_over_or_continue countdown).
@@ -498,8 +503,10 @@ print_str_src_hi = * + 2
     \ 'CONTINUE PLAY!' (game_over_or_continue countdown).
     EQUS "CONTINUE PLAY!", &0D
 .str_two_digits
-    \ '10' — first char at &3682 is the displayed seconds (set to '1' or '0' depending on the count), second char at &3683 rolls '0'..'9' during the per-second countdown.
+    \ '10' — first char at &3682 is the displayed seconds (set to '1' or '0' depending on the
+    \ count), second char at &3683 rolls '0'..'9' during the per-second countdown.
     EQUS "10", &0D
 .str_credits_nn
-    \ 'CREDITS:00' — the trailing '00' at &368D/&368E shows the player's credit count, written before the print call.
+    \ 'CREDITS:00' — the trailing '00' at &368D/&368E shows the player's credit count, written
+    \ before the print call.
     EQUS "CREDITS:00", &0D

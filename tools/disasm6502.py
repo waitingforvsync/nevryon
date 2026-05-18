@@ -229,6 +229,21 @@ def fmt_hex(value: int, width: int) -> str:
     return f"&{value:0{width}X}"
 
 
+def emit_comment_block(cmt: str, lines: list[str]) -> None:
+    """Append `\\ ...` comment lines for `cmt` to `lines`, with paragraph
+    breaks preserved (the literal "\\n" two-char sequence or a real newline
+    in the cfg source) and each paragraph word-wrapped at 94 cols (so the
+    `    \\ ` prefix + text stays under 100 cols total)."""
+    for para in cmt.replace("\\n", "\n").split("\n"):
+        para = para.lstrip()
+        if not para:
+            lines.append("    \\")
+            continue
+        for ln in textwrap.wrap(para, width=94, break_long_words=False,
+                                break_on_hyphens=False):
+            lines.append(f"    \\ {ln}")
+
+
 def fmt_operand(mode: str, value: int, target_label: str | None) -> str:
     if mode == "imm":
         return f"#{fmt_hex(value, 2)}"
@@ -397,23 +412,8 @@ def disasm_code_region(data: bytes, base: int, region: Region,
             operand_str = ""
 
         cmt = comments.get(pc, "")
-        # Emit the comment ABOVE the instruction as a block of `\ ...`
-        # lines. Multi-line comments (literal "\\n" / real newline) keep
-        # their paragraph breaks; single-line comments get word-wrapped
-        # at 100 columns. The instruction line never carries an inline
-        # `\` comment — every comment is on its own line(s).
         if cmt:
-            paragraphs = cmt.replace("\\n", "\n").split("\n")
-            for para in paragraphs:
-                para = para.lstrip()
-                if not para:
-                    lines.append("    \\")
-                    continue
-                wrapped = textwrap.wrap(para, width=94,
-                                         break_long_words=False,
-                                         break_on_hyphens=False)
-                for ln in wrapped:
-                    lines.append(f"    \\ {ln}")
+            emit_comment_block(cmt, lines)
         if operand_str:
             lines.append(f"    {mnem} {operand_str}")
         else:
@@ -434,8 +434,7 @@ def disasm_data_region(data: bytes, base: int, region: Region,
         if off < 0 or off >= len(data):
             break
         if pc in comments:
-            for line in comments[pc].replace("\\n", "\n").split("\n"):
-                lines.append(f"    \\ {line.lstrip()}")
+            emit_comment_block(comments[pc], lines)
 
         if region.kind == "string":
             # Emit ASCII as EQUS "...", &XX terminators; break each line

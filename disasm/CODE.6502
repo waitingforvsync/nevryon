@@ -747,7 +747,7 @@ scroll_upper_dst_hi = * + 2
     LDY zp_player_y
     INY
     JSR calc_screen_addr
-    LDA #&39
+    LDA #HI(gfx_pod_frame0)
     STA sprite_src_hi
     LDX #&04
     LDY #&18
@@ -757,36 +757,54 @@ scroll_upper_dst_hi = * + 2
     JMP update_bullets
 
 .draw_player_pod
-    \ Draw the player force-pod beside the ship. Selects one of three frames (gfx_pod_frame0/1/2)
-    \ based on `pod_anim_frame`, falls into sprite_plot_xy with X=4, Y=&18.
+    \ Draw the player force-pod beside the ship. Selects one of three frames based on
+    \ `pod_anim_frame`, sets sprite_src_lo to LO(gfx_pod_frame0 / _1 / _2), and falls through into
+    \ sprite_plot_xy.
+    \
+    \ The HI byte is NOT set here — the caller (draw_player) has already done `LDA
+    \ #HI(gfx_pod_frame0) / STA sprite_src_hi` just before the JSR. All three pod frames share the
+    \ same HI page (&39), so the routine only has to vary the LO byte per frame.
     \
     \ Inputs:
-    \ pod_anim_frame = 1, 2, or 3 — frame index
-    \ X, Y = screen position (set up by caller — typically draw_player passes player_x + 5, player_y
-    \ + 1)
+    \ pod_anim_frame ∈ {1, 2, 3} — frame index
+    \ X, Y = screen position (set up by caller's calc_screen_addr — typically (player_x + 5,
+    \ player_y + 1))
+    \ sprite_src_hi = HI(gfx_pod_frame0) (set by caller)
     \
-    \ Note: pod_anim_frame is driven by vertical motion: move_player_up INCs it (wraps 4→1),
-    \ move_player_down DECs (wraps 0→3).
+    \ Dispatch table:
+    \ pod_anim_frame == 1 → gfx_pod_frame0
+    \ pod_anim_frame == 2 → gfx_pod_frame1
+    \ else (= 3)          → gfx_pod_frame2
+    \
+    \ Note: pod_anim_frame is driven by vertical motion — move_player_up INCs it (wraps 4→1),
+    \ move_player_down DECs (wraps 0→3). The else branch handles the value 3 directly.
     LDA pod_anim_frame
     CMP #&01
     BEQ L14C8
     CMP #&02
     BEQ L14D0
-    LDA #&C0
+    LDA #LO(gfx_pod_frame2)
     STA sprite_src_lo
     JMP sprite_plot_xy
 .L14C8
-    LDA #&00
+    LDA #LO(gfx_pod_frame0)
     STA sprite_src_lo
     JMP sprite_plot_xy
 .L14D0
-    LDA #&60
+    LDA #LO(gfx_pod_frame1)
     STA sprite_src_lo
     JMP sprite_plot_xy
 
 \ ----- data &14D8..&14D9 -----
 .pod_anim_frame
-    \ Force-pod animation frame index (1 / 2 / 3). Drives which of gfx_pod_frame0/1/2 the draw_player_pod routine renders. Stepped by player vertical motion — move_player_up INCs (wraps 4→1), move_player_down DECs (wraps 0→3). Disk-initial value is 1.
+    \ Force-pod animation frame index (1 / 2 / 3).
+    \
+    \ Drives which of gfx_pod_frame0 / _1 / _2 the draw_player_pod routine renders.
+    \
+    \ Stepped by player vertical motion — move_player_up INCs (wraps 4→1), move_player_down DECs
+    \ (wraps 0→3).
+    \
+    \ Disk-initial value is 1.
     EQUB &01
 
 \ ----- code &14D9..&1575 -----
@@ -1658,7 +1676,13 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- data &1A55..&1A99 -----
 .enemy_x
-    \ Enemy slot pool — 11 bytes per array (slots 0..10), but only indices 1..n_enemies (1..8) are ever populated. Active per-slot state: enemy_x[i] / enemy_y[i] = screen position; enemy_state[i] = animation/lifecycle counter (0 = free, 1..8 = active, 9 = expiring, &0A = just hit / about to free). Plus enemy_pattern_step[i] (the byte-offset into the per-pattern motion script pointed at by zp_88) and enemy_pattern_id[i] (pattern selector 1..6, captured at spawn). Spawned by spawn_periodic_enemy with enemy_x = &25; per-frame stepped by update_enemies which calls L1B87 to walk each slot's script.
+    \ Enemy slot pool — 11 bytes per array (slots 0..10), but only indices 1..n_enemies (1..8) are
+    \ ever populated. Active per-slot state: enemy_x[i] / enemy_y[i] = screen position;
+    \ enemy_state[i] = animation/lifecycle counter (0 = free, 1..8 = active, 9 = expiring, &0A =
+    \ just hit / about to free). Plus enemy_pattern_step[i] (the byte-offset into the per-pattern
+    \ motion script pointed at by zp_88) and enemy_pattern_id[i] (pattern selector 1..6, captured at
+    \ spawn). Spawned by spawn_periodic_enemy with enemy_x = &25; per-frame stepped by
+    \ update_enemies which calls L1B87 to walk each slot's script.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA, &EA
 .enemy_y
@@ -1668,11 +1692,21 @@ scroll_upper_dst_hi = * + 2
     EQUB &EA, &00, &00, &00, &00, &00, &00, &00
     EQUB &00, &00, &00
 .enemy_pattern_step
-    \ Enemy per-slot pattern-step counter — byte-offset into the per-pattern motion script that update_enemies/L1B87 is currently walking. The script (pointed at by zp_88, length enemy_pattern_len bytes) is a sequence of (dy_dir, dx_dir) byte pairs. L1B87 reads `(zp_88),Y` at Y = enemy_pattern_step[X] into data_16F6 (vertical-dir) and `(zp_88),Y+1` into data_16F7 (horizontal-dir), then INYs twice; the next frame's L1B2D stashes the new Y back here. Wrap-around at enemy_pattern_len.
+    \ Enemy per-slot pattern-step counter — byte-offset into the per-pattern motion script that
+    \ update_enemies/L1B87 is currently walking. The script (pointed at by zp_88, length
+    \ enemy_pattern_len bytes) is a sequence of (dy_dir, dx_dir) byte pairs. L1B87 reads `(zp_88),Y`
+    \ at Y = enemy_pattern_step[X] into data_16F6 (vertical-dir) and `(zp_88),Y+1` into data_16F7
+    \ (horizontal-dir), then INYs twice; the next frame's L1B2D stashes the new Y back here.
+    \ Wrap-around at enemy_pattern_len.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA, &EA
 .enemy_pattern_id
-    \ Enemy per-slot pattern ID — selects which motion pattern the slot follows. Set at spawn by spawn_periodic_enemy (cycles 1..6 via zp_86). Values 5 and 6 are special-cased in L1B87 (player-homing: pattern 5 toggles horizontal dir based on player_x; pattern 6 = straight at the player). Other values walk the table at (zp_88) verbatim. Slot 0 unused, slots 1..n_enemies (1..8) active; only 10 bytes wide (vs 11 for the position/state arrays) because enemy_pattern_id slot 10 wasn't allocated.
+    \ Enemy per-slot pattern ID — selects which motion pattern the slot follows. Set at spawn by
+    \ spawn_periodic_enemy (cycles 1..6 via zp_86). Values 5 and 6 are special-cased in L1B87
+    \ (player-homing: pattern 5 toggles horizontal dir based on player_x; pattern 6 = straight at
+    \ the player). Other values walk the table at (zp_88) verbatim. Slot 0 unused, slots
+    \ 1..n_enemies (1..8) active; only 10 bytes wide (vs 11 for the position/state arrays) because
+    \ enemy_pattern_id slot 10 wasn't allocated.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
     EQUB &EA, &EA
 .npc_bullet_x
@@ -2254,7 +2288,9 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- data &1E46..&1E47 -----
 .lives_blink_state
-    \ Lives-icon blink state — 0/1 toggle stepped by `lose_a_life`. Used both to swap the lives-icon sprite (gfx_icon_lives vs the alternate at &48B8) and to halve the rate at which player_hp DROPs (DEC only on alternate calls).
+    \ Lives-icon blink state — 0/1 toggle stepped by `lose_a_life`. Used both to swap the lives-icon
+    \ sprite (gfx_icon_lives vs the alternate at &48B8) and to halve the rate at which player_hp
+    \ DROPs (DEC only on alternate calls).
     EQUB &EA
 
 \ ----- code &1E47..&2050 -----
@@ -2494,10 +2530,17 @@ L2016            = * + 1
 
 \ ----- data &2050..&208A -----
 .player_hp
-    \ Per-life HP — how many lose_a_life calls the current ship can absorb before it explodes. Reset to zp_9A by init (= zp_9A default 6, configurable from options.BAS as `?&9A = X%`). DEC'd in pairs by lose_a_life (every other call); when it hits 0 the next lose_a_life jumps to death_anim. Also used as the X-position of the lives icon in the bottom-status row (col player_hp + &1F).
+    \ Per-life HP — how many lose_a_life calls the current ship can absorb before it explodes. Reset
+    \ to zp_9A by init (= zp_9A default 6, configurable from options.BAS as `?&9A = X%`). DEC'd in
+    \ pairs by lose_a_life (every other call); when it hits 0 the next lose_a_life jumps to
+    \ death_anim. Also used as the X-position of the lives icon in the bottom-status row (col
+    \ player_hp + &1F).
     EQUB &06
 .lives_left
-    \ Lives counter — number of ships remaining BEFORE the current one (i.e. continues / extra lives). Initialised by restore_score_from_loader from loader_lives_save (= 3 at game start; preserved across levels). DEC'd by death_anim after the explosion plays. main_loop polls this each game_step: when it reaches 0 → JMP game_over_or_continue.
+    \ Lives counter — number of ships remaining BEFORE the current one (i.e. continues / extra
+    \ lives). Initialised by restore_score_from_loader from loader_lives_save (= 3 at game start;
+    \ preserved across levels). DEC'd by death_anim after the explosion plays. main_loop polls this
+    \ each game_step: when it reaches 0 → JMP game_over_or_continue.
     EQUB &06
 .hazard_x
     EQUB &00, &00, &00, &00, &00, &00, &00, &00
@@ -3031,13 +3074,16 @@ L2016            = * + 1
 
 \ ----- data &23C5..&23C8 -----
 .forcefield_x
-    \ Force-field current X — last column it was drawn at; used by L210A to erase before forcefield_render redraws a fresh strip.
+    \ Force-field current X — last column it was drawn at; used by L210A to erase before
+    \ forcefield_render redraws a fresh strip.
     EQUB &FF
 .forcefield_y
     \ Force-field current Y — paired with forcefield_x.
     EQUB &FF
 .forcefield_active
-    \ Force-field active flag: 1 = a force-field was drawn last frame and needs erasing this frame, 0 = clean. Set by forcefield_draw_or_erase, cleared by L210A's early erase branch (and by forcefield_erase if the field went off-screen).
+    \ Force-field active flag: 1 = a force-field was drawn last frame and needs erasing this frame,
+    \ 0 = clean. Set by forcefield_draw_or_erase, cleared by L210A's early erase branch (and by
+    \ forcefield_erase if the field went off-screen).
     EQUB &00
 
 \ ----- code &23C8..&2554 -----
@@ -3370,12 +3416,15 @@ L2016            = * + 1
 
 \ ----- data &25A1..&25AA -----
 .pickup_tier_flag
-    \ 8-element pickup tier-flag array, indexed by `pickup_count - 1`. Set by set_pickup_tier_flag to mark each tier as reached. Three slots overlap with named flags whose meaning is consumed elsewhere:
+    \ 8-element pickup tier-flag array, indexed by `pickup_count - 1`. Set by set_pickup_tier_flag
+    \ to mark each tier as reached. Three slots overlap with named flags whose meaning is consumed
+    \ elsewhere:
     \ tier 3 (offset +2) = `pod_attached` — pod sprite + pod_collide_enemy kicks in
     \ tier 5 (offset +4) = `force_pod_state` — pod_fire enabled + force_pod_anim runs
     \ tier 7 (offset +6) = `player_missiles_unlocked` — fire_player_missiles enabled
-    \ 
-    \ Tiers 2, 4, 6, 8 (offsets +1, +3, +5, +7) ARE written but nothing reads them — orphan flags, presumably scaffolding for power-ups that were planned but never wired up.
+    \
+    \ Tiers 2, 4, 6, 8 (offsets +1, +3, +5, +7) ARE written but nothing reads them — orphan flags,
+    \ presumably scaffolding for power-ups that were planned but never wired up.
     EQUB &EA, &EA
 .pod_attached
     EQUB &EA, &EA
@@ -3551,13 +3600,18 @@ L2016            = * + 1
 .stage_clear_flag
     EQUB &EA
 .pickup_x
-    \ Power-up pickup X coordinate (column). DEC'd by 1 each subframe of game_step (so the pickup drifts leftward 16 px/sec = 4 px per game_step). When it hits 0, update_pickup deactivates and erases. Initial value &27 (right edge) on spawn from try_spawn_pickup.
+    \ Power-up pickup X coordinate (column). DEC'd by 1 each subframe of game_step (so the pickup
+    \ drifts leftward 16 px/sec = 4 px per game_step). When it hits 0, update_pickup deactivates and
+    \ erases. Initial value &27 (right edge) on spawn from try_spawn_pickup.
     EQUB &EA
 .pickup_y
-    \ Power-up pickup Y coordinate (scanline) — captured from player_y at the moment try_spawn_pickup ran, then held constant for the lifetime of the pickup.
+    \ Power-up pickup Y coordinate (scanline) — captured from player_y at the moment
+    \ try_spawn_pickup ran, then held constant for the lifetime of the pickup.
     EQUB &EA
 .pickup_state
-    \ Power-up pickup state: 0 = inactive (slot free for a new spawn). Non-zero = active, with the value selecting the sprite frame for the flashing animation (2/6 → gfx_pickup_yellow, 3/5 → gfx_pickup_red, others → erase) — wraps at &0A back to 1.
+    \ Power-up pickup state: 0 = inactive (slot free for a new spawn). Non-zero = active, with the
+    \ value selecting the sprite frame for the flashing animation (2/6 → gfx_pickup_yellow, 3/5 →
+    \ gfx_pickup_red, others → erase) — wraps at &0A back to 1.
     EQUB &EA
 
 \ ----- code &2693..&27E7 -----
