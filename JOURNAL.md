@@ -4,6 +4,197 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-18 — Sessions 26-29: cfg quality pass + Y-origin fix + enemy_pattern_scripts discovery
+
+A bundle of related cleanup and one solid new finding. Tracking
+as one journal entry since they were done in one continuous arc;
+the commit log preserves the per-step granularity.
+
+### Disasm tool: comments now wrap above the instruction at 100 cols
+
+Tool change (`tools/disasm6502.py`): every cfg comment now emits
+as a block of `\` lines on its own row(s) ABOVE the instruction
+it annotates, word-wrapped at ~100 cols. Previously short
+comments rode inline next to the first instruction, which got
+ugly once routines had structured Inputs/Outputs sections.
+
+Factored the wrap logic into a shared helper `emit_comment_block`
+used by both the code-region emit path AND the data-region /
+region-header paths, so data labels (`pod_anim_frame`,
+`hazard_x`, etc.) and `\ ----- data ... -----` headers all wrap
+the same way.
+
+### Restructured ~80 routine comments with Inputs / Outputs / Effects
+
+Mass pass over `disasm/*.cfg.json` turning prose comments into
+the new structured form, plus an automatic strip of redundant
+` (&XXXX)` literal-address suffixes next to label names. Touches
+basically every routine that had a non-trivial comment — the
+high-traffic ones documented now have explicit input registers,
+zp dependencies, output registers, side effects, and brief
+explanation.
+
+For example, `sprite_plot_xy` now reads:
+
+```
+.sprite_plot_xy
+    \ Plot a column-major sprite to the screen. Walks W byte-cols × H scanlines through the source
+    \ via the self-modified LDA at sprite_src_lo/_hi, writing pixel-bytes directly to screen RAM via
+    \ the zp_screen_ptr that's set up internally from zp_dest_x. No blending — non-zero source bytes
+    \ overwrite the screen, zero bytes blank to black (which is how erase brushes work).
+    \
+    \ Inputs:
+    \ X = sprite width in byte-cols (each byte-col is 4 pixels wide)
+    \ Y = sprite height in scanlines
+    \ sprite_src_lo / _hi = source byte address (self-modified operand)
+    \ zp_dest_x_lo / _hi = destination screen address (typically from calc_screen_addr)
+    \ zp_sprite_dir_flag = 1 forward, 0 vertical-flip (source read back-to-front)
+    \
+    \ Clobbers: A, X, Y, zp_70..zp_78 scratch area.
+```
+
+### `move_player_up` ↔ `move_player_down` + `KEY_UP` ↔ `KEY_DOWN` swap
+
+Rich caught a longstanding inversion: `calc_screen_addr` does
+`EOR #&FF` on Y before the row LUT (see PC &1271), so the
+**caller-Y origin is at the BOTTOM of the screen**. Higher
+`zp_player_y` = higher on screen. So the routine that INCs
+player_y is actually move-up, and the routine that DECs is
+move-down. The corresponding key-scan codes also swap.
+
+Renamed:
+
+  | was            | new   |
+  |----------------|-------|
+  | move_player_down (&16B0, INCs y) | `move_player_up` |
+  | move_player_up   (&16CC, DECs y) | `move_player_down` |
+  | KEY_DOWN (&14F6 / &B7) | `KEY_UP` |
+  | KEY_UP   (&1500 / &97) | `KEY_DOWN` |
+
+Updated comments accordingly and added a Y-origin convention
+note on `calc_screen_addr` so future readers don't trip on it.
+
+Side fix: CLAUDE.md's claim that "Upper tile id table at &7F10 /
+Lower at &7E10" was the wrong way round. Code, Nevryon.6502 and
+docs/memory_map.md were all correct (&7E10 = upper, &7F10 =
+lower); only the CLAUDE.md sidebar had it inverted.
+
+### Sprite address references instead of magic numbers
+
+Three routines previously stored sprite addresses as raw
+`LDA #&XX / LDA #&YY` immediates; all now render via label
+references via `immediate_overrides`:
+
+  - `draw_player_pod`: 3 branches → `LDA #LO(gfx_pod_frame{0,1,2})`,
+    plus caller `draw_player` → `LDA #HI(gfx_pod_frame0)` (shared
+    page &39 for all 3 frames).
+  - `plot_player_missile`: inline multiply-by-&28 →
+    `LDA #LO(gfx_missile_0)` start + `LDA #HI(gfx_missile_0)`
+    page (= &44 for all 5 frames).
+  - `enemy_hit_frame1..3`: each frame's sprite_src setup now
+    reads `LDA #HI(lev_enemy_hit_N) / LDA #LO(lev_enemy_hit_N)`.
+
+Each set of changes was paired with a comment block explicitly
+calling out where the OTHER half of the sprite_src pointer is
+set (in `draw_player_pod`'s case: by the CALLER `draw_player`,
+not in the pod routine itself).
+
+### State arrays as data: player_bullet_x/_y, player_missile_*
+
+Two more pools converted from "code that happens to decode as
+NOP/BRK because of the zero-init bytes" into proper data
+regions:
+
+  - Player bullets: `player_bullet_x[7] + player_bullet_y[7]`
+    at &16E6..&16F4 (with array_labels removing the auto-
+    promoted `data_16E7..data_16EC` mid-array names).
+  - Player missiles: `player_missile_x[2] + _y[2] + _frame +
+    _step + _active[2]` at &156F..&1576.
+
+### starfield_update fully decoded
+
+Added a structured comment block for `starfield_update` plus
+two new zp-state labels (`starfield_slow_phase` was
+`data_1307`, `starfield_fast_phase` was `data_1308`).
+
+The routine animates 60 stars across three 60-entry parallel
+arrays (`starfield_pos_lo / _hi / _type`) as a 2-layer parallax:
+
+  - **Slow / background layer** (`starfield_type[X] == 2`):
+    moves 1 char-col left every 16 frames, plots a steady dim
+    pixel.
+  - **Fast / foreground layer** (other types): twinkles by
+    cycling through brightness values 1 / 2 / 4 / 8 / &10
+    every frame (driven by `starfield_fast_phase` left-shifting
+    each frame), and moves 1 char-col left every 5 frames when
+    the phase wraps back to 1.
+
+Both layers wrap horizontally inside the screen-RAM range
+&5C00..&6B00 (the 12-row playfield gap).
+
+### MAJOR: `gfx_orphan_4500` is the enemy motion-script storage
+
+For weeks the 592-byte block at GRAPHIX:&4500..&474F has been
+labelled "orphan / dead data, no references". Rich's hunch
+about `tbl_1702` was the unlock: those bytes look like sprite-
+address MSBs because they ARE address MSBs — but the addresses
+point INTO the supposedly-dead block.
+
+The truth: `spawn_periodic_enemy` loads a pattern-script
+pointer + length triple from three parallel 7-entry LUTs in
+CODE on each pattern change:
+
+  &16FB `enemy_pattern_ptr_lo`     (was `tbl_16FB`)
+  &1702 `enemy_pattern_ptr_hi`     (was `tbl_1702`)
+  &1709 `enemy_pattern_len_lut`    (was `tbl_1709`)
+
+The 4 valid pattern slots (indices 1..4 of `zp_86`) point at:
+
+  enemy_pattern_1 = &4500   (len &78 = 120 B)
+  enemy_pattern_2 = &4574   (len &9C = 156 B)
+  enemy_pattern_3 = &4614   (len &60 = 96 B)
+  enemy_pattern_4 = &4680   (len &D6 = 214 B)
+
+Each script is a sequence of `(dy_dir, dx_dir)` byte pairs that
+`L1B87` walks per enemy slot per frame; when the slot's
+`enemy_pattern_step` reaches `enemy_pattern_len`, the enemy
+expires (gets erased and the slot freed). Patterns 5 and 6 are
+special-cased in `L1B87` (player-homing — they ignore the script
+pointer entirely).
+
+Followed up by:
+
+  - Adding `enemy_pattern_1..4` labels to GRAPHIX.cfg.json + 4
+    `_end` labels for the script terminations.
+  - Three `byte_overrides` sets in CODE.cfg.json so the LUTs
+    read `EQUB LO(enemy_pattern_N) / HI(enemy_pattern_N) /
+    enemy_pattern_N_end - enemy_pattern_N` — every entry derived
+    from address arithmetic, no magic numbers.
+  - Pulled the stale `enemy_pattern_scripts` (was orphan_4500)
+    PNG from `graphix/` since the bytes aren't pixels.
+  - Updated `docs/memory_map.md`'s GRAPHIX layout.
+  - Quirk: enemy_pattern_1 (&4500..&4578) and enemy_pattern_2
+    (&4574..&4610) overlap by 4 bytes. The labels still work —
+    BeebAsm allows co-located labels. The disasm renders
+    `.enemy_pattern_2` then several EQUBs then `.enemy_pattern_1_
+    end` inline.
+
+### Other corrections
+
+  - `data_16FD` was a phantom label — bytes 2..6 of
+    `enemy_pattern_ptr_lo` that the tracer mis-decoded as code.
+    Gone.
+  - `data_16F5/_F6/_F7/_F8` are general-purpose X-save scratch
+    slots used by many routines (NOT player-bullet related as
+    one might guess from their position next to
+    `player_bullet_y`). Region comment now documents the
+    dual-use of `_F6/_F7` (X-save vs. enemy direction bytes).
+
+Build remains byte-identical across all four binaries through
+every step.
+
+---
+
 ## 2026-05-18 — Session 25: icon renames + DFS-format correction
 
 ### Semantic names for the four "well-known" icons

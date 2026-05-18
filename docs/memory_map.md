@@ -247,11 +247,11 @@ Sprite atlas at `&3680..&48FF` (4736 B). Every named sprite has the
 | `&3DE0..&3FFF` | `gfx_text_score / _last / _high / _gpr90` etc. |
 | `&4060..&4090..` | `gfx_pickup_red / _yellow / _checker / _white` |
 | `&4100..&4360..` | `gfx_text_get_ready / _game / _over / _on` + `gfx_hazard_slot19` |
-| `&4410..&44D7` | `gfx_missile_0..4`                          |
-| `&4500..&474F` | `gfx_orphan_4500` (592 B — dead data, no references) |
+| `&4400..&44C7` | `gfx_missile_0..4` (5×8 px each)            |
+| `&4500..&4755` | `enemy_pattern_1..4` — 4 NPC motion-script tables (`(dy_dir, dx_dir)` byte-pair sequences walked by L1B87 per enemy slot per frame). Starts at `&4500` (len &78), `&4574` (&9C), `&4614` (&60), `&4680` (&D6). Indexed by `enemy_pattern_ptr_lo / _hi / _len_lut` in CODE at &16FB+. (Was previously called `gfx_orphan_4500` and assumed to be dead sprite data; corrected in Session 27.) |
 | `&4750..&47FD` | `gfx_pickup_white / _pause`                 |
-| `&4800..&484F` | `gfx_icon_lives_intro..17` + `gfx_bomb`              |
-| `&4858..&48E7` | `gfx_enemy_small_frame0/1`                  |
+| `&4800..&483F` | `gfx_icon_lives_intro / _11..15 / _missile_rocket / _17` (8 small icons, semantic names where known) |
+| `&4840..&48FF` | `gfx_enemy_small_frame0 / _1` (two 4×24 winged-creature frames, back-to-back to the IRQ handler at &4900) |
 
 Beyond the atlas (`&4900..&49FF`):
 
