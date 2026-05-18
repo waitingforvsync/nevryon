@@ -62,6 +62,8 @@
     "0x121F": "screen_row_hi_lut",
     "0x1236": "calc_screen_addr",
     "0x1309": "starfield_update",
+    "0x1307": "starfield_slow_phase",
+    "0x1308": "starfield_fast_phase",
     "0x2656": "starfield_init",
     "0x208A": "spawn_check_step",
     "0x22B2": "hazard_type_dispatch",
@@ -307,6 +309,7 @@
     "0x262A": "Score carry (tens → hundreds): subtract 10 from score+3, INC score+2 (hundreds), recurse if it also wraps. Shared by `add_score_x1` and `add_score_x10`.",
     "0x263B": "Score carry (hundreds → thousands): subtract 10 from score+2, INC score+1 (thousands), recurse if it also wraps.",
     "0x264C": "Score carry (thousands → ten-thousands): subtract 10 from score+1, INC score (the MSD = ten-thousands). No further carry — overflow past 99,999,0 silently wraps.",
+    "0x1309": "Per-frame starfield update — animates 60 stars in two parallel layers. The stars share three 60-entry arrays at &3041..&30F7 (starfield_pos_lo / _hi / _type), seeded by starfield_init at game start.\\n\\nTwo phase counters drive the animation; both are stepped once per call:\\n  starfield_slow_phase = LDA / EOR #&50 / STA — toggles bit 4 + bit 6\\n  starfield_fast_phase = ASL — shift left, so it cycles &01, &02, &04, &08, &10, then wraps back to 1\\n\\nThen iterates X = 0..&3B over the 60 stars. Two layers, split by starfield_type[X]:\\n  type == 2 → slow layer. Erases the current pos with byte 0; if starfield_slow_phase == &10 (= every 16th frame), DECs the column pos by &08 (= 1 char-col left), wrapping &5C → &6B at the screen-RAM edge; re-plots as a single pixel of brightness &10.\\n  type != 2 → fast layer. Erases / re-plots at the current pos using the current starfield_fast_phase value as the pixel byte — so the star cycles through brightness levels 1, 2, 4, 8, &10 across frames (giving a twinkling effect). On the wrap-back (phase == &01), also DECs the column pos by &08 with the same screen-edge wrap, so fast stars scroll leftward one char-col every 5 frames.\\n\\nNet effect: a 2-layer parallax starfield. Background stars (type 2) scroll slowly + plot a steady dim pixel. Foreground stars (other types) scroll faster + twinkle by cycling brightness. Both layers wrap horizontally inside the screen-RAM range &5C00..&6B00 (= the 12-row playfield gap between the upper and lower tile bands).\\n\\nInputs:\\n  starfield_pos_lo / _hi / _type (parallel arrays of 60)\\n  starfield_slow_phase, starfield_fast_phase (engine-state phase counters)\\n\\nEffects: writes 60 screen bytes (erase + re-plot per star); mutates starfield_pos_lo / _hi (when columns advance); updates the phase counters.",
     "0x13BC": "Frame-rate regulator (busy-wait). Called once per main_loop iteration. Holds total frame time roughly constant by waiting (256 − work_done) outer iterations × 256 cycles inner. Heavy frames get shorter waits; idle frames get longer waits.\\n\\nInputs:\\n  zp_frame_progress = work-done counter (bumped by update_bullets, get_ready_overlay etc.)\\n  zp_game_speed = user's Speed preference from options.BAS (`?&92 = 120 + S%*30`); BREAK cheat sets to 252.\\n\\nOutputs: zp_frame_progress reset to zp_game_speed for the next frame.\\n\\nOverflow guard: `CPX #&64 / BCS / LDX #&FE` substitutes X=&FE if work-done wrapped past 255 into a tiny value, preventing a paradoxically-long delay."
   },
   "extern_labels": {
