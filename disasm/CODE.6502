@@ -1189,7 +1189,12 @@ scroll_upper_dst_hi = * + 2
     EQUB HI(enemy_pattern_4)
     EQUB &EA, &EA
 .enemy_pattern_len_lut
-    EQUB &EA, &78, &9C, &60, &D6, &EA, &EA
+    EQUB &EA
+    EQUB enemy_pattern_1_end - enemy_pattern_1
+    EQUB enemy_pattern_2_end - enemy_pattern_2
+    EQUB enemy_pattern_3_end - enemy_pattern_3
+    EQUB enemy_pattern_4_end - enemy_pattern_4
+    EQUB &EA, &EA
 .enemy_pattern_len
     EQUB &EA, &EA
 
