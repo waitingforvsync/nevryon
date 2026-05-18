@@ -387,6 +387,14 @@
     "0x2A02": ["score", 6]
   },
   "byte_overrides": {
+    "0x16FC": "LO(enemy_pattern_1)",
+    "0x16FD": "LO(enemy_pattern_2)",
+    "0x16FE": "LO(enemy_pattern_3)",
+    "0x16FF": "LO(enemy_pattern_4)",
+    "0x1703": "HI(enemy_pattern_1)",
+    "0x1704": "HI(enemy_pattern_2)",
+    "0x1705": "HI(enemy_pattern_3)",
+    "0x1706": "HI(enemy_pattern_4)",
     "0x1C0C": "&EA",
     "0x1C0D": "LO(lev_enemy_0)",
     "0x1C0E": "LO(lev_enemy_1)",

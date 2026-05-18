@@ -1175,9 +1175,19 @@ scroll_upper_dst_hi = * + 2
 .data_16F8
     EQUB &EA, &EA, &EA
 .enemy_pattern_ptr_lo
-    EQUB &EA, &00, &74, &14, &80, &EA, &EA
+    EQUB &EA
+    EQUB LO(enemy_pattern_1)
+    EQUB LO(enemy_pattern_2)
+    EQUB LO(enemy_pattern_3)
+    EQUB LO(enemy_pattern_4)
+    EQUB &EA, &EA
 .enemy_pattern_ptr_hi
-    EQUB &EA, &45, &45, &46, &46, &EA, &EA
+    EQUB &EA
+    EQUB HI(enemy_pattern_1)
+    EQUB HI(enemy_pattern_2)
+    EQUB HI(enemy_pattern_3)
+    EQUB HI(enemy_pattern_4)
+    EQUB &EA, &EA
 .enemy_pattern_len_lut
     EQUB &EA, &78, &9C, &60, &D6, &EA, &EA
 .enemy_pattern_len
