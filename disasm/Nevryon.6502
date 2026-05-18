@@ -85,6 +85,65 @@ n_hazard_missiles          = 2     \ Hazard missile slots, indexed 0..n_hazard_m
 n_player_bullets          = 6     \ Player bullet slots, indexed 1..n_player_bullets. update_bullets predec-loops over all 6; on_fire_pressed only scans 1..n_player_fire_slots so the upper 2 slots (5,6) are reserved for the force-pod's twin shot.
 n_player_fire_slots       = 4     \ Number of in-flight bullets the fire button can put on screen. on_fire_pressed scans player_bullet_x[n_player_fire_slots..1] for a free slot.
 
+\ ---- State-machine enumerations ----------------------------
+\ Named values that appear in the enemy_state / hazard_type bytes
+\ and in the per-axis pattern-direction scratch (data_16F6, _16F7).
+\ Reflected in the disasm via immediate_overrides at the sites that
+\ literally compare against or store these values; the underlying
+\ bytes are unchanged and the build still roundtrips bit-identical.
+
+\ ---- enemy_state values --------
+\ Animation / lifecycle counter for each enemy slot (&1A6B+X).
+\ Values 1..7 = alive (INC'd through the hit-count up to the kill
+\ threshold), 9 = invincibility ceiling (CPY #&09 BCC = "hittable"),
+\ &0A..&0D = death-animation frames, &00 = slot free.
+\ enemy_state_initial_pat5 / _initial_pat6 happen to share their
+\ numeric values with the kill thresholds for the previous pattern
+\ (state &03 = "pattern 5 just spawned" = "pattern 1..4 + 2 hits").
+\ The per-PC override picks the name that fits each use site.
+enemy_state_inactive          = &00     \ slot free / death-anim done; also CPY's BEQ-fall-through "active?" test
+enemy_state_initial_pat14     = &01     \ initial state set by spawn_periodic_enemy for patterns 1..4
+enemy_state_initial_pat5      = &03     \ initial state for pattern 5 (player-homing)
+enemy_state_kill_pat14        = &03     \ patterns 1..4 enemy reaches this after 2 hits = killed
+enemy_state_initial_pat6      = &05     \ initial state for pattern 6 (straight-at-player)
+enemy_state_kill_pat5         = &05     \ pattern 5 enemy reaches this after 2 hits = killed
+enemy_state_kill_pat6         = &07     \ pattern 6 enemy reaches this after 2 hits = killed
+enemy_state_invincible_min    = &09     \ CPY #&09 BCC: states 1..8 = hittable, &09+ = invincible / dying
+enemy_state_hit_frame_1       = &0A     \ death-anim frame 1 (sprite = lev_enemy_hit_1)
+enemy_state_hit_frame_2       = &0B     \ death-anim frame 2 (sprite = lev_enemy_hit_2)
+enemy_state_hit_frame_3       = &0C     \ death-anim frame 3 (sprite = lev_enemy_hit_3)
+enemy_state_hit_erase         = &0D     \ final erase frame; slot cleared back to &00
+
+\ ---- hazard_type values --------
+\ Each hazard slot (hazard_type[X] at &2065+X) is a small state
+\ machine: 0 = free, 1..3 = three-frame decor anim loop, &04 / &06 /
+\ &07 / &08 / &13 = per-frame action types (fire bullet / fire
+\ missile / force-field / fire flame / fire bullet variant), &09 =
+\ post-flame idle, &0F↔&10 = two-frame anim ping-pong, &14..&1B =
+\ death-anim frames, &1C = clear-slot marker.
+hazard_type_inactive          = &00
+hazard_type_fires_bullet_a    = &04     \ per-frame: enqueue_npc_bullet (white 4×2 leftward bullet)
+hazard_type_fires_missile     = &06     \ per-frame: spawn_hazard_missile (CODE2 — homing rocket)
+hazard_type_forcefield        = &07     \ per-frame: forcefield_render (the slot IS the force-field)
+hazard_type_fires_flame       = &08     \ per-frame: spawn_flame; mutates self to &09 on success
+hazard_type_flame_idle        = &09     \ post-flame idle (anim toggles &08 ↔ &09)
+hazard_type_anim_ping_a       = &0F     \ 2-frame ping-pong with &10 (anim_set_type_10)
+hazard_type_anim_ping_b       = &10     \ 2-frame ping-pong with &0F (anim_set_type_F)
+hazard_type_fires_bullet_b    = &13     \ per-frame: enqueue_npc_bullet (second bullet-firing variant)
+hazard_type_death_start       = &14     \ set on kill (check_bullet_hits / check_player_collisions / missile_hazard_box_test) — starts the &14..&1B death-anim chain
+hazard_type_death_clear       = &1C     \ hazard_death_step clears the slot when type reaches this
+
+\ ---- pattern_dir values --------
+\ Per-axis direction selector emitted by L1B87's pattern walker;
+\ consumed by L1B2D. Convention: 0 = no motion, 1 = positive
+\ (Y += 4 = UP / X += 1 = right), anything else (3 is the stored
+\ value) = negative (Y -= 4 = DOWN / X -= 1 = left). Stored in
+\ data_16F6 (dy) and data_16F7 (dx); the consumer tests CMP #&01
+\ BNE → "negative" so any non-zero non-one value falls through.
+pattern_dir_none              = &00
+pattern_dir_pos               = &01
+pattern_dir_neg               = &03
+
 \ ---- Per-level data (LEVD1 / LEVD2 / LEVD3) ----------------
 \ Each scenario (and per stage) reloads these three files into
 \ fixed CPU regions. LEVD1 is per-scenario only; LEVD2 / LEVD3

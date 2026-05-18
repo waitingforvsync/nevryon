@@ -4,6 +4,89 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-18 — Session 30: state-machine enumerations (enemy_state / hazard_type / pattern_dir)
+
+Added named constants for the three small state machines so that the
+CMP/CPY/LDA-#imm sites at decision points read as `BEQ
+enemy_state_hit_frame_1` rather than `BEQ &0A`. Self-documenting code
+without changing a single byte of the build.
+
+### New constant blocks in Nevryon.6502 (master)
+
+Twelve `enemy_state_*` constants covering the inactive / initial-per-
+pattern / kill-threshold-per-pattern / invincibility-min / hit-anim
+(frame 1..3) / hit-erase states. Some numeric values get more than one
+name because of state aliasing — `&03` is both `enemy_state_initial_pat5`
+(when a pattern-5 enemy just spawned) and `enemy_state_kill_pat14` (when
+a pattern-1..4 enemy has just been hit twice). The right name at each
+PC is chosen by the immediate_override there.
+
+Eleven `hazard_type_*` constants — inactive, the five
+action-per-frame types (fires_bullet_a/_b, fires_missile,
+fires_flame + flame_idle, forcefield), the two anim-ping-pong values
+(&0F ↔ &10), and the death-anim start/clear markers (&14 / &1C).
+
+Three `pattern_dir_*` constants (none = 0, pos = 1, neg = 3) for
+data_16F6/16F7 — the per-axis direction bytes that L1B87 writes and
+L1B2D reads to walk an enemy through its motion script.
+
+### Forty-three immediate_overrides in CODE.cfg.json
+
+19 enemy_state sites, 17 hazard_type sites, 7 pattern_dir sites. Each
+located by a forward/backward propagation scan from the underlying
+memory ref (LDA enemy_state,X / STA hazard_type,X / etc.) to the
+nearest #imm operand, then manually filtered against false positives
+(loops over the slot count, `LDA zp_86` re-defining A mid-window, etc.).
+
+### Tool change: enum constants skipped in parse_master_externs
+
+`tools/disasm6502.py` was using its master-externs parser to harvest
+every `name = &VAL` equate as a candidate address label. With the new
+enum constants in the master, that mapped low values like
+`hazard_type_anim_ping_a = &0F` to **address** &000F — so `LDA &0F`
+(zp scratch) started rendering as `LDA hazard_type_anim_ping_a`
+mid-routine. Fixed by teaching the parser to skip equates whose name
+matches `(enemy_state|hazard_type|pattern_dir)_*`.
+
+### Where the constants land — sample readability win
+
+`check_bullet_hits` (CODE &1847) now reads:
+
+```
+LDY enemy_state,X
+CPY #enemy_state_invincible_min   \ &09 — alive iff Y < this
+BCC L18A9
+RTS
+.L18A9
+INY
+TYA
+STA enemy_state,X
+CPY #enemy_state_kill_pat14       \ &03 — pattern 1..4 killed?
+BEQ L18BD
+CPY #enemy_state_kill_pat5        \ &05 — pattern 5 killed?
+BEQ L18BD
+CPY #enemy_state_kill_pat6        \ &07 — pattern 6 killed?
+BEQ L18BD
+JMP L18D1
+.L18BD
+LDA #&07 : JSR OSWRCH             \ collision bell
+LDA #enemy_state_hit_frame_1      \ &0A — start death anim
+STA enemy_state,X
+```
+
+And `hazard_anim_advance` (&2267) dispatches by name through every
+type the per-frame state machine cares about (fires_bullet_a /
+fires_flame / flame_idle / anim_ping_a / anim_ping_b / death_start)
+instead of the previous sea of hex magic numbers.
+
+### Build verification
+
+`./build.sh` shows all four binaries byte-identical after the change.
+The constants only affect the source text emitted by the disassembler;
+the assembled bytes are unchanged.
+
+---
+
 ## 2026-05-18 — Sessions 26-29: cfg quality pass + Y-origin fix + enemy_pattern_scripts discovery
 
 A bundle of related cleanup and one solid new finding. Tracking

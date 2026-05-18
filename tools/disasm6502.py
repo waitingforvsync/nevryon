@@ -992,10 +992,16 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
 def parse_master_externs(path: str) -> dict[int, str]:
     """Parse a BeebAsm source file for `name = &VAL` equates so we can
     use the master's preferred names for shared zp / hardware / extern
-    addresses (instead of auto-promoting to `zp_XX` / `data_XXXX`)."""
+    addresses (instead of auto-promoting to `zp_XX` / `data_XXXX`).
+
+    Equates whose names look like enumeration constants (matching the
+    `<scope>_<variant>` pattern below) are skipped — they're value
+    labels for `immediate_overrides` use, not address labels."""
     import re
     pat = re.compile(
         r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*&([0-9A-Fa-f]+)\s*(?:\\|$)')
+    enum_prefix = re.compile(
+        r'^(enemy_state|hazard_type|pattern_dir)_')
     out: dict[int, str] = {}
     with open(path) as f:
         for line in f:
@@ -1003,6 +1009,8 @@ def parse_master_externs(path: str) -> dict[int, str]:
             if not m:
                 continue
             name = m.group(1)
+            if enum_prefix.match(name):
+                continue
             value = int(m.group(2), 16)
             out.setdefault(value, name)
     return out

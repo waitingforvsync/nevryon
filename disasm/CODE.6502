@@ -1269,13 +1269,13 @@ scroll_upper_dst_hi = * + 2
     BEQ L1781
     CMP #&06
     BEQ L1793
-    LDA #&01
+    LDA #enemy_state_initial_pat14
     STA enemy_state,X
     LDA #&9A
     STA enemy_y,X
     RTS
 .L1781
-    LDA #&03
+    LDA #enemy_state_initial_pat5
     STA enemy_state,X
     JSR lfsr_random
     SEC
@@ -1284,7 +1284,7 @@ scroll_upper_dst_hi = * + 2
     STA enemy_y,X
     RTS
 .L1793
-    LDA #&05
+    LDA #enemy_state_initial_pat6
     STA enemy_state,X
     JSR lfsr_random
     SEC
@@ -1460,24 +1460,24 @@ scroll_upper_dst_hi = * + 2
     JMP L1858
 .L18A1
     LDY enemy_state,X
-    CPY #&09
+    CPY #enemy_state_invincible_min
     BCC L18A9
     RTS
 .L18A9
     INY
     TYA
     STA enemy_state,X
-    CPY #&03
+    CPY #enemy_state_kill_pat14
     BEQ L18BD
-    CPY #&05
+    CPY #enemy_state_kill_pat5
     BEQ L18BD
-    CPY #&07
+    CPY #enemy_state_kill_pat6
     BEQ L18BD
     JMP L18D1
 .L18BD
     LDA #&07
     JSR OSWRCH
-    LDA #&0A
+    LDA #enemy_state_hit_frame_1
     STA enemy_state,X
     JSR add_score_x1
     INC pickup_kill_count
@@ -1592,7 +1592,7 @@ scroll_upper_dst_hi = * + 2
 .L1993
     LDA enemy_state,X
     BEQ L198D
-    CMP #&0A
+    CMP #enemy_state_hit_frame_1
     BCS L198D
     STX data_16F5
     LDA enemy_y,X
@@ -1631,7 +1631,7 @@ scroll_upper_dst_hi = * + 2
     LDA #&07
     JSR OSWRCH
     LDX data_16F5
-    LDA #&0A
+    LDA #enemy_state_hit_frame_1
     STA enemy_state,X
     JSR add_score_x1
     INC pickup_kill_count
@@ -1646,7 +1646,7 @@ scroll_upper_dst_hi = * + 2
 .L19FE
     LDA hazard_type,X
     BEQ L19F8
-    CMP #&14
+    CMP #hazard_type_death_start
     BCS L19F8
     STX data_16F5
     LDA hazard_y,X
@@ -1832,7 +1832,7 @@ scroll_upper_dst_hi = * + 2
     STA enemy_pattern_step,X
     LDA data_16F6
     BEQ L1B4F
-    CMP #&01
+    CMP #pattern_dir_pos
     BEQ L1B46
     LDA enemy_y,X
     SEC
@@ -1847,7 +1847,7 @@ scroll_upper_dst_hi = * + 2
 .L1B4F
     LDA data_16F7
     BEQ L1B61
-    CMP #&01
+    CMP #pattern_dir_pos
     BNE L1B5E
     INC enemy_x,X
     JMP L1B61
@@ -1891,28 +1891,28 @@ scroll_upper_dst_hi = * + 2
     LDA zp_7F
     CMP #&04
     BNE L1BD1
-    LDA #&03
+    LDA #pattern_dir_neg
     STA data_16F7
     LDA zp_player_y
     CMP enemy_y,X
     BCC L1BC4
-    LDA #&01
+    LDA #pattern_dir_pos
     STA data_16F6
     LDY enemy_pattern_step,X
     INY
     CPY enemy_pattern_len
     RTS
 .L1BC4
-    LDA #&03
+    LDA #pattern_dir_neg
     STA data_16F6
     LDY enemy_pattern_step,X
     INY
     CPY enemy_pattern_len
     RTS
 .L1BD1
-    LDA #&03
+    LDA #pattern_dir_neg
     STA data_16F7
-    LDA #&00
+    LDA #pattern_dir_none
     STA data_16F6
     LDY enemy_pattern_step,X
     INY
@@ -1935,14 +1935,14 @@ scroll_upper_dst_hi = * + 2
     \ Outputs: sprite_src_lo / _hi set for the caller to plot.
     LDX data_16F5
     LDA enemy_state,X
-    CMP #&0A
+    CMP #enemy_state_hit_frame_1
     BCC L1BFB
     BEQ enemy_hit_frame1
-    CMP #&0B
+    CMP #enemy_state_hit_frame_2
     BEQ enemy_hit_frame2
-    CMP #&0C
+    CMP #enemy_state_hit_frame_3
     BEQ enemy_hit_frame3
-    CMP #&0D
+    CMP #enemy_state_hit_erase
     BEQ enemy_hit_erase
 .L1BFB
     TAX
@@ -2037,7 +2037,7 @@ scroll_upper_dst_hi = * + 2
 .L1C5D
     STX data_16F5
     LDA enemy_state,X
-    CMP #&0A
+    CMP #enemy_state_hit_frame_1
     BCC L1C68
     RTS
 .L1C68
@@ -2071,7 +2071,7 @@ scroll_upper_dst_hi = * + 2
     CMP hazard_y,X
     BCC L1C78
     LDX data_16F5
-    LDA #&0A
+    LDA #enemy_state_hit_frame_1
     STA enemy_state,X
     LDA #&07
     JMP OSWRCH
@@ -2140,7 +2140,7 @@ scroll_upper_dst_hi = * + 2
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX data_16F5
-    LDA #&0A
+    LDA #enemy_state_hit_frame_1
     STA enemy_state,X
     JSR add_score_x1
     INC pickup_kill_count
@@ -2658,9 +2658,9 @@ L2016            = * + 1
     LDA #&04
     STA hazard_step,X
     LDA hazard_type,X
-    CMP #&10
+    CMP #hazard_type_anim_ping_b
     BEQ L20FA
-    CMP #&07
+    CMP #hazard_type_forcefield
     BEQ L2102
     CMP #&03
     BCC L2102
@@ -2845,7 +2845,7 @@ L2016            = * + 1
     \ across frames, so anim advances 50% of the time) and fall into hazard_anim_advance.
     JSR hazard_type_dispatch
     LDA hazard_type,X
-    CMP #&14
+    CMP #hazard_type_death_start
     BCC L2260
     JMP hazard_death_step
 .L2260
@@ -2865,17 +2865,17 @@ L2016            = * + 1
     \ &04..&07, &0A..&0E, &11..&13 → hazard_anim_done (no animation — action types or static decor)
     \ type >= &14 → hazard_death_step (the explosion-animation tail)
     LDA hazard_type,X
-    CMP #&04
+    CMP #hazard_type_fires_bullet_a
     BCC anim_loop_1_to_3
-    CMP #&08
+    CMP #hazard_type_fires_flame
     BEQ anim_toggle_8_9
-    CMP #&09
+    CMP #hazard_type_flame_idle
     BEQ anim_toggle_8_9
-    CMP #&0F
+    CMP #hazard_type_anim_ping_a
     BEQ anim_set_type_10
-    CMP #&10
+    CMP #hazard_type_anim_ping_b
     BEQ anim_set_type_F
-    CMP #&14
+    CMP #hazard_type_death_start
     BCC hazard_anim_done
     JMP hazard_death_step
 
@@ -2886,7 +2886,7 @@ L2016            = * + 1
     \ type back to 1.
     INC hazard_type,X
     LDA hazard_type,X
-    CMP #&04
+    CMP #hazard_type_fires_bullet_a
     BNE hazard_anim_done
     LDA #&01
     STA hazard_type,X
@@ -2912,7 +2912,7 @@ L2016            = * + 1
     \ hazard_type = &14 to start the death anim.
     INC hazard_type,X
     LDA hazard_type,X
-    CMP #&1C
+    CMP #hazard_type_death_clear
     BNE hazard_anim_done
     LDA #&00
     STA hazard_type,X
@@ -2933,11 +2933,11 @@ L2016            = * + 1
     \ type &13 → enqueue_npc_bullet (same as type 4 — second hazard variant that fires a bullet)
     \ else → RTS (no per-frame action; the slot just gets drawn and frame-advanced)
     LDA hazard_type,X
-    CMP #&04
+    CMP #hazard_type_fires_bullet_a
     BNE L22BC
     JMP enqueue_npc_bullet
 .L22BC
-    CMP #&13
+    CMP #hazard_type_fires_bullet_b
     BNE L22CF
     JMP enqueue_npc_bullet
 
@@ -2945,14 +2945,14 @@ L2016            = * + 1
     \ Frame-advance for type-&0F hazards → set hazard_type = &10. Pairs with anim_set_type_F to form
     \ a 2-frame ping-pong (F↔10) for whichever hazard type this is (likely a 2-frame animated decor
     \ / persistent enemy with no death state).
-    LDA #&10
+    LDA #hazard_type_anim_ping_b
     STA hazard_type,X
     RTS
 
 .anim_set_type_F
     \ Frame-advance for type-&10 hazards → set hazard_type = &0F. The other half of the F↔10
     \ ping-pong (see anim_set_type_10).
-    LDA #&0F
+    LDA #hazard_type_anim_ping_a
     STA hazard_type,X
     RTS
 .L22CF
@@ -3200,7 +3200,7 @@ L2016            = * + 1
     LDX data_16F5
     RTS
 .L2458
-    LDA #&14
+    LDA #hazard_type_death_start
     LDX data_16F5
     STA hazard_type,X
     LDX data_16F5
@@ -3394,7 +3394,7 @@ L2016            = * + 1
     RTS
 .L255D
     LDA enemy_state,X
-    CMP #&09
+    CMP #enemy_state_invincible_min
     BCC L2565
     RTS
 .L2565
@@ -3419,7 +3419,7 @@ L2016            = * + 1
     SBC #&14
     CMP zp_test_y
     BCS L259E
-    LDA #&0A
+    LDA #enemy_state_hit_frame_1
     STA enemy_state,X
     LDA #&07
     JSR OSWRCH
