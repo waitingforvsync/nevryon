@@ -1161,37 +1161,24 @@ scroll_upper_dst_hi = * + 2
 .L16E5
     RTS
 
-\ ----- data &16E6..&16F5 -----
-\ Player bullet pool state: player_bullet_x[7] at &16E6 + player_bullet_y[7] at &16ED + 1 B gap at
-\ &16F4 before data_16F5 (scratch). The arrays are 7 bytes wide because the predec iterator (LDX
-\ #n_player_bullets / DEX BNE) accesses slots 1..6 — slot 0 is unused but reserved by the array's
-\ address arithmetic.
+\ ----- data &16E6..&1712 -----
 .player_bullet_x
     EQUB &00, &00, &00, &00, &00, &00, &00
 .player_bullet_y
     EQUB &00, &00, &00, &00, &00, &00, &00, &EA
-
-\ ----- code &16F5..&16FD -----
 .data_16F5
-    NOP
+    EQUB &EA
 .data_16F6
-    NOP
+    EQUB &EA
 .data_16F7
-    NOP
+    EQUB &EA
 .data_16F8
-    NOP
-    NOP
-    NOP
-.tbl_16FB
-    NOP
-    BRK
-
-\ ----- data &16FD..&1712 -----
-.data_16FD
-    EQUB &74, &14, &80, &EA, &EA
-.tbl_1702
+    EQUB &EA, &EA, &EA
+.enemy_pattern_ptr_lo
+    EQUB &EA, &00, &74, &14, &80, &EA, &EA
+.enemy_pattern_ptr_hi
     EQUB &EA, &45, &45, &46, &46, &EA, &EA
-.tbl_1709
+.enemy_pattern_len_lut
     EQUB &EA, &78, &9C, &60, &D6, &EA, &EA
 .enemy_pattern_len
     EQUB &EA, &EA
@@ -1201,8 +1188,13 @@ scroll_upper_dst_hi = * + 2
     \ Periodic background-enemy spawner. Called once per game_step. Doesn't run after the map has
     \ wrapped (zp_scroll_col == &F0). Otherwise paces on zp_87 (sub-counter, 0..A): when zp_87
     \ reaches &0A, waits for the enemy field to fully empty, then advances `zp_86` (pattern
-    \ selector, cycles 1..6 wrapping back to 1) and pre-loads the per-pattern parameters from the
-    \ LUTs at tbl_16FB / tbl_1702 / tbl_1709.
+    \ selector, cycles 1..6 wrapping back to 1) and pre-loads the per-pattern parameters:
+    \ enemy_pattern_ptr_lo[zp_86] → zp_88   (script ptr LO)
+    \ enemy_pattern_ptr_hi[zp_86] → zp_89   (script ptr HI)
+    \ enemy_pattern_len_lut[zp_86] → enemy_pattern_len   (script wrap-around byte count)
+    \ The four valid scripts (idx 1..4) live at &4500 / &4574 / &4614 / &4680 inside the GRAPHIX
+    \ region — sequences of (dy_dir, dx_dir) byte pairs that L1B87 walks per enemy slot to drive
+    \ motion.
     \
     \ On the other 10 calls of each cycle: INCs zp_87 and spawns one enemy into the first free slot
     \ — enemy_x = &25 (right edge); enemy_state / enemy_y set per pattern (patterns 5/6: state 3/5,
@@ -1233,11 +1225,11 @@ scroll_upper_dst_hi = * + 2
     STA zp_86
 .L173D
     TAX
-    LDA tbl_1709,X
+    LDA enemy_pattern_len_lut,X
     STA enemy_pattern_len
-    LDA tbl_16FB,X
+    LDA enemy_pattern_ptr_lo,X
     STA zp_88
-    LDA tbl_1702,X
+    LDA enemy_pattern_ptr_hi,X
     STA zp_89
     LDA #&00
     STA zp_87

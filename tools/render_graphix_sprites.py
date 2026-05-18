@@ -108,9 +108,11 @@ CATALOG = [
     (0x4478, "missile_3",             5, 8),
     (0x44A0, "missile_4",             5, 8),
     # &44C8..&44FF: 56 B padding
-    # &4500..&474F: orphan_4500, 592 B of sprite-like bytes (`00 03 00 03 ...`)
-    # — no references in CODE/CODE2/CODE3 or any BASIC loader. Dead data.
-    (0x4500, "orphan_4500",           1, 592),  # rendered as a strip
+    # &4500..&474F: enemy_pattern_scripts — 592 B of NPC motion-script
+    # data, NOT sprite data. Four scripts at offsets +0 / +&74 / +&114 /
+    # +&180 hold (dy_dir, dx_dir) byte-pair sequences walked by L1B87 to
+    # drive enemy motion. Referenced via enemy_pattern_ptr_lo / _hi in
+    # CODE at &16FB / &1702. Skipped here — bytes are not pixels.
     # &4750..&476F: 4th pickup variant — 2×16
     (0x4750, "pickup_white",          2, 16),
     # &4770..&477F: 16 B padding

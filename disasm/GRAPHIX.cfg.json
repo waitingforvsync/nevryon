@@ -95,7 +95,7 @@
     "0x4478": "gfx_missile_3",
     "0x44A0": "gfx_missile_4",
     "0x44C8": "gfx_pad_44C8",
-    "0x4500": "gfx_orphan_4500",
+    "0x4500": "enemy_pattern_scripts",
     "0x4750": "gfx_pickup_white",
     "0x4770": "gfx_pad_4770",
     "0x4780": "gfx_text_pause",

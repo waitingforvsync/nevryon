@@ -41,6 +41,13 @@
       "comment": "Player bullet pool state: player_bullet_x[7] at &16E6 + player_bullet_y[7] at &16ED + 1 B gap at &16F4 before data_16F5 (scratch). The arrays are 7 bytes wide because the predec iterator (LDX #n_player_bullets / DEX BNE) accesses slots 1..6 — slot 0 is unused but reserved by the array's address arithmetic."
     },
     {
+      "start": "0x16F5",
+      "end": "0x1712",
+      "kind": "data",
+      "width": 1,
+      "comment": "Shared scratch slots + enemy-motion-pattern LUTs.\n\n&16F5..&16FA: 6 bytes used by many routines as X / Y register save slots across nested JSRs. data_16F5 is the most-used (slot-index save); data_16F6 / _16F7 are dual-purpose — in update_hazards / L1B87 they hold the per-frame enemy direction bytes (dy / dx) freshly read from the active pattern script, but in check_bullet_hits / npc_bullet_alloc / etc. they get reused as inner-loop X-save. data_16F8 is forcefield_draw_or_erase's X-save.\n\n&16FB..&170F: three 7-entry parallel LUTs indexed by zp_86 (= pattern selector 1..6). When `spawn_periodic_enemy` advances to a new pattern, it loads:\n  enemy_pattern_ptr_lo[zp_86] → zp_88 (script ptr LO)\n  enemy_pattern_ptr_hi[zp_86] → zp_89 (script ptr HI)\n  enemy_pattern_len_lut[zp_86] → enemy_pattern_len (wrap-around byte count)\nThe four valid patterns (idx 1..4) point at scripts stored INSIDE the GRAPHIX region previously called gfx_orphan_4500 — &4500 (len &78), &4574 (&9C), &4614 (&60), &4680 (&D6). Index 0, 5, 6 entries are &EA placeholders (patterns 5 and 6 are special-cased in update_hazards / L1B87 — player-homing — and don't use a script).\n\n&1710..&1711: enemy_pattern_len (the active pattern's length, copied from enemy_pattern_len_lut on pattern change) + 1 trailing pad byte."
+    },
+    {
       "start": "0x1A55",
       "end": "0x1A8B",
       "kind": "data",
@@ -122,6 +129,9 @@
     "0x15C4": "update_player_missiles",
     "0x1689": "plot_player_missile",
     "0x1710": "enemy_pattern_len",
+    "0x16FB": "enemy_pattern_ptr_lo",
+    "0x1702": "enemy_pattern_ptr_hi",
+    "0x1709": "enemy_pattern_len_lut",
     "0x1A55": "enemy_x",
     "0x1A60": "enemy_y",
     "0x1A6B": "enemy_state",
@@ -272,7 +282,7 @@
     "0x1D35": "Per-frame mover for the 6-slot npc_bullet pool (shared by enemies and hazards). Iterates X = n_npc_bullets..1 (predec); for each active slot (npc_bullet_x[X] != &FF):\\n  - DEC X by 2 (move 2 px left)\\n  - if X dropped to &00 / &01, ERASE (plot 2×2 from lev_erase_brush + &102) and deactivate (slot = &FF)\\n  - else RE-PLOT the 4×2-px white bullet via a 3×2 read of `npc_bullet_sprite`: visible col 0 + 2-col zero trail that erases the previous frame's tail (NPC bullets move LEFT)\\n  - call npc_bullet_collide_player\\n\\nFinally DECs zp_7E (the global enemy-fire cooldown).",
     "0x13D1": "ONE TILE COLUMN of game progress. Called once per main_loop iteration.\\n\\nPer-column setup (once per call):\\n  - try_spawn_pickup, spawn_periodic_enemy, spawn_check_step\\n  - resolve right-edge upper / lower tile pointers via tile_upper_ptr_calc / tile_lower_ptr_calc\\n  - INC zp_scroll_col (wraps &F0+ back to &F0 = end-of-map loop)\\n  - check PAUSE key\\n\\nThen runs 4 sub-frames (the `play_subframe` loop, gated by `zp_get_ready_erase` 0→1→2→3→4). Each subframe scrolls the playfield by 4 px → 16 px per game_step call = one tile cell.\\n\\nPer-subframe work: update_hazard_missiles → draw_score → force_pod_anim → frame_delay → update_enemies → scroll_step (which scrolls 4 px + calls update_hazards) → update_pickup → read_input. On even columns, also bumps zp_frame_progress and runs get_ready_overlay.\\n\\nReturns early once `lives_left` reaches 0.",
     "0x143C": "Body of game_step's per-subframe inner loop. Runs once per BBC display frame (gated by frame_delay). 4 iterations are run per game_step (= per tile-column of horizontal scroll), producing the 4-frame soft-scroll animation between successive columns.",
-    "0x1712": "Periodic background-enemy spawner. Called once per game_step. Doesn't run after the map has wrapped (zp_scroll_col == &F0). Otherwise paces on zp_87 (sub-counter, 0..A): when zp_87 reaches &0A, waits for the enemy field to fully empty, then advances `zp_86` (pattern selector, cycles 1..6 wrapping back to 1) and pre-loads the per-pattern parameters from the LUTs at tbl_16FB / tbl_1702 / tbl_1709.\\n\\nOn the other 10 calls of each cycle: INCs zp_87 and spawns one enemy into the first free slot — enemy_x = &25 (right edge); enemy_state / enemy_y set per pattern (patterns 5/6: state 3/5, Y random in [&97..&D7]; others: state 1, Y = &9A fixed).",
+    "0x1712": "Periodic background-enemy spawner. Called once per game_step. Doesn't run after the map has wrapped (zp_scroll_col == &F0). Otherwise paces on zp_87 (sub-counter, 0..A): when zp_87 reaches &0A, waits for the enemy field to fully empty, then advances `zp_86` (pattern selector, cycles 1..6 wrapping back to 1) and pre-loads the per-pattern parameters:\\n  enemy_pattern_ptr_lo[zp_86] → zp_88   (script ptr LO)\\n  enemy_pattern_ptr_hi[zp_86] → zp_89   (script ptr HI)\\n  enemy_pattern_len_lut[zp_86] → enemy_pattern_len   (script wrap-around byte count)\\nThe four valid scripts (idx 1..4) live at &4500 / &4574 / &4614 / &4680 inside the GRAPHIX region — sequences of (dy_dir, dx_dir) byte pairs that L1B87 walks per enemy slot to drive motion.\\n\\nOn the other 10 calls of each cycle: INCs zp_87 and spawns one enemy into the first free slot — enemy_x = &25 (right edge); enemy_state / enemy_y set per pattern (patterns 5/6: state 3/5, Y random in [&97..&D7]; others: state 1, Y = &9A fixed).",
     "0x25AA": "Try to start a power-up pickup. Triggered when `pickup_kill_count` (the kill-milestone counter — INC'd in check_bullet_hits at enemy-hit values 3/5/7) reaches &0A. Requires no pickup already active (`pickup_state == 0`) and `player_missiles_unlocked != 1` (= the 7th-pickup ceiling — once the player has collected 7 power-ups, no more spawn).\\n\\nOn success: stashes player_y in pickup_y, sets pickup_x = &27 (right edge col 39), pickup_state = 1, and plays sfx_level_start.",
     "0x2693": "Per-subframe power-up pickup updater. Returns immediately if `pickup_state == 0`. Otherwise:\\n  - call L275F (= pickup_collected — collision test)\\n  - conditionally advance pickup_state\\n  - DEC pickup_x (drifts the pickup leftward 1 px per subframe)\\n  - on pickup_x == 0: deactivate (pickup_state = 0) and erase\\n\\nWhile alive, plots one of two sprites based on the current `pickup_state` for a flashing animation: state 2/6 = gfx_pickup_yellow, state 3/5 = gfx_pickup_red, others = erase. Wraps at &0A back to 1.",
     "0x2690": "Power-up pickup X coordinate (column). DEC'd by 1 each subframe of game_step (so the pickup drifts leftward 16 px/sec = 4 px per game_step). When it hits 0, update_pickup deactivates and erases. Initial value &27 (right edge) on spawn from try_spawn_pickup.",
@@ -360,6 +370,9 @@
     "0x1C0C": ["enemy_anim_ptr_lo", 7],
     "0x1C13": ["enemy_anim_ptr_hi", 7],
     "0x156F": ["player_missile_x", 2],
+    "0x16FB": ["enemy_pattern_ptr_lo", 7],
+    "0x1702": ["enemy_pattern_ptr_hi", 7],
+    "0x1709": ["enemy_pattern_len_lut", 7],
     "0x1571": ["player_missile_y", 2],
     "0x1575": ["player_missile_active", 2],
     "0x16E6": ["player_bullet_x", 7],
