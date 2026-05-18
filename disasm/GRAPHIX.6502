@@ -28,7 +28,10 @@ ORG &3680
 
 
 \ ----- data &3680..&4900 -----
-\ shared sprite atlas — column-major 4×N sprites. Sprite-start addresses below are derived from `LDA #lo;STA &1194; LDA #hi;STA &1195` patterns in CODE/CODE2/CODE3 plus the LEVD2 enemy-ptr-table entries that point into this region. Boundaries are approximate where the code references don't pin them down — refine as we learn more.
+\ shared sprite atlas — column-major 4×N sprites. Sprite-start addresses below are derived from `LDA
+\ #lo;STA &1194; LDA #hi;STA &1195` patterns in CODE/CODE2/CODE3 plus the LEVD2 enemy-ptr-table
+\ entries that point into this region. Boundaries are approximate where the code references don't
+\ pin them down — refine as we learn more.
 .gfx_muzzle_flash_frame0
     EQUB &00, &00, &00, &00, &00, &00, &02, &00
     EQUB &04, &00, &00, &01, &00, &00, &00, &00

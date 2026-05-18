@@ -229,19 +229,23 @@ def fmt_hex(value: int, width: int) -> str:
     return f"&{value:0{width}X}"
 
 
-def emit_comment_block(cmt: str, lines: list[str]) -> None:
+def emit_comment_block(cmt: str, lines: list[str], indent: str = "    ") -> None:
     """Append `\\ ...` comment lines for `cmt` to `lines`, with paragraph
     breaks preserved (the literal "\\n" two-char sequence or a real newline
-    in the cfg source) and each paragraph word-wrapped at 94 cols (so the
-    `    \\ ` prefix + text stays under 100 cols total)."""
+    in the cfg source) and each paragraph word-wrapped so the prefix + body
+    stays under 100 cols total. `indent` is the whitespace before the `\\`
+    (default 4 spaces for instruction-attached comments; pass "" for
+    region-header comments)."""
+    body_width = 100 - len(indent) - 2  # "\\ " is 2 more chars after indent
     for para in cmt.replace("\\n", "\n").split("\n"):
         para = para.lstrip()
         if not para:
-            lines.append("    \\")
+            lines.append(f"{indent}\\")
             continue
-        for ln in textwrap.wrap(para, width=94, break_long_words=False,
+        for ln in textwrap.wrap(para, width=body_width,
+                                break_long_words=False,
                                 break_on_hyphens=False):
-            lines.append(f"    \\ {ln}")
+            lines.append(f"{indent}\\ {ln}")
 
 
 def fmt_operand(mode: str, value: int, target_label: str | None) -> str:
@@ -964,7 +968,7 @@ def disassemble(data: bytes, cfg: DisasmConfig) -> str:
         lines.append("")
         lines.append(f"\\ ----- {r.kind} {fmt_hex(r.start, 4)}..{fmt_hex(r.end, 4)} -----")
         if r.comment:
-            lines.append(f"\\ {r.comment}")
+            emit_comment_block(r.comment, lines, indent="")
         if r.kind == "code":
             disasm_code_region(data, cfg.base, r, cfg.labels, cfg.extern_labels,
                                cfg.comments, lines, cfg.immediate_overrides,

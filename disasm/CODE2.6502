@@ -419,7 +419,12 @@ data_28D8        = * + 1
     RTS
 
 \ ----- data &2A02..&2A08 -----
-\ Score: 6-byte BCD buffer, most-significant digit first. Bytes 0..3 are the four upper display digits (ten-thousands → tens of thousands → thousands → hundreds), byte 4 is the tens digit (which is what add_score_x1/x10 actually increment), byte 5 is always 0 (the trailing '0' that appears on screen — Nevryon awards score in multiples of 10). draw_score loops X=0..5 reading score,X. add_score_x1 / add_score_x10 in CODE add zp_score_acc (or zp_score_acc×10) at byte 4 / byte 3 with carry propagating upward through bytes 3..0.
+\ Score: 6-byte BCD buffer, most-significant digit first. Bytes 0..3 are the four upper display
+\ digits (ten-thousands → tens of thousands → thousands → hundreds), byte 4 is the tens digit (which
+\ is what add_score_x1/x10 actually increment), byte 5 is always 0 (the trailing '0' that appears on
+\ screen — Nevryon awards score in multiples of 10). draw_score loops X=0..5 reading score,X.
+\ add_score_x1 / add_score_x10 in CODE add zp_score_acc (or zp_score_acc×10) at byte 4 / byte 3 with
+\ carry propagating upward through bytes 3..0.
 .score
     EQUB &00, &00, &00, &00, &00, &00
 
@@ -1246,7 +1251,8 @@ L2FF0            = * + 1
     RTS
 
 \ ----- data &3041..&30F8 -----
-\ Starfield engine state — three parallel 61-byte arrays. Loop bound is X<60 (60 active stars; the 61st slot in each array is unused). Mutated in place every frame by starfield_update in CODE.
+\ Starfield engine state — three parallel 61-byte arrays. Loop bound is X<60 (60 active stars; the
+\ 61st slot in each array is unused). Mutated in place every frame by starfield_update in CODE.
 .starfield_pos_lo
     EQUB &00, &D0, &18, &30, &48, &F0, &F0, &10
     EQUB &08, &38, &D0, &98, &68, &70, &68, &90

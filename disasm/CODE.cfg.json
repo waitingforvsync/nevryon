@@ -27,6 +27,13 @@
       "comment": "Lives counters (player_hp, lives_left) + first three of the six per-hazard-slot state arrays (hazard_x[10], hazard_y[9], hazard_type[9]). All are pure data — the tracer otherwise mis-decodes them as `ASL zp_06` / BRK / NOP because the initial bytes happen to be valid opcodes. The remaining three arrays (hazard_flip / _hp / _step) are already in the synthesised data region at &206E..&208A."
     },
     {
+      "start": "0x156F",
+      "end": "0x1577",
+      "kind": "data",
+      "width": 1,
+      "comment": "Player-missile pool state: player_missile_x[2] + player_missile_y[2] + player_missile_frame (1 B) + player_missile_step (1 B) + player_missile_active[2] (= 8 B covering &156F..&1576). All zero on the disk; populated by fire_player_missiles when the tier-7 pickup unlocks the missiles. Tracer would otherwise decode the zero bytes as BRK."
+    },
+    {
       "start": "0x16E6",
       "end": "0x16F5",
       "kind": "data",

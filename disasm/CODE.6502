@@ -807,7 +807,7 @@ scroll_upper_dst_hi = * + 2
     \ Disk-initial value is 1.
     EQUB &01
 
-\ ----- code &14D9..&1575 -----
+\ ----- code &14D9..&156F -----
 .read_input
     \ Per-frame input reader. If joystick mode (zp_9F == 1) takes the read_joystick path; otherwise
     \ scans the five keys KEY_RIGHT / KEY_LEFT / KEY_UP / KEY_DOWN / KEY_FIRE in turn via
@@ -913,21 +913,19 @@ scroll_upper_dst_hi = * + 2
     DEC zp_player_x
     RTS
 
+\ ----- data &156F..&1577 -----
+\ Player-missile pool state: player_missile_x[2] + player_missile_y[2] + player_missile_frame (1 B)
+\ + player_missile_step (1 B) + player_missile_active[2] (= 8 B covering &156F..&1576). All zero on
+\ the disk; populated by fire_player_missiles when the tier-7 pickup unlocks the missiles. Tracer
+\ would otherwise decode the zero bytes as BRK.
 .player_missile_x
-    BRK
-    BRK
-
+    EQUB &00, &00
 .player_missile_y
-    BRK
-    BRK
-
+    EQUB &00, &00
 .player_missile_frame
-    BRK
-
+    EQUB &00
 .player_missile_step
-    BRK
-
-\ ----- data &1575..&1577 -----
+    EQUB &00
 .player_missile_active
     EQUB &EA, &EA
 
@@ -1158,7 +1156,10 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 \ ----- data &16E6..&16F5 -----
-\ Player bullet pool state: player_bullet_x[7] at &16E6 + player_bullet_y[7] at &16ED + 1 B gap at &16F4 before data_16F5 (scratch). The arrays are 7 bytes wide because the predec iterator (LDX #n_player_bullets / DEX BNE) accesses slots 1..6 — slot 0 is unused but reserved by the array's address arithmetic.
+\ Player bullet pool state: player_bullet_x[7] at &16E6 + player_bullet_y[7] at &16ED + 1 B gap at
+\ &16F4 before data_16F5 (scratch). The arrays are 7 bytes wide because the predec iterator (LDX
+\ #n_player_bullets / DEX BNE) accesses slots 1..6 — slot 0 is unused but reserved by the array's
+\ address arithmetic.
 .player_bullet_x
     EQUB &00, &00, &00, &00, &00, &00, &00
 .player_bullet_y
@@ -1940,7 +1941,13 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 \ ----- data &1C0C..&1C1A -----
-\ Per-state animation-frame sprite-pointer LUT (parallel LSB+HSB tables, 7 entries each, indexed by enemy_state in [0..6]). Read by enemy_anim_dispatch (L1BE3). Slot 0 = &EAEA (placeholder; state 0 = inactive, never plotted). Slots 1..4 = lev_enemy_0..3 (the four 4×24 small-enemy frames in LEVD1). Slots 5..6 = gfx_enemy_small_frame0/1 in GRAPHIX (two 4×24 frames of a winged creature). Earlier GRAPHIX cfg labels mis-split this region into gfx_pad/gfx_bomb/3×24-frames; corrected in Session 22 to two contiguous 4×24 sprites at &4840 and &48A0, exactly back-to-back to the IRQ handler at &4900.
+\ Per-state animation-frame sprite-pointer LUT (parallel LSB+HSB tables, 7 entries each, indexed by
+\ enemy_state in [0..6]). Read by enemy_anim_dispatch (L1BE3). Slot 0 = &EAEA (placeholder; state 0
+\ = inactive, never plotted). Slots 1..4 = lev_enemy_0..3 (the four 4×24 small-enemy frames in
+\ LEVD1). Slots 5..6 = gfx_enemy_small_frame0/1 in GRAPHIX (two 4×24 frames of a winged creature).
+\ Earlier GRAPHIX cfg labels mis-split this region into gfx_pad/gfx_bomb/3×24-frames; corrected in
+\ Session 22 to two contiguous 4×24 sprites at &4840 and &48A0, exactly back-to-back to the IRQ
+\ handler at &4900.
 .enemy_anim_ptr_lo
     EQUB &EA
     EQUB LO(lev_enemy_0)
