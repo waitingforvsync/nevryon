@@ -1083,13 +1083,19 @@ scroll_upper_dst_hi = * + 2
 
 .plot_player_missile
     \ Plot one player-missile frame at the screen position already set up by the caller's
-    \ `calc_screen_addr`. Selects the source sprite via an inline multiply-by-&28: src = &4400 +
-    \ (player_missile_frame - 1) * &28, for frames 1..5 → &4400 / &4428 / &4450 / &4478 / &44A0 =
-    \ `gfx_missile_0..4` (5×8 each).
+    \ `calc_screen_addr`.
     \
-    \ Inputs: zp_dest_x set by caller; player_missile_frame ∈ [1, 5].
-    \ Plots 5×8 px sprite.
-    LDA #&00
+    \ The source sprite is selected by an inline multiply-by-&28 on player_missile_frame. The
+    \ starting LO byte is `LO(gfx_missile_0)` (= 0), then the loop adds &28 once per frame index and
+    \ the trailing SBC #&28 corrects for the off-by-one, yielding `LO(gfx_missile_(frame-1))`. HI is
+    \ `HI(gfx_missile_0)` since all five frames live in the same page (&44).
+    \
+    \ Inputs:
+    \ player_missile_frame ∈ [1, 5] — selects gfx_missile_0..gfx_missile_4
+    \ zp_dest_x_lo / _hi = destination screen address (set by caller)
+    \
+    \ Plots a 5×8 px sprite via JMP sprite_plot_xy.
+    LDA #LO(gfx_missile_0)
     LDX player_missile_frame
     CLC
 .L168F
@@ -1099,7 +1105,7 @@ scroll_upper_dst_hi = * + 2
     SEC
     SBC #&28
     STA sprite_src_lo
-    LDA #&44
+    LDA #HI(gfx_missile_0)
     STA sprite_src_hi
     LDX #&05
     LDY #&08
