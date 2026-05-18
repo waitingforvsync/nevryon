@@ -91,8 +91,13 @@ ORG &1100
 
 \ ----- code &1100..&116B -----
 .main_init
-    \ Entry: restore saved score, run per-level init, draw the title screen, then drop into
-    \ main_loop. Called as `CALL &1100` from BASIC Runner/Loader4 on each level start.
+    \ Main game entry point — called as `CALL &1100` from BASIC Runner / Loader4 on each level
+    \ start. Restores the saved score from the loader persistence area at &0CF3+, runs per-level
+    \ `init`, draws the title screen, then drops into `main_loop`.
+    \
+    \ Inputs: ?&9D = current level number (set by Runner).
+    \
+    \ Effects: restores score / lives / scoreboard state; resets per-level engine state.
     JSR restore_score_from_loader
     JSR init
     JSR draw_title_screen
@@ -131,10 +136,10 @@ ORG &1100
     \ Inputs: 5-byte state at zp_0D..zp_11 (seeded by init; must be non-zero).
     \
     \ Outputs:
-    \ rndval256 (&116B) = raw byte, 0..255
-    \ rndval64  (&116C) = raw >> 2, 0..63
-    \ rndval32  (&116D) = raw >> 3, 0..31
-    \ rndval16  (&116E) = raw >> 4, 0..15
+    \ rndval256 = raw byte, 0..255
+    \ rndval64  = raw >> 2, 0..63
+    \ rndval32  = raw >> 3, 0..31
+    \ rndval16  = raw >> 4, 0..15
     \
     \ Heavy users: starfield_update (one rndval256 read per star per frame) and forcefield_render
     \ (reads rndval256 to pick a sideways-ROM offset per noise byte).
@@ -183,17 +188,16 @@ ORG &1100
 
 .sprite_plot_xy
     \ Plot a column-major sprite to the screen. Walks W byte-cols × H scanlines through the source
-    \ via the self-modified LDA at sprite_src_lo/_hi (&1194), writing pixel-bytes directly to screen
-    \ RAM via the zp_screen_ptr that's set up internally from zp_dest_x. No blending — non-zero
-    \ source bytes overwrite the screen, zero bytes blank to black (which is how erase brushes
-    \ work).
+    \ via the self-modified LDA at sprite_src_lo/_hi, writing pixel-bytes directly to screen RAM via
+    \ the zp_screen_ptr that's set up internally from zp_dest_x. No blending — non-zero source bytes
+    \ overwrite the screen, zero bytes blank to black (which is how erase brushes work).
     \
     \ Inputs:
     \ X = sprite width in byte-cols (each byte-col is 4 pixels wide)
     \ Y = sprite height in scanlines
-    \ sprite_src_lo / _hi (&1194/&1195) = source byte address (self-modified operand)
-    \ zp_dest_x_lo / _hi (&76/&77) = destination screen address (typically from calc_screen_addr)
-    \ zp_sprite_dir_flag (&79) = 1 forward, 0 vertical-flip (source read back-to-front)
+    \ sprite_src_lo / _hi = source byte address (self-modified operand)
+    \ zp_dest_x_lo / _hi = destination screen address (typically from calc_screen_addr)
+    \ zp_sprite_dir_flag = 1 forward, 0 vertical-flip (source read back-to-front)
     \
     \ Clobbers: A, X, Y, zp_70..zp_78 scratch area.
     STX zp_sprite_cols_remaining
@@ -301,17 +305,17 @@ sprite_src_hi    = * + 2
 \ ----- code &1236..&1307 -----
 .calc_screen_addr
     \ Compute screen address from char-col X and caller-Y, store the result in zp_dest_x_lo/_hi
-    \ (&76/&77) ready for sprite_plot_xy. Caller-Y origin is at the BOTTOM of the screen — EOR #&FF
-    \ inverts Y before the row LUT, so HIGHER caller-Y is HIGHER on screen. Same convention applies
-    \ to all per-slot Y fields (hazard_y / enemy_y / pickup_y / flame_y / force_pod_y / player_y).
+    \ ready for sprite_plot_xy. Caller-Y origin is at the BOTTOM of the screen — EOR #&FF inverts Y
+    \ before the row LUT, so HIGHER caller-Y is HIGHER on screen. Same convention applies to all
+    \ per-slot Y fields (hazard_y / enemy_y / pickup_y / flame_y / force_pod_y / player_y).
     \
     \ Inputs:
     \ X = char column (0..19 across the playfield)
     \ Y = scanline in caller-Y units (bottom = 0)
     \
     \ Outputs:
-    \ zp_dest_x_lo / _hi (&76/&77) = screen address for the top-left of the cell, ready to be
-    \ consumed by sprite_plot_xy.
+    \ zp_dest_x_lo / _hi = screen address for the top-left of the cell, ready to be consumed by
+    \ sprite_plot_xy.
     \
     \ Clobbers: A.
     TYA
@@ -542,19 +546,19 @@ scroll_upper_dst_hi = * + 2
     JMP L1335
 
 .frame_delay
-    \ Frame-rate regulator (busy-wait). Called once per main_loop iteration. zp_frame_progress
-    \ accumulates 'work done this frame' (e.g. update_bullets does `INC zp_frame_progress` twice per
-    \ active bullet, get_ready_overlay bumps it once per other frame). At entry, zp_frame_progress
-    \ starts at zp_game_speed (set by the user's Speed option in `options.BAS` line 700: `?&92 = 120
-    \ + S%*30`, so 120 = slow .. 240 = fast; the BREAK cheat in Loader2 line 1310 sets it to 252).
-    \ The busy loop runs (256 - X) outer iterations × 256-cycle inner loop, so the delay is
-    \ INVERSELY proportional to zp_frame_progress: heavy frames (high X) get short delays, idle
-    \ frames (X near zp_game_speed) get long delays — total frame time is roughly constant. The `CPX
-    \ #&64 / BCS / LDX #&FE` guard handles the overflow case where so much work happened that
-    \ zp_frame_progress wrapped past 255 to a small value (< 100): substitute X=&FE for a fixed
-    \ minimum delay (~2 outer iterations) rather than the paradoxically-long (256-X) the underflowed
-    \ value would imply. After the wait, zp_frame_progress is reset to zp_game_speed for the next
-    \ frame.
+    \ Frame-rate regulator (busy-wait). Called once per main_loop iteration. Holds total frame time
+    \ roughly constant by waiting (256 − work_done) outer iterations × 256 cycles inner. Heavy
+    \ frames get shorter waits; idle frames get longer waits.
+    \
+    \ Inputs:
+    \ zp_frame_progress = work-done counter (bumped by update_bullets, get_ready_overlay etc.)
+    \ zp_game_speed = user's Speed preference from options.BAS (`?&92 = 120 + S%*30`); BREAK cheat
+    \ sets to 252.
+    \
+    \ Outputs: zp_frame_progress reset to zp_game_speed for the next frame.
+    \
+    \ Overflow guard: `CPX #&64 / BCS / LDX #&FE` substitutes X=&FE if work-done wrapped past 255
+    \ into a tiny value, preventing a paradoxically-long delay.
     LDX zp_frame_progress
     CPX #&64
     BCS L13C4
@@ -571,17 +575,22 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .game_step
-    \ ONE COLUMN of game progress — called once per main_loop iteration. Does the per-tile-column
-    \ setup (try_spawn_pickup, spawn_periodic_enemy, spawn_check_step, then computes the new
-    \ right-edge tile sprite pointers `zp_tile_lower_hi/lo` and `zp_tile_upper_hi/lo` by indexing
-    \ `lev_map_lower[zp_scroll_col]` / `lev_map_upper[zp_scroll_col]` into the tile catalog at
-    \ &4E80, multiply-by-&80 via repeated ADC), bumps `zp_scroll_col` by 1 (with wrap from &F0+ back
-    \ to &F0 = the end-of-map loop), checks the PAUSE key, then runs 4 sub-frames (`play_subframe`
-    \ loop, gated on `zp_get_ready_erase` going 0→1→2→3→4). Each subframe scrolls the playfield by 4
-    \ px (so 4×4 = 16 px = one tile-cell per game_step call), updates hazards / enemies / missiles /
-    \ pickups, draws score, reads input, and on even columns also bumps `zp_frame_progress` + draws
-    \ the get_ready overlay. Returns early once `lives_left` drops to 0, which the caller
-    \ `main_loop` immediately tests to go to game_over_or_continue.
+    \ ONE TILE COLUMN of game progress. Called once per main_loop iteration.
+    \
+    \ Per-column setup (once per call):
+    \ - try_spawn_pickup, spawn_periodic_enemy, spawn_check_step
+    \ - resolve right-edge upper / lower tile pointers via tile_upper_ptr_calc / tile_lower_ptr_calc
+    \ - INC zp_scroll_col (wraps &F0+ back to &F0 = end-of-map loop)
+    \ - check PAUSE key
+    \
+    \ Then runs 4 sub-frames (the `play_subframe` loop, gated by `zp_get_ready_erase` 0→1→2→3→4).
+    \ Each subframe scrolls the playfield by 4 px → 16 px per game_step call = one tile cell.
+    \
+    \ Per-subframe work: update_hazard_missiles → draw_score → force_pod_anim → frame_delay →
+    \ update_enemies → scroll_step (which scrolls 4 px + calls update_hazards) → update_pickup →
+    \ read_input. On even columns, also bumps zp_frame_progress and runs get_ready_overlay.
+    \
+    \ Returns early once `lives_left` reaches 0.
     JSR try_spawn_pickup
     JSR spawn_periodic_enemy
     JSR spawn_check_step
@@ -681,9 +690,13 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .draw_player
-    \ Draw the player ship: plot lev_player_sprite (6×22 from &4E80 in LEVD1) at (zp_player_x,
-    \ zp_player_y). If pod_attached == 1 (force-pod power-up active), also call draw_player_pod at
-    \ (player_x+5, player_y+1). Then JSR check_player_collisions and JMP to update_player_bullets.
+    \ Draw the player ship and orbital pod, then check player collisions and update player bullets.
+    \ Plots `lev_player_sprite` (6×22) at (zp_player_x, zp_player_y). If `pod_attached == 1`, also
+    \ calls `draw_player_pod` at (player_x + 5, player_y + 1).
+    \
+    \ Inputs: zp_player_x / zp_player_y, pod_attached, pod_anim_frame.
+    \
+    \ Tail-calls: check_player_collisions, update_bullets (via JMP).
     LDX zp_player_x
     LDY zp_player_y
     JSR calc_screen_addr
@@ -714,11 +727,16 @@ scroll_upper_dst_hi = * + 2
     JMP update_bullets
 
 .draw_player_pod
-    \ Draw the player's force-pod (the rotating saucer that orbits the ship after a power-up).
-    \ Selects one of three frames at gfx_pod_frame0/1/2 (&3900/&3960/&39C0) based on pod_anim_frame
-    \ (= data_14D8, cycles 1/2/3 driven by vertical movement: move_player_up does INC,
-    \ move_player_down does DEC, both wrap 1<->3). Falls through into sprite_plot_xy with X=4
-    \ byte-cols, Y=&18 lines.
+    \ Draw the player force-pod beside the ship. Selects one of three frames (gfx_pod_frame0/1/2)
+    \ based on `pod_anim_frame`, falls into sprite_plot_xy with X=4, Y=&18.
+    \
+    \ Inputs:
+    \ pod_anim_frame = 1, 2, or 3 — frame index
+    \ X, Y = screen position (set up by caller — typically draw_player passes player_x + 5, player_y
+    \ + 1)
+    \
+    \ Note: pod_anim_frame is driven by vertical motion: move_player_up INCs it (wraps 4→1),
+    \ move_player_down DECs (wraps 0→3).
     LDA pod_anim_frame
     CMP #&01
     BEQ L14C8
@@ -738,14 +756,19 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- data &14D8..&14D9 -----
 .pod_anim_frame
-    \ Force-pod animation frame (1 / 2 / 3). Selects which of the three gfx_pod_frame0/1/2 sprites draw_player_pod renders. Cycled by player vertical motion: each move_player_up INCs it (wraps 4→1), each move_player_down DECs it (wraps 0→3). Disk-initial value is 1.
+    \ Force-pod animation frame index (1 / 2 / 3). Drives which of gfx_pod_frame0/1/2 the draw_player_pod routine renders. Stepped by player vertical motion — move_player_up INCs (wraps 4→1), move_player_down DECs (wraps 0→3). Disk-initial value is 1.
     EQUB &01
 
 \ ----- code &14D9..&1575 -----
 .read_input
-    \ Read input: if joystick mode (zp_9F == 1) take read_joystick path; else scan KEY_RIGHT /
-    \ KEY_LEFT / KEY_UP / KEY_DOWN / KEY_FIRE in turn via check_key_pressed and dispatch the
-    \ matching move_player_* / on_fire_pressed routine.
+    \ Per-frame input reader. If joystick mode (zp_9F == 1) takes the read_joystick path; otherwise
+    \ scans the five keys KEY_RIGHT / KEY_LEFT / KEY_UP / KEY_DOWN / KEY_FIRE in turn via
+    \ check_key_pressed and dispatches the matching move_player_* / on_fire_pressed routine for any
+    \ that test pressed.
+    \
+    \ Inputs: zp_9F = control-mode flag.
+    \
+    \ Effects: may update zp_player_x / _y, install a player_bullet, or do nothing this frame.
     LDA zp_9F
     CMP #&01
     BEQ read_joystick
@@ -778,9 +801,9 @@ scroll_upper_dst_hi = * + 2
     JMP draw_player
 
 .read_joystick
-    \ Read joystick: OSBYTE &80 reads analog joystick 1 X/Y axes (low/high thresholds &40/&C8) and
-    \ the fire button bit, dispatching the same move_player_* / on_fire_pressed routines as the
-    \ keyboard path.
+    \ Joystick input handler. OSBYTE &80 reads analog joystick 1 X/Y axes (thresholds &40 / &C8) and
+    \ the fire-button bit, dispatching the same move_player_* / on_fire_pressed routines as the
+    \ keyboard path. Threshold-based — pushing the stick past the deadzone moves one row/col.
     LDA #&80
     LDX #&01
     JSR OSBYTE
@@ -862,15 +885,16 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- code &1577..&16E6 -----
 .fire_player_missiles
-    \ Player-missile launch (called from on_fire_pressed). Gated on `player_missiles_unlocked == 1`
-    \ (= the player has collected 7 pickups → tier 7) AND `player_missile_step == 0` (= no pair
-    \ currently in flight). On launch: captures the player position into two parallel slots — upper
-    \ (player_missile_x[0], player_missile_y[0] = player_x, player_y + 2) and lower
-    \ (player_missile_x[1], player_missile_y[1] = player_x, player_y - &12). Activates both slots
-    \ (player_missile_active = {1, 1}), sets sprite-frame = 1 and step counter = 1. Suppresses the
-    \ upper missile if player_y >= &D8 (too low — would be off-screen) and suppresses the lower if
-    \ player_y < &A0 (too high). On the next pass, `update_player_missiles` (called per-subframe)
-    \ drives the pair.
+    \ Launch the paired player missile pair (upper + lower). Gated on `player_missiles_unlocked ==
+    \ 1` (= the player has collected 7 pickups → tier 7) AND `player_missile_step == 0` (= no pair
+    \ in flight).
+    \
+    \ On launch: captures the player position into both slots — upper (player_x, player_y + 2),
+    \ lower (player_x, player_y - &12). Activates both slots, sets player_missile_frame = 1,
+    \ player_missile_step = 1. The next-pass `update_player_missiles` then animates the pair.
+    \
+    \ Edge clamps: suppresses the upper missile if player_y >= &D8 (would be off-screen top);
+    \ suppresses the lower if player_y < &A0 (would be off-screen bottom).
     LDA player_missiles_unlocked
     CMP #&01
     BEQ L157F
@@ -913,14 +937,17 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .update_player_missiles
-    \ Per-subframe ticker for the paired player missiles. RTS if `player_missile_step == 0` (idle).
-    \ Phase 0: steps 1..4 spread the pair vertically (INC upper_y, DEC lower_y); phase 1: steps 5..7
-    \ advance the missile-frame index 1→2→3→4→5→2 (ping-pong loop) and walk the pair rightward by +1
-    \ px per subframe; phase 2: steps 8+ accelerate to +2 px/subframe. Each subframe re-plots
-    \ whichever slots are active via `plot_player_missile`. When player_missile_x[0] >= &24 (off the
-    \ right edge), erases both sprites with lev_erase_brush+&80 and resets the state (step = 0, x =
-    \ 0). Note that the per-slot `player_missile_active` flag is cleared independently by
-    \ `missile_hit_hazard` when a missile connects.
+    \ Per-subframe ticker for the paired player missiles. RTS immediately if `player_missile_step ==
+    \ 0` (idle).
+    \
+    \ Phase 0 (steps 1..4): vertical-spread — INC upper_y, DEC lower_y.
+    \ Phase 1 (steps 5..7): walk pair rightward by +1 px, advance missile-frame (1→2→3→4→5→2
+    \ ping-pong).
+    \ Phase 2 (steps 8+): accelerate to +2 px/subframe.
+    \
+    \ Each subframe re-plots whichever slots are active via plot_player_missile. When
+    \ player_missile_x[0] >= &24 (off the right edge), erases both sprites and resets state.
+    \ Individual slots can also be cleared early by `missile_hit_hazard` when the missile connects.
     LDA player_missile_step
     BNE L15CA
     RTS
@@ -1010,13 +1037,12 @@ scroll_upper_dst_hi = * + 2
 
 .plot_player_missile
     \ Plot one player-missile frame at the screen position already set up by the caller's
-    \ calc_screen_addr. Selects the sprite via the inline multiply: `LDA #0 / LDX
-    \ player_missile_frame / loop ADC #&28 / DEX / BNE / SBC #&28 / STA src_lo / LDA #&44 / STA
-    \ src_hi` — so frame N (1..5) → src = &4400 + (N-1)*&28 = &4400/&4428/&4450/&4478/&44A0. Always
-    \ 5×8 px. (Note: the existing GRAPHIX cfg labels gfx_missile_0..4 at &4410..&44B0 are
-    \ inconsistent with this — the actual frames L1689 reads are 16 bytes lower in memory. Either
-    \ the GRAPHIX labels are off by one, or this routine has a constant-offset bug producing
-    \ scrambled-looking trails.)
+    \ `calc_screen_addr`. Selects the source sprite via an inline multiply-by-&28: src = &4400 +
+    \ (player_missile_frame - 1) * &28, for frames 1..5 → &4400 / &4428 / &4450 / &4478 / &44A0 =
+    \ `gfx_missile_0..4` (5×8 each).
+    \
+    \ Inputs: zp_dest_x set by caller; player_missile_frame ∈ [1, 5].
+    \ Plots 5×8 px sprite.
     LDA #&00
     LDX player_missile_frame
     CLC
@@ -1046,7 +1072,7 @@ scroll_upper_dst_hi = * + 2
 .move_player_up
     \ Move player one row UP (zp_player_y += 4, clamped at max &DC). NOTE: caller-Y origin is at the
     \ BOTTOM of the screen — `calc_screen_addr` does an EOR #&FF before the row LUT, so HIGHER
-    \ `zp_player_y` is HIGHER on screen.
+    \ `zp_player_y` is HIGHER on screen. Also INCs `pod_anim_frame` (wraps 4→1).
     LDA zp_player_y
     CMP #&DC
     BNE L16B7
@@ -1065,8 +1091,8 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .move_player_down
-    \ Move player one row DOWN (zp_player_y -= 4, clamped at min &98). See `move_player_up` for the
-    \ Y-origin note.
+    \ Move player one row DOWN (zp_player_y -= 4, clamped at min &98). Also DECs `pod_anim_frame`
+    \ (wraps 0→3). See `move_player_up` for the Y-origin note.
     LDA zp_player_y
     CMP #&98
     BNE L16D3
@@ -1117,13 +1143,15 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- code &1712..&1A55 -----
 .spawn_periodic_enemy
-    \ Periodic background-enemy spawner — called once per game_step. Doesn't run after the map has
+    \ Periodic background-enemy spawner. Called once per game_step. Doesn't run after the map has
     \ wrapped (zp_scroll_col == &F0). Otherwise paces on zp_87 (sub-counter, 0..A): when zp_87
-    \ reaches &0A, wait for the enemy field to fully empty, then advance `zp_86` (pattern selector,
-    \ cycles 1..6 wrapping back to 1 after 7) and pre-load the per-pattern parameters from the LUTs
-    \ at tbl_16FB / tbl_1702 / tbl_1709. On the other 10 calls of each cycle, INC zp_87 and spawn
-    \ one enemy into the first free slot: enemy_x = &25 (right edge), enemy_state and enemy_y set
-    \ per pattern (patterns 5/6: state 3/5, Y random in [&97..&D7]; others: state 1, Y = &9A fixed).
+    \ reaches &0A, waits for the enemy field to fully empty, then advances `zp_86` (pattern
+    \ selector, cycles 1..6 wrapping back to 1) and pre-loads the per-pattern parameters from the
+    \ LUTs at tbl_16FB / tbl_1702 / tbl_1709.
+    \
+    \ On the other 10 calls of each cycle: INCs zp_87 and spawns one enemy into the first free slot
+    \ — enemy_x = &25 (right edge); enemy_state / enemy_y set per pattern (patterns 5/6: state 3/5,
+    \ Y random in [&97..&D7]; others: state 1, Y = &9A fixed).
     LDA zp_scroll_col
     CMP #&F0
     BNE L1719
@@ -1219,15 +1247,13 @@ scroll_upper_dst_hi = * + 2
     \ Fire-button handler — called from read_input on KEY_FIRE pressed. Refuses if the per-frame
     \ cooldown counter (zp_8A) is non-zero. On accept: finds the first empty slot in
     \ player_bullet_x[4..1] (the keyboard-fire range — slots 5..6 are reserved for the force-pod's
-    \ twin-shot, populated by pod_fire in CODE2), installs a new bullet at (player_x + 2, player_y -
-    \ &0C), reloads the cooldown timer, and queues the fire SFX.
+    \ twin-shot, populated by `pod_fire` in CODE2), installs a new bullet at (player_x + 2, player_y
+    \ - &0C), reloads the cooldown, and plays sfx_fire.
     \
-    \ Inputs:
-    \ zp_player_x / _y = current ship position
-    \ zp_8A = cooldown counter (0 = ready, else frames remaining)
-    \ fire_cooldown_reload (&2554) = frames to reload (default 6, drops to 3 after the 1st pickup)
+    \ Inputs: zp_player_x / _y, zp_8A (cooldown), fire_cooldown_reload (default 6 frames; drops to 3
+    \ after the 1st pickup).
     \
-    \ Effects: writes one player_bullet slot if a free slot exists; resets zp_8A; calls sfx_fire.
+    \ Effects: installs one player_bullet slot if free; resets zp_8A; plays sfx_fire.
     JSR fire_player_missiles
     LDA zp_8A
     BEQ L17C1
@@ -1255,12 +1281,17 @@ scroll_upper_dst_hi = * + 2
     JMP pod_fire
 
 .update_bullets
-    \ Update player bullets: iterate the 6 player_bullet slots; for each active one (player_bullet_x
-    \ != 0) move +2 px right, erase + clear if it has crossed col &25 (off-screen right), else
-    \ replot the bullet via a 3×2 read from `lev_erase_brush + &102` (two zero cols of leading
-    \ erase-trail + the visible 4×2-px `player_bullet_sprite` byte at col 2 — yellow on L1,
-    \ cyan/green/magenta on L2/L3/L4). Then run check_bullet_hits. Finally decrement zp_8A (the fire
-    \ cooldown).
+    \ Per-frame mover for the 6-slot player_bullet pool. Iterates X = n_player_bullets..1 (predec);
+    \ for each active slot (player_bullet_x[X] != 0):
+    \ - DEC slot (move 2 px right)
+    \ - if past col &25, ERASE (plot 2×2 from lev_erase_brush + &102) and clear slot
+    \ - else RE-PLOT via a 3×2 read from `lev_erase_brush + &102`: two zero-pad cols leading + the
+    \ visible 4×2 `player_bullet_sprite` byte at col 2 — palette-2 colour: yellow / cyan / green /
+    \ magenta per scenario. The leading zero pad over-paints the previous frame's visible col →
+    \ built-in trail erase.
+    \ - then check_bullet_hits.
+    \
+    \ Finally DECs zp_8A (fire cooldown) on the way out.
     LDX #n_player_bullets
 .L17E9
     LDA player_bullet_x,X
@@ -1307,12 +1338,17 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .check_bullet_hits
-    \ Check what the current player bullet has hit. Two loops over the same bullet position
-    \ (zp_test_x = player_bullet_x+2, zp_test_y = player_bullet_y): (a) X=8..1 over the enemy slots
-    \ in enemy_x/enemy_y/enemy_state — a hit INCs enemy_state[X] and at values 3/5/7 plays OSWRCH 7
-    \ + INCs pickup_kill_count; at >=9 the enemy is fully expired; (b) X=0..7 over the hazard slots
-    \ — a hit decrements hazard_hp, plays explode, and on kill clears the slot. Either way, the
-    \ bullet erases itself (3x2 brush) and the slot is freed.
+    \ Check what the current player bullet has hit. The caller (update_bullets) has just moved the
+    \ bullet; this routine tests it against both NPC pools.
+    \
+    \ Two loops over the same bullet position (zp_test_x = player_bullet_x[X] + 2, zp_test_y =
+    \ player_bullet_y[X]):
+    \ (a) X = 8..1 over the enemy slots in enemy_x / _y / enemy_state — a hit INCs enemy_state[X];
+    \ at values 3/5/7 plays OSWRCH 7 + INCs pickup_kill_count; at >= 9 the enemy is fully expired.
+    \ (b) X = 0..7 over the hazard slots in hazard_x / _y / hazard_type — a hit DECs hazard_hp; on
+    \ kill, mutates hazard_type to &14 to start the death animation.
+    \
+    \ On either hit: the bullet erases itself (3×2 brush) and the slot is freed.
     LDX data_16F5
     LDY player_bullet_x,X
     INY
@@ -1476,12 +1512,16 @@ scroll_upper_dst_hi = * + 2
     JMP OSWRCH
 
 .check_player_collisions
-    \ Per-frame player collision check. Two loops: (a) X=8..1 over the enemy slots at
-    \ enemy_x/_y/_state — for any slot whose enemy_state is in 1..9 (active), test the player
-    \ against a 6×&18 bounding box; on hit, mark the slot &0A (expired) and JSR lose_a_life. (b)
-    \ X=0..7 over the hazard slots (hazard_x, hazard_y, hazard_type < &14) — same test. Each hit
-    \ triggers a `OSWRCH &07` (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be
-    \ a short non-musical blip used as the in-game collision sound).
+    \ Per-frame player-collision check. Tests the player ship against both NPC pools.
+    \
+    \ Two loops:
+    \ (a) X = 8..1 over enemy slots — for any slot whose enemy_state is in 1..9 (active), test the
+    \ player against a 6×&18 bounding box; on hit, mark slot &0A (expired) and JSR lose_a_life.
+    \ (b) X = 0..7 over hazard slots — for any slot whose hazard_type < &14 (alive), same test; on
+    \ hit same effect.
+    \
+    \ Each hit triggers OSWRCH &07 (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214`
+    \ to be a short non-musical blip used as the in-game collision sound).
     LDX #n_enemies + 1
 .L198D
     DEX
@@ -1612,12 +1652,16 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- code &1A99..&1C0C -----
 .enemy_try_fire_bullet
-    \ Enemy 'try to fire a bullet' hook — called from update_enemies after plotting each active
-    \ enemy slot. Random chance (rndval32 == 2 → 1/16) gates each call; further requires the enemy
-    \ to be near the left edge (enemy_x < &10), the global cooldown zp_7E to be 0, and a free slot
-    \ in npc_bullet_x[4..1]. On success: stores enemy_x+2 / enemy_y-8 into the chosen slot, sets
-    \ zp_7E = 8 (8-frame cooldown), plays sfx_hit_lo. Shares the npc_bullet_x/_y pool with
-    \ enqueue_npc_bullet — enemies and hazards fire the same bullet sprite.
+    \ Per-enemy-slot 'try to fire a bullet' hook, called from update_enemies after plotting each
+    \ active enemy slot. Random chance (rndval32 == 2 → 1/16 each frame) gates the call; further
+    \ requires the enemy to be near the left edge (enemy_x < &10), the global cooldown zp_7E to be
+    \ 0, and a free slot in npc_bullet_x[4..1] (the enemy quota).
+    \
+    \ On success: stores (enemy_x + 2, enemy_y - 8) into the chosen slot, sets zp_7E = 8 (8-frame
+    \ cooldown), plays sfx_hit_lo.
+    \
+    \ Shares the npc_bullet pool with enqueue_npc_bullet (called by hazard types 4 / &13). Both pool
+    \ users plot the same `npc_bullet_sprite`.
     JSR lfsr_random
     LDA rndval32
     CMP #&02
@@ -1664,11 +1708,17 @@ scroll_upper_dst_hi = * + 2
     JMP sfx_hit_lo
 
 .update_enemies
-    \ Per-frame enemy update: iterate the 8 enemy slots (X=8..1 in enemy_state), move each by ±1 X /
-    \ ±4 Y depending on data_16F6/16F7 direction bits, erase + redraw at the new position with a
-    \ 4x24 sprite. Slot deactivates (and is erased) when enemy_state drops to 0. Enemies damage the
-    \ player on contact (check_player_collisions) and are destructible by player bullets
-    \ (check_bullet_hits).
+    \ Per-frame ENEMY (moving spawned) pool update. Iterates X = n_enemies..1 (predec); for each
+    \ active slot (enemy_state[X] != 0):
+    \ - per-frame motion via L1B87 (reads the active pattern script's next (dy, dx) pair, applies to
+    \ enemy_x / _y)
+    \ - erase + redraw the 4×24 sprite at the new position (sprite_src looked up via
+    \ enemy_anim_dispatch)
+    \ - call enemy_try_fire_bullet for a random chance to fire
+    \
+    \ Slot deactivates and is erased when enemy_state drops to 0. Enemies damage the player on
+    \ contact (check_player_collisions) and are destructible by player bullets (check_bullet_hits)
+    \ and the force-pod (pod_collide_enemy).
     LDX #n_enemies
 .L1AED
     LDA enemy_state,X
@@ -1792,14 +1842,19 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .enemy_anim_dispatch
-    \ Enemy sprite-frame dispatcher (X = data_16F5 = current enemy slot). For enemy_state in 0..6 it
-    \ indexes into the parallel `enemy_anim_ptr_lo` / `enemy_anim_ptr_hi` LUT: slots 1..4 →
-    \ `lev_enemy_0..3` (LEVD1), slots 5..6 → `gfx_enemy_small_frame0/1` (GRAPHIX, two 4×24
-    \ winged-creature frames). For state >= &0A it dispatches to one of the hit-animation routines,
-    \ each of which advances the state by 1 and sets sprite_src for the caller's plot: &0A →
-    \ enemy_hit_frame1 (lev_enemy_hit_1), &0B → enemy_hit_frame2 (lev_enemy_hit_2), &0C →
-    \ enemy_hit_frame3 (lev_enemy_hit_3), &0D → enemy_hit_erase (sprite_src = lev_erase_brush + &80,
-    \ and enemy_state = 0 — clears the slot).
+    \ Enemy sprite-frame dispatcher. For enemy_state in 0..6 it indexes into the parallel
+    \ enemy_anim_ptr_lo / enemy_anim_ptr_hi LUT: slots 1..4 → lev_enemy_0..3 (LEVD1), slots 5..6 →
+    \ gfx_enemy_small_frame0/1 (GRAPHIX, two 4×24 winged-creature frames).
+    \
+    \ For state >= &0A it dispatches to one of the hit-animation routines, each of which advances
+    \ state by 1 and sets sprite_src for the caller's plot:
+    \ &0A → enemy_hit_frame1 (sprite = lev_enemy_hit_1)
+    \ &0B → enemy_hit_frame2 (lev_enemy_hit_2)
+    \ &0C → enemy_hit_frame3 (lev_enemy_hit_3)
+    \ &0D → enemy_hit_erase (sprite = lev_erase_brush + &80, and enemy_state cleared)
+    \
+    \ Inputs: data_16F5 = enemy slot index.
+    \ Outputs: sprite_src_lo / _hi set for the caller to plot.
     LDX data_16F5
     LDA enemy_state,X
     CMP #&0A
@@ -1841,10 +1896,9 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- code &1C1A..&1E46 -----
 .enemy_hit_frame1
-    \ Per-frame plot setup for enemy_state &0A → advances state to &0B and points sprite_src at
-    \ lev_enemy_hit_1 (&4C20). The caller (update_enemy_slot) then performs the actual
-    \ sprite_plot_xy with the standard 4×24 dimensions. First of three hit-animation frames played
-    \ when an enemy has just been killed.
+    \ Plot setup for enemy_state &0A → advance state to &0B and point sprite_src at lev_enemy_hit_1.
+    \ The caller (update_enemies) performs the actual plot with 4×24 dims. First of three
+    \ hit-animation frames played when an enemy has just been killed.
     TAY
     INY
     TYA
@@ -1856,8 +1910,8 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .enemy_hit_frame2
-    \ Per-frame plot setup for enemy_state &0B → advances to &0C, sprite_src = lev_enemy_hit_2
-    \ (&4C68). Second hit-animation frame.
+    \ Plot setup for enemy_state &0B → advance to &0C, sprite_src = lev_enemy_hit_2. Second
+    \ hit-animation frame.
     TAY
     INY
     TYA
@@ -1869,11 +1923,10 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .enemy_hit_frame3
-    \ Per-frame plot setup for enemy_state &0C → advances to &0D, sprite_src = lev_enemy_hit_3
-    \ (&4CB0). Third (final visible) hit-animation frame. Note: the LSB constant `&B0` is written as
-    \ `LO(lev_enemy_hit_3)` (the byte happens to equal `LO(lev_erase_brush + &B0)` too — the
-    \ original author may have used the brush form as a typing shortcut; we render the level-data
-    \ form for clarity).
+    \ Plot setup for enemy_state &0C → advance to &0D, sprite_src = lev_enemy_hit_3. Third (final
+    \ visible) hit-animation frame. The LSB constant &B0 is written as `LO(lev_enemy_hit_3)` (the
+    \ byte happens to equal LO(lev_erase_brush + &B0) too — the original author may have used the
+    \ brush form as a typing shortcut; we render the level-data form for clarity).
     TAY
     INY
     TYA
@@ -1885,10 +1938,10 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .enemy_hit_erase
-    \ Per-frame plot setup for enemy_state &0D → ERASE the enemy: points sprite_src at
-    \ lev_erase_brush + &80 (the all-zeros erase brush) and clears enemy_state to 0 (releases the
-    \ slot for re-spawn). The caller plots a 4×24 black rectangle over the last hit-frame position.
-    \ This is the final step of the enemy-death animation chain &0A → &0B → &0C → &0D.
+    \ Plot setup for enemy_state &0D → ERASE the enemy. Points sprite_src at lev_erase_brush + &80
+    \ (the all-zeros brush) and clears enemy_state to 0 (releases the slot for re-spawn). The caller
+    \ plots a 4×24 black rectangle over the last hit-frame position. Final step of the enemy-death
+    \ chain &0A → &0B → &0C → &0D.
     LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
     LDA #HI(lev_erase_brush + &80)
@@ -2010,12 +2063,16 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .update_npc_bullets
-    \ Per-frame mover for the 6-slot npc_bullet pool. For each active slot (npc_bullet_x[X] != &FF):
-    \ DEC X by 2 (move left 2 px), then either deactivate (X underflowed past &00 or new X <= 1) or
-    \ re-plot the 4×2-px white bullet at the new position via a 3×2 read of `npc_bullet_sprite`
-    \ (visible col + 2-col zero trail). Each active slot then runs npc_bullet_collide_player to test
-    \ against the player ship and trigger lose_a_life on hit. Also DECs the global enemy-fire
-    \ cooldown zp_7E.
+    \ Per-frame mover for the 6-slot npc_bullet pool (shared by enemies and hazards). Iterates X =
+    \ n_npc_bullets..1 (predec); for each active slot (npc_bullet_x[X] != &FF):
+    \ - DEC X by 2 (move 2 px left)
+    \ - if X dropped to &00 / &01, ERASE (plot 2×2 from lev_erase_brush + &102) and deactivate (slot
+    \ = &FF)
+    \ - else RE-PLOT the 4×2-px white bullet via a 3×2 read of `npc_bullet_sprite`: visible col 0 +
+    \ 2-col zero trail that erases the previous frame's tail (NPC bullets move LEFT)
+    \ - call npc_bullet_collide_player
+    \
+    \ Finally DECs zp_7E (the global enemy-fire cooldown).
     LDX #n_npc_bullets
 .L1D37
     LDA npc_bullet_x,X
@@ -2070,8 +2127,10 @@ scroll_upper_dst_hi = * + 2
 
 .npc_bullet_collide_player
     \ Box-collision test for one npc_bullet against the player. Hit window: player_x in [bullet_x,
-    \ bullet_x+5] AND player_y in [bullet_y, bullet_y+&10]. On hit: erase the 2×2 bullet trail with
-    \ lev_erase_brush+&102, mark the slot inactive (&FF), and fall through into lose_a_life.
+    \ bullet_x + 5] AND player_y in [bullet_y, bullet_y + &10]. On hit: erases the 2×2 bullet trail
+    \ from lev_erase_brush + &102, marks the slot inactive, and falls through into lose_a_life.
+    \
+    \ Inputs: X = bullet slot index, zp_player_x / _y.
     LDA npc_bullet_x,X
     STA zp_test_x
     LDA npc_bullet_y,X
@@ -2113,13 +2172,15 @@ scroll_upper_dst_hi = * + 2
     STA npc_bullet_x,X
 
 .lose_a_life
-    \ Per-hit handler — runs once each time the player ship is touched by a enemy / hazard / bullet
-    \ (see check_player_collisions). Plays OSWRCH 7 (the redefined BBC bell). Toggles
-    \ lives_blink_state (0↔1) and DECs player_hp on every other call — so player_hp drops by 1 per
-    \ actual death, with the blink toggle in between giving a two-frame red/yellow flash on the ship
-    \ icon at the bottom of the screen. The icon is redrawn at column (player_hp + &1F), row &5F,
-    \ using gfx_icon_lives (state 0) or the alternate icon at &48B8 (state 1). When player_hp hits 0
-    \ AND the blink-toggle says state 1, JMP death_anim (= explosion + DEC lives_left + init).
+    \ Per-hit handler — runs once each time the player ship is touched by an enemy / hazard /
+    \ bullet. Plays the bell sound (OSWRCH 7, redefined by Loader2 to be a short non-musical blip).
+    \ Toggles `lives_blink_state` (0↔1) and DECs `player_hp` on every other call — so player_hp
+    \ drops by 1 per actual death, with the blink toggle giving a two-frame flash on the ship-icon
+    \ at the bottom of the screen.
+    \
+    \ The icon is redrawn at column (player_hp + &1F), row &5F, using `gfx_icon_lives` (blink state
+    \ 0) or the alternate icon at &48B8 (state 1). When `player_hp` hits 0 AND blink-toggle is in
+    \ state 1, JMP `death_anim` (= explosion + DEC lives_left + init).
     STX data_16F5
     LDA #&07
     JSR OSWRCH
@@ -2163,18 +2224,20 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- data &1E46..&1E47 -----
 .lives_blink_state
-    \ Lives-icon blink-state — 0/1 toggle stepped by lose_a_life. Used both to swap the lives-icon sprite (gfx_icon_lives vs &48B8) and to halve the rate at which player_hp drops (DEC only on alternate calls).
+    \ Lives-icon blink state — 0/1 toggle stepped by `lose_a_life`. Used both to swap the lives-icon sprite (gfx_icon_lives vs the alternate at &48B8) and to halve the rate at which player_hp DROPs (DEC only on alternate calls).
     EQUB &EA
 
 \ ----- code &1E47..&2050 -----
 .death_anim
     \ Player death animation. Plays sfx_explode then plots 6 frames of a 4×32 explosion sprite
-    \ (`lev_explosion_0..5`) at the player position with `frame_delay` between frames. The source
-    \ pointer pairs live in slots 21..26 of `lev_hazard_ptr_*` (aliased as `lev_explosion_ptr_lo` /
-    \ `_hi` at &7A95 / &7AD5). Frames 0..3 are in LEVD1 (`lev_explosion_0..3` at &4A00 / &4A80 /
-    \ &4B00 / &4B80); frames 4..5 are in LEVD2 (`lev_explosion_4..5` at &7C00 / &7C80). After the
-    \ last frame, DEC `lives_left` and redraw the lives-remaining indicator at row &57; if any lives
-    \ are left, also plays intro_get_ready and re-runs init to start the next ship.
+    \ (lev_explosion_0..5) at the player position with `frame_delay` between frames. Frame source
+    \ pointers come from slots 21..26 of lev_hazard_ptr_* (aliased as lev_explosion_ptr_lo/_hi).
+    \
+    \ Frames 0..3 live in LEVD1 (lev_explosion_0..3); frames 4..5 live in LEVD2
+    \ (lev_explosion_4..5).
+    \
+    \ After the last frame: DEC lives_left, redraw the lives-remaining indicator at row &57; if any
+    \ lives left, also plays intro_get_ready and re-runs `init` to start the next ship.
     LDA #&01
     STA zp_sprite_dir_flag
     LDX zp_player_x
@@ -2307,10 +2370,17 @@ scroll_upper_dst_hi = * + 2
     RTS
 
 .init
-    \ Per-level init. Sets player start position (&05, &C8), zero-fills the six 9-slot hazard state
-    \ tables (hazard_x, hazard_y, hazard_type, hazard_hp, hazard_step, enemy_state), clears
-    \ single-byte state (player bullets, force-pod registers), sets fire_cooldown_reload=6, and
-    \ marks all 7 npc_bullet_x slots inactive (&FF).
+    \ Per-level init. Resets all engine state to the start-of-level defaults.
+    \
+    \ Player: position (&05, &C8), zero player_bullet_x[*], cooldown reload = 6.
+    \ Hazard pool: 9-slot sweep clearing hazard_x / _y / _type / _hp / _step / enemy_state (the
+    \ parallel array used by init's combined-clear trick — see n_state_slots).
+    \ Enemy pool: clears via the same sweep — both pools share the wider 9-slot block for cleanup.
+    \ NPC bullets: all 7 npc_bullet_x slots set to &FF (inactive).
+    \ Force-pod / pickup / pickup-tier state: zeroed.
+    \ Scroll position: zp_scroll_col = 0, tile-pointer pair to a fresh column.
+    \
+    \ Called once per game-over and once per ship loss (from death_anim).
     LDA #&01
     STA lives_blink_state
     LDA #&05
@@ -2420,15 +2490,21 @@ L2016            = * + 1
 
 \ ----- code &208A..&23C5 -----
 .spawn_check_step
-    \ Spawn-table scanner — runs once per frame from main_loop. Compares lev_spawn_col[zp_7B]
-    \ against zp_scroll_col; on match, decodes the paired lev_spawn_attr byte into a new hazard in
-    \ the slot pool: bits 0..4 → hazard_type (0..31), bit 7 → hazard_flip (INVERTED: 0 in attr =
-    \ upright, 1 = vertical-flip), bits 5..6 → spawn row 0..3 mapped to Y = &DF / &BF / &9F / &7F (4
-    \ evenly-spaced lines spanning the playfield gap between the upper and lower tile bands).
-    \ Initial slot state: hazard_x = &28 (off-screen right, col 40), hazard_hp = &14 for type &10 /
-    \ &06 for types &07 and < &03 / &08 otherwise, hazard_step = 4. Allocates slot via zp_7C
-    \ (round-robin 0..7). On any non-spawning type (3..6 special-cased) it re-enters
-    \ spawn_check_step to drain back-to-back spawns at the same column.
+    \ Spawn-table scanner — runs once per frame from main_loop's game_step. Compares
+    \ lev_spawn_col[zp_7B] against zp_scroll_col; on match, decodes the paired lev_spawn_attr byte
+    \ into a new hazard in the slot pool:
+    \ bits 0..4 → hazard_type (0..31)
+    \ bits 5..6 → spawn row 0..3 mapped to Y = &DF / &BF / &9F / &7F (4 evenly-spaced lines spanning
+    \ the playfield gap between the upper and lower tile bands)
+    \ bit 7 → hazard_flip (INVERTED: 0 in attr = upright, 1 = vertical-flip — used to pair
+    \ ceiling-hanging and floor-rising decoration hazards)
+    \
+    \ Initial slot state: hazard_x = &28 (off-screen right, col 40); hazard_hp = &14 for type &10,
+    \ &06 for types &07 and < &03, &08 otherwise; hazard_step = 4. Round-robin slot allocation via
+    \ zp_7C (0..n_hazards-1).
+    \
+    \ On any non-spawning type (3..6 special-cased) it re-enters itself to drain back-to-back spawns
+    \ at the same column.
     LDX zp_7B
     LDA lev_spawn_col,X
     CMP zp_scroll_col
@@ -2506,12 +2582,14 @@ L2016            = * + 1
     JMP spawn_check_step
 
 .update_hazards
-    \ Per-frame hazard + force-field update + plot. First clears the force-field strip if
-    \ forcefield_active=1 (erases a 2×&20 rectangle at (forcefield_x, forcefield_y) and clears the
-    \ flag — the strip is procedural noise re-drawn every frame, so it has to be wiped before
-    \ forcefield_render generates a fresh one). Then iterates the 8 hazard slots: for each active
-    \ hazard (hazard_type != 0), DEC hazard_x to scroll it left, redraw, and dispatch any per-type
-    \ behaviour via hazard_type_dispatch.
+    \ Per-frame HAZARD (scrolling destructible) pool update + force-field strip clear. First erases
+    \ the force-field strip if forcefield_active=1 (clears a 2×&20 rectangle at (forcefield_x,
+    \ forcefield_y) and clears the flag — the strip is procedural noise redrawn each frame, so it
+    \ needs wiping before forcefield_render generates a fresh one).
+    \
+    \ Then iterates the 8 hazard slots (X = 0..n_hazards-1): for each active hazard (hazard_type !=
+    \ 0), DECs hazard_x to scroll it left, redraws it, and dispatches any per-type behaviour via
+    \ hazard_type_dispatch.
     LDA forcefield_active
     CMP #&01
     BNE L2130
@@ -2667,11 +2745,11 @@ L2016            = * + 1
     JMP L2140
 
 .update_hazard_slot
-    \ Per-frame action for one hazard slot (X = slot index). Two steps: (1) call
-    \ hazard_type_dispatch for the per-type immediate action; if the dispatch path bumped
-    \ hazard_type past &14 (the death-anim range), jump to hazard_death_step. (2) Otherwise gate
-    \ frame-advance on zp_7F == 4 (the animation phase tick — zp_7F cycles 3/4 across frames, so
-    \ anim only advances 50% of the time) and fall into hazard_anim_advance.
+    \ Per-frame action for one hazard slot (X = slot index). Two steps:
+    \ 1. Call hazard_type_dispatch for the per-type immediate action; if the dispatch path bumped
+    \ hazard_type past &14 (the death-anim range), jump to hazard_death_step.
+    \ 2. Otherwise gate frame-advance on zp_7F == 4 (the animation phase tick — zp_7F cycles 3/4
+    \ across frames, so anim advances 50% of the time) and fall into hazard_anim_advance.
     JSR hazard_type_dispatch
     LDA hazard_type,X
     CMP #&14
@@ -2685,15 +2763,14 @@ L2016            = * + 1
 
 .hazard_anim_advance
     \ Animation-frame state machine for one hazard slot — keyed on hazard_type[X]:
-    \ type < &04 → anim_loop_1_to_3 (3-frame anim loop: 1→2→3→1, with type 4 hit briefly to spawn a
-    \ bullet then immediately wrapped back to 1)
-    \ type &08 or &09 → anim_toggle_8_9 (EOR #1 — flame-firing hazard alternates between pre-fire
+    \ type < &04 → anim_loop_1_to_3 (3-frame loop 1→2→3→1; type 4 hit briefly to spawn a bullet then
+    \ immediately wrapped back to 1)
+    \ type &08 / &09 → anim_toggle_8_9 (EOR #1 — flame-firing hazard alternates between pre-fire
     \ pose &08 and post-fire idle &09)
     \ type &0F → anim_set_type_10 (2-frame loop with &10)
     \ type &10 → anim_set_type_F (2-frame loop with &0F)
-    \ &04..&07, &0A..&0E, &11..&13 → hazard_anim_done (no animation — these are either action types
-    \ that mutate to their own next state on dispatch, or static decor)
-    \ type ≥ &14 → hazard_death_step (the explosion-animation tail).
+    \ &04..&07, &0A..&0E, &11..&13 → hazard_anim_done (no animation — action types or static decor)
+    \ type >= &14 → hazard_death_step (the explosion-animation tail)
     LDA hazard_type,X
     CMP #&04
     BCC anim_loop_1_to_3
@@ -2710,9 +2787,9 @@ L2016            = * + 1
     JMP hazard_death_step
 
 .anim_loop_1_to_3
-    \ Small-hazard 3-frame animation loop (types 1, 2, 3). INC type; on hitting type 4 (which is the
-    \ 'fire' marker, NOT a frame), wrap back to type 1. Note: type 4 IS reached momentarily —
-    \ hazard_type_dispatch runs FIRST and enqueues a bullet on type 4, then this routine wraps the
+    \ Small-hazard 3-frame animation loop (types 1, 2, 3). INC hazard_type; on hitting type 4 (which
+    \ is the 'fire' marker, NOT a frame), wraps back to type 1. Note: type 4 IS reached momentarily
+    \ — hazard_type_dispatch runs FIRST and enqueues a bullet on type 4, then this routine wraps the
     \ type back to 1.
     INC hazard_type,X
     LDA hazard_type,X
@@ -2738,8 +2815,8 @@ L2016            = * + 1
 .hazard_death_step
     \ Explosion-animation step for a dying hazard. INC hazard_type so it walks &14 → &15 → ... → &1B
     \ (= 8 frames using lev_hazard_ptr_*[20..27]); on reaching &1C clears the slot completely
-    \ (hazard_type/_x/_y = 0). Triggered when a hazard's HP hits 0 (check_bullet_hits sets
-    \ hazard_type = &14 to start the death anim).
+    \ (hazard_type / _x / _y = 0). Triggered when a hazard's HP hits 0 — check_bullet_hits sets
+    \ hazard_type = &14 to start the death anim.
     INC hazard_type,X
     LDA hazard_type,X
     CMP #&1C
@@ -2753,15 +2830,15 @@ L2016            = * + 1
 .hazard_type_dispatch
     \ Hazard per-type IMMEDIATE action — called once per frame per active slot from
     \ update_hazard_slot, before frame-advance. Dispatch table by hazard_type[X]:
-    \ type &04 → enqueue_npc_bullet (hazard fires a leftward 4×2-px white bullet; pool at
-    \ npc_bullet_x/_y, 7 slots)
-    \ type &06 → spawn_hazard_missile (CODE2: launch a vertical 4×6-px yellow-red rocket that
-    \ horizontally homes on the player; pool at hazard_missile_x/_y, 2 slots)
+    \ type &04 → enqueue_npc_bullet (hazard fires a leftward 4×2-px white bullet; shared npc_bullet
+    \ pool, 7 slots)
+    \ type &06 → spawn_hazard_missile (CODE2: launches a vertical 4×6-px yellow-red rocket that
+    \ homes horizontally on the player; pool at hazard_missile_x / _y, 2 slots)
     \ type &07 → forcefield_render (this slot IS a force-field — re-noise the strip every frame)
-    \ type &08 → spawn_flame (start the one-shot 32×8-px flame projectile; auto-mutates to type 9 on
-    \ success)
+    \ type &08 → spawn_flame (start the one-shot 32×8-px flame projectile; auto-mutates the slot to
+    \ type 9 on success)
     \ type &13 → enqueue_npc_bullet (same as type 4 — second hazard variant that fires a bullet)
-    \ else     → RTS (no per-frame action; the slot just gets drawn and frame-advanced).
+    \ else → RTS (no per-frame action; the slot just gets drawn and frame-advanced)
     LDA hazard_type,X
     CMP #&04
     BNE L22BC
@@ -2801,16 +2878,17 @@ L2016            = * + 1
     RTS
 
 .enqueue_npc_bullet
-    \ Enqueue a NPC bullet — called from hazard_type_dispatch for hazard types &04 and &13. Scans
-    \ npc_bullet_x[6..1] for a &FF (free) slot; on found, stores `hazard_x[firer] - 1` at
-    \ npc_bullet_x[slot] and `hazard_y[firer] - &10` at npc_bullet_y[slot] (Y lifted by 16 px to
-    \ fire from above the hazard). Plays sfx_fire. If the firer is already at hazard_x < &08 (almost
-    \ off-screen left) the bullet is suppressed — there's not enough screen left for it to fly.
-    \ Per-frame mover: update_npc_bullets. The bullet sprite is a 4×2-px white block at
-    \ `npc_bullet_sprite` (= &7E00, two bytes &77 poked by Loader2 line 1060). The per-frame mover
-    \ plots a 3×2 sprite from `npc_bullet_sprite` (= the visible white col 0 + two zero erase-trail
-    \ cols 1..2 that blank the bullet's previous position since hazards bullets move LEFT 2
-    \ px/frame). The deactivation erase is a 2×2 stamp from `lev_erase_brush + &102` (4 zero bytes).
+    \ Enqueue an NPC bullet from a hazard. Called from hazard_type_dispatch for hazard types &04 and
+    \ &13. Scans npc_bullet_x[6..1] for a &FF (free) slot; on found, stores `hazard_x[firer] - 1`
+    \ and `hazard_y[firer] - &10` (Y lifted by 16 px to fire from above the hazard).
+    \
+    \ Suppresses the fire if `hazard_x[firer] < &08` (almost off-screen left) — there's not enough
+    \ screen left for it to fly.
+    \
+    \ Inputs: data_16F5 = firer's slot index.
+    \ Effects: writes one slot of npc_bullet_x / _y; plays sfx_fire.
+    \
+    \ Per-frame mover: update_npc_bullets. The bullet sprite is `npc_bullet_sprite` (4×2 px white).
     LDA zp_get_ready_erase
     CMP #&02
     BEQ L22EC
@@ -2937,8 +3015,7 @@ L2016            = * + 1
     \ Per-frame test of both player missiles against the current hazard slot (X = hazard slot index,
     \ passed in via data_16F5). Sets up zp_test_x = upper_x + 3 and zp_test_y = upper_y - 4, calls
     \ `missile_hazard_box_test` with Y = 0 if the upper slot is active; then repeats with the lower
-    \ slot's Y (zp_test_y = lower_y - 4) and Y = 1. Called from update_hazards' per-slot tail
-    \ (L21AC, L21EB).
+    \ slot's Y (zp_test_y = lower_y - 4) and Y = 1. Called from update_hazards' per-slot tail.
     LDY player_missile_x
     INY
     INY
@@ -2967,10 +3044,12 @@ L2016            = * + 1
     RTS
 
 .missile_hazard_box_test
-    \ Box-test the hazard at slot X (data_16F5) against the test point (zp_test_x, zp_test_y). Hit
+    \ Box-test the hazard at slot X (= data_16F5) against the test point (zp_test_x, zp_test_y). Hit
     \ window: hazard_x in [test_x - 5, test_x] AND hazard_y in [test_y, test_y + &20]. On hit →
-    \ `missile_hit_hazard`. Y on entry encodes which missile is being tested (0 = upper, 1 = lower)
-    \ and is used by the hit path to deactivate the right slot and pick the right Y coordinate.
+    \ `missile_hit_hazard`.
+    \
+    \ Inputs: Y on entry = which missile is being tested (0 = upper, 1 = lower) — used by the hit
+    \ path to deactivate the right slot and pick the right Y coordinate.
     LDX data_16F5
     LDA hazard_x,X
     CMP zp_test_x
@@ -3034,10 +3113,9 @@ L2016            = * + 1
 .spawn_flame
     \ Spawn the flame projectile. Called from hazard_type_dispatch when a hazard of type 8 wants to
     \ fire. Refuses if `flame_state != 0` (only one flame at a time) or if the firing hazard's
-    \ `hazard_x < &0C` (it has already scrolled too far left to spawn from). On success: mutates the
-    \ firing hazard to type 9 (the post-fire idle state), copies its position into `flame_x` /
-    \ `flame_y` (with a per-flip Y offset), and sets `flame_state = 1` to start the 6-frame
-    \ animation.
+    \ `hazard_x < &0C` (already scrolled too far left to spawn from). On success: mutates the firing
+    \ hazard to type 9 (the post-fire idle state), copies its position into flame_x / flame_y (with
+    \ a per-flip Y offset), and sets flame_state = 1 to start the 6-frame animation.
     LDA flame_state
     BEQ L246A
     RTS
@@ -3079,18 +3157,19 @@ L2016            = * + 1
 
 .flame_state
     \ Flame state machine: 0 = inactive (slot free for a new spawn); 1..6 = animation frames
-    \ (1=&3B00, 2=&3B40, 3=&3B80, then ping-pongs back 4=&3B80, 5=&3B40, 6=&3B00); 7 = deactivate
-    \ next call. Each call to update_flame INCs the state (via advance_flame_state) or jumps
-    \ straight to 7 if the player has been hit.
+    \ (1=&3B00, 2=&3B40, 3=&3B80, ping-pongs back 4=&3B80, 5=&3B40, 6=&3B00); 7 = deactivate next
+    \ call. Each call to update_flame advances state via advance_flame_state, or jumps straight to 7
+    \ if the player has been hit.
     BRK
 
 .update_flame
     \ Per-frame flame update (called from update_hazards when `flame_state != 0`). Erases the
     \ previous 32×8 frame, shifts the flame left by 1 px (DEC flame_x), then either re-plots the
-    \ next animation frame from `gfx_flame_frame0..2` (states 1..6) or deactivates (state 7 /
-    \ off-screen). Each frame is 8 byte-cols × 8 lines = 32×8 px. There is only ever one flame on
-    \ screen — `spawn_flame` checks `flame_state` and refuses to start a new one until this slot is
-    \ free.
+    \ next animation frame from gfx_flame_frame0..2 (states 1..6) or deactivates (state 7 /
+    \ off-screen).
+    \
+    \ Each frame is 8 byte-cols × 8 lines = 32×8 px. There is only ever one flame on screen —
+    \ spawn_flame checks flame_state and refuses a new one until this slot is free.
     LDX flame_x
     LDY flame_y
     JSR calc_screen_addr
@@ -3108,10 +3187,9 @@ L2016            = * + 1
     JMP deactivate_flame
 
 .plot_flame
-    \ Plot the flame at its updated position. Dispatches by `flame_state` to one of three frame
-    \ plotters: state 1/6 → `plot_flame_frame_0` (`gfx_flame_frame0` at &3B00), state 2/5 →
-    \ `plot_flame_frame_1` (`gfx_flame_frame1` at &3B40), state 3/4 → `plot_flame_frame_2`
-    \ (`gfx_flame_frame2` at &3B80). State 7 → `deactivate_flame`.
+    \ Plot the flame at its updated position. Dispatches by flame_state to one of three frame
+    \ plotters: state 1/6 → gfx_flame_frame0; state 2/5 → gfx_flame_frame1; state 3/4 →
+    \ gfx_flame_frame2. State 7 → deactivate_flame.
     TAX
     LDY flame_y
     JSR calc_screen_addr
@@ -3156,8 +3234,8 @@ L2016            = * + 1
     JMP flame_collide_player
 
 .deactivate_flame
-    \ Deactivate the flame — `flame_state = 0`. Reached when the flame has reached its final
-    \ animation frame, drifts off the left edge, or has hit the player.
+    \ Deactivate the flame — flame_state = 0. Reached when the flame has reached its final animation
+    \ frame, drifts off the left edge, or has hit the player.
     LDA #&00
     STA flame_state
     LDX data_16F5
@@ -3165,8 +3243,8 @@ L2016            = * + 1
 
 .flame_collide_player
     \ Box-test the flame against the player. Collision box is offset (+4, -4) from the plotted
-    \ position, 6 px wide × &18 (24) lines tall. On hit: set `flame_state = 7` (so the next call
-    \ deactivates) and JMP `lose_a_life`.
+    \ position, 6 px wide × &18 (24) lines tall. On hit: set flame_state = 7 (so the next call
+    \ deactivates) and JMP lose_a_life.
     LDA flame_x
     CLC
     ADC #&04
@@ -3192,8 +3270,8 @@ L2016            = * + 1
     JMP lose_a_life
 
 .advance_flame_state
-    \ Tail of `flame_collide_player` for the no-hit case — INC `flame_state` so the next frame plots
-    \ the next animation step (1→2→3→4→5→6→7→deactivate).
+    \ Tail of flame_collide_player for the no-hit case — INC flame_state so the next frame plots the
+    \ next animation step (1→2→3→4→5→6→7→deactivate).
     INC flame_state
     RTS
 
@@ -3205,13 +3283,15 @@ L2016            = * + 1
 .pod_collide_enemy
     \ Per-frame pod ↔ enemy collision check (X = enemy slot). Only runs when the force-pod power-up
     \ is attached to the player (`pod_attached == 1`) and the enemy slot is active (`enemy_state <
-    \ 9`). Test box is 3×&14 px at (player_x+8, player_y-11) — matches where draw_player_pod plots
-    \ the pod sprite (offset (+5, +1) from the player). On hit: marks the slot &0A (expired), plays
-    \ OSWRCH &07 (collision bell), runs `add_score_x1` for the score, and INCs `pickup_kill_count`
-    \ (the kill-milestone counter that triggers a pickup spawn every 10 hits). Differs from
-    \ `check_player_collisions` in that this is the POD doing damage to the enemy (scoring), whereas
-    \ check_player_collisions is the enemy damaging the player (lose_a_life). Called from
-    \ update_enemies per-slot.
+    \ 9`). Test box is 3×&14 px at (player_x + 8, player_y - 11) — matches where draw_player_pod
+    \ plots the pod sprite (offset (+5, +1) from the player).
+    \
+    \ On hit: marks the enemy slot &0A (expired) to start its death animation, plays the collision
+    \ bell, runs `add_score_x1`, and INCs pickup_kill_count (the kill-milestone counter that
+    \ triggers a pickup spawn every 10 hits).
+    \
+    \ Differs from `check_player_collisions` in that this is the POD doing damage to the enemy
+    \ (scoring), whereas check_player_collisions is the enemy damaging the player (lose_a_life).
     LDA pod_attached
     CMP #&01
     BEQ L255D
@@ -3260,7 +3340,12 @@ L2016            = * + 1
 
 \ ----- data &25A1..&25AA -----
 .pickup_tier_flag
-    \ 8-element pickup tier-flag array (&25A1..&25A8), indexed by `pickup_count - 1`. Set by `set_pickup_tier_flag` to mark each tier as reached. Three slots overlap with named flags whose meaning is consumed elsewhere: tier 3 (offset +2) = `pod_attached` (pod sprite + pod_collide_enemy kicks in), tier 5 (offset +4) = `force_pod_state` (pod_fire enabled + force_pod_anim runs), tier 7 (offset +6) = `player_missiles_unlocked` (`fire_player_missiles` enabled — a paired upper+lower 5×8 missile pattern fires on the next fire-button press; the spawn-block side-effect just falls out — there's nothing left to upgrade). Tiers 2, 4, 6, 8 (offsets +1, +3, +5, +7) ARE written but nothing reads them — orphan flags, presumably scaffolding for power-ups that were planned but never implemented (no consumer code).
+    \ 8-element pickup tier-flag array, indexed by `pickup_count - 1`. Set by set_pickup_tier_flag to mark each tier as reached. Three slots overlap with named flags whose meaning is consumed elsewhere:
+    \ tier 3 (offset +2) = `pod_attached` — pod sprite + pod_collide_enemy kicks in
+    \ tier 5 (offset +4) = `force_pod_state` — pod_fire enabled + force_pod_anim runs
+    \ tier 7 (offset +6) = `player_missiles_unlocked` — fire_player_missiles enabled
+    \ 
+    \ Tiers 2, 4, 6, 8 (offsets +1, +3, +5, +7) ARE written but nothing reads them — orphan flags, presumably scaffolding for power-ups that were planned but never wired up.
     EQUB &EA, &EA
 .pod_attached
     EQUB &EA, &EA
@@ -3273,12 +3358,13 @@ L2016            = * + 1
 
 \ ----- code &25AA..&268F -----
 .try_spawn_pickup
-    \ Try to start a power-up pickup. Triggered when pickup_kill_count (the kill-milestone counter —
-    \ INC'd in check_bullet_hits at enemy-hit values 3/5/7) reaches &0A. Requires no pickup already
-    \ active (pickup_state == 0) and `player_missiles_unlocked != 1` (= the 7th-pickup ceiling —
-    \ once the player has collected 7 power-ups, no more spawn). On success: stash player_y in
-    \ pickup_y, set pickup_x = &27 (right edge col 39), pickup_state = 1 (animation start), play
-    \ sfx_level_start.
+    \ Try to start a power-up pickup. Triggered when `pickup_kill_count` (the kill-milestone counter
+    \ — INC'd in check_bullet_hits at enemy-hit values 3/5/7) reaches &0A. Requires no pickup
+    \ already active (`pickup_state == 0`) and `player_missiles_unlocked != 1` (= the 7th-pickup
+    \ ceiling — once the player has collected 7 power-ups, no more spawn).
+    \
+    \ On success: stashes player_y in pickup_y, sets pickup_x = &27 (right edge col 39),
+    \ pickup_state = 1, and plays sfx_level_start.
     LDA pickup_kill_count
     CMP #&0A
     BCS L25B2
@@ -3308,8 +3394,8 @@ L2016            = * + 1
     \ chain through the 4 display digits (score+3 → +2 → +1 → +0). The score buffer is 6 bytes
     \ MSD-first at `score..score + 5`: bytes 0..3 are the four visible display digits, byte 4 is the
     \ actual units (which is what gets incremented), byte 5 is always 0 (the trailing '0' shown on
-    \ screen so a score of 1230 stores as {0,1,2,3,0,0} and a +10 award stores `zp_score_acc = 1`
-    \ then calls `add_score_x10`). Carries cascade through `add_score_carry_x{1,10,100,1000}`.
+    \ screen — Nevryon awards in multiples of 10). Carries cascade through
+    \ `add_score_carry_x{1,10,100,1000}`.
     CLC
     LDA score + 4
     ADC zp_score_acc
@@ -3446,12 +3532,15 @@ L2016            = * + 1
 
 \ ----- code &2693..&27E7 -----
 .update_pickup
-    \ Per-subframe power-up pickup updater. Returns immediately if pickup_state == 0. Otherwise
-    \ calls L275F (collision test?), conditionally advances state, DECs pickup_x (drifts the pickup
-    \ leftward 1 px per subframe), and on pickup_x == 0 deactivates and erases. While alive, plots
-    \ one of two sprites (`gfx_pickup_yellow` or `gfx_pickup_red`) keyed on the current pickup_state
-    \ value (state 2/6 = yellow, 3/5 = red, 4 = ?, others = erase) — gives the pickup a flashing
-    \ animation as it crosses the playfield.
+    \ Per-subframe power-up pickup updater. Returns immediately if `pickup_state == 0`. Otherwise:
+    \ - call L275F (= pickup_collected — collision test)
+    \ - conditionally advance pickup_state
+    \ - DEC pickup_x (drifts the pickup leftward 1 px per subframe)
+    \ - on pickup_x == 0: deactivate (pickup_state = 0) and erase
+    \
+    \ While alive, plots one of two sprites based on the current `pickup_state` for a flashing
+    \ animation: state 2/6 = gfx_pickup_yellow, state 3/5 = gfx_pickup_red, others = erase. Wraps at
+    \ &0A back to 1.
     LDA pickup_state
     BNE L2699
     RTS
@@ -3549,13 +3638,20 @@ L2016            = * + 1
 .pickup_collected
     \ Per-subframe pickup ↔ player collision test + tier ladder. Box-test the player against
     \ (pickup_x, pickup_y) with a (6 × &1C) hit window; miss → RTS. On hit: clear pickup_state,
-    \ erase the pickup sprite (3×&10 brush), play sfx_level_start, add 100 to score (add_score_x10
-    \ with zp_score_acc=10? — TODO confirm), INC pickup_count, plot the +1 icon on the status row,
-    \ then dispatch to `apply_pickup_tier`. Effects ladder (cumulative per game/life): #1 → fast
-    \ fire (fire_cooldown_reload = 3); #2 → pickup_tier_flag+1 (unused); #3 → pod_attached = 1; #4 →
-    \ unused; #5 → force_pod_state = 1 AND reset fire timer zp_8A = 8; #6 → unused; #7 →
-    \ player_missiles_unlocked = 1; #8+ → no effect (count clamped). Called from update_pickup every
-    \ active subframe.
+    \ erase the pickup sprite (3×&10 brush), play sfx_level_start, add 100 to score, INC
+    \ pickup_count, plot the +1 icon on the status row, then dispatch to `apply_pickup_tier`.
+    \
+    \ Effects ladder (cumulative per game/life):
+    \ #1 → fast fire (fire_cooldown_reload = 3)
+    \ #2 → pickup_tier_flag + 1 (unused)
+    \ #3 → pod_attached = 1
+    \ #4 → unused
+    \ #5 → force_pod_state = 1 AND reset fire timer zp_8A = 8
+    \ #6 → unused
+    \ #7 → player_missiles_unlocked = 1
+    \ #8+ → no effect (count clamped)
+    \
+    \ Called from update_pickup every active subframe.
     LDX zp_player_x
     DEX
     TXA
@@ -3608,9 +3704,9 @@ L2016            = * + 1
     RTS
 
 .apply_pickup_tier
-    \ Tier-flag dispatcher. X = pickup_count, decrement to get the tier index (0-based), then jump
-    \ to `set_pickup_tier_flag` if X < 7. Falls through to RTS for tier indices >= 7 (i.e.
-    \ pickup_count >= 8).
+    \ Tier-flag dispatcher. Inputs: pickup_count (just INC'd by pickup_collected). Decrements to get
+    \ the tier index (0-based), then JMP to set_pickup_tier_flag if tier index < 7. Falls through to
+    \ RTS for tier indices >= 7 (i.e. pickup_count >= 8).
     TAX
     DEX
     CPX #&07
@@ -3618,9 +3714,9 @@ L2016            = * + 1
     RTS
 
 .set_pickup_tier_flag
-    \ Set the per-tier pickup flag at `pickup_tier_flag,X`. The interesting tiers are X=2 (=
-    \ pod_attached), X=4 (= force_pod_state, also resets zp_8A), X=6 (= player_missiles_unlocked).
-    \ Tiers X=1/3/5/7 write to dead slots.
+    \ Set the per-tier pickup flag at `pickup_tier_flag, X`. The semantically-loaded tiers are X=2
+    \ (= pod_attached), X=4 (= force_pod_state, also resets zp_8A), X=6 (=
+    \ player_missiles_unlocked). Tiers X=1/3/5/7 write to dead slots.
     LDA #&01
     STA pickup_tier_flag,X
     CPX #&04

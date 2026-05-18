@@ -82,8 +82,8 @@ ORG &2800
 
 \ ----- code &2800..&2809 -----
 .sfx_fire
-    \ Single-tone shot/fire sound effect — tail-call into OSWORD &07 with param block at
-    \ sfx_fire_params.
+    \ Play 'fire' sound via OSWORD &07. Loads the param block at &2809 (ch=&0013 amp=2 pitch=&4B
+    \ dur=1).
     LDA #&07
     LDX #&09
     LDY #&28
@@ -96,8 +96,7 @@ ORG &2800
 
 \ ----- code &2811..&281A -----
 .sfx_hit_lo
-    \ Single-tone hit sound effect — tail-call into OSWORD &07 with param block at
-    \ sfx_hit_lo_params.
+    \ Play 'hit/low' sound. Param block at &281A (ch=&0012 amp=2 pitch=&28 dur=1).
     LDA #&07
     LDX #&1A
     LDY #&28
@@ -110,8 +109,10 @@ ORG &2800
 
 \ ----- code &2822..&283B -----
 .sfx_explode
-    \ Explosion sound effect — plays two queued OSWORD &07 SOUNDs back-to-back (noise on ch 0 then
-    \ tone on ch 1).
+    \ Play 'explode' sound — two OSWORD &07 calls in sequence. Sound A (noise on ch 0) via params at
+    \ &283B; sound B (tone on ch 1) via params at &2843. Note: amp.lo of sound A is at &283D = the
+    \ byte that Loader3 PATCHES with `?&283D = 256 - V%` (the user's volume preference from
+    \ options.BAS).
     STY scratch_28D3
     LDA #&07
     LDX #&3B
@@ -238,14 +239,16 @@ ORG &2800
 data_28D8        = * + 1
     \ Per-subframe (from game_step's play_subframe): if force_pod_state == 1, animate the floating
     \ force-pod power-up — a chomping ball drawn at (force_pod_x, force_pod_y). Erases the previous
-    \ frame with lev_erase_brush+&80 (2 byte-col × &0C lines), then plots one of 6 frames at
-    \ gfx_ball_frame0..5 (&3860..&38D8 in GRAPHIX, each 2×&0C = &18 bytes). Frame selection is a
-    \ multiply-by-&18 unrolled inline: `LDA #LO(gfx_ball_frame0 - &18); CLC; LDX force_pod_frame;
-    \ loop ADC #&18 / DEX / BNE` — so frame N=1 gives LO = &48 + &18 = &60 (= gfx_ball_frame0),
-    \ frame N=2 gives &78 (= gfx_ball_frame1), ..., frame N=6 gives &D8 (= gfx_ball_frame5). HI is
-    \ hard-wired to &38. After plot, force_pod_frame INCs (wraps 7→1). Also checks (a) OSBYTE &81 /
-    \ -1 INKEY for any key press, and (b) a box-collision against the player ship — either condition
-    \ dismisses the pod (jumps to L299F, presumably to collect or hide).
+    \ frame with lev_erase_brush + &80 (2 byte-col × &0C lines), then plots one of 6 frames at
+    \ gfx_ball_frame0..5 (each 2×&0C = &18 bytes).
+    \
+    \ Frame selection: inline multiply-by-&18 — `LDA #LO(gfx_ball_frame0 - &18); CLC; LDX
+    \ force_pod_frame; loop ADC #&18 / DEX / BNE` — so frame N=1 gives &60 (= gfx_ball_frame0), N=2
+    \ gives &78, ..., N=6 gives &D8. HI is hard-wired to &38.
+    \
+    \ After plot, force_pod_frame INCs (wraps 7→1). Also checks (a) OSBYTE &81 / -1 INKEY for any
+    \ key press, and (b) a box-collision against the player ship — either condition dismisses the
+    \ pod (jumps to L299F, presumably to collect or hide).
     LDA force_pod_state
     CMP #&01
     BEQ L28DF
@@ -397,8 +400,9 @@ data_28D8        = * + 1
 
 \ ----- code &29E7..&2A02 -----
 .draw_score
-    \ Draw 6-digit score at char-col 9 row &5F. Loops X=0..5 reading score_d* (&2A02..&2A07) and
-    \ calls draw_score_digit per digit.
+    \ Draw the 6-digit score at char-col 9, row &5F. Loops X = 0..5 reading score[X] and calls
+    \ draw_score_digit per digit. Score is most-significant-digit first; rightmost byte is always 0
+    \ (Nevryon awards in multiples of 10).
     LDX #&09
     LDY #&5F
     JSR calc_screen_addr
@@ -421,8 +425,10 @@ data_28D8        = * + 1
 
 \ ----- code &2A08..&2B9A -----
 .draw_score_digit
-    \ Draw one score digit. A=digit value (0..9), X=column offset; selects gfx_digit_N (= &3A60 +
-    \ 8*N) and plots a 4x8 sprite.
+    \ Draw one score digit at the current screen position.
+    \
+    \ Inputs: A = digit value (0..9), X = column offset.
+    \ Selects gfx_digit_N via `&3A60 + 8*N` and plots a 4×8 sprite.
     STX scratch_28D3
     ASL A
     ASL A
@@ -439,12 +445,14 @@ data_28D8        = * + 1
 .spawn_hazard_missile
     \ Try to spawn a new hazard missile in one of the two slots (hazard_missile_x[0..1] == &FF =
     \ free). Called from CODE's hazard_type_dispatch for hazard_type &06. Validates the firer's
-    \ hazard_x is in [&08, &25] (on-screen), copies hazard_x+2 / hazard_y into the missile slot,
+    \ hazard_x is in [&08, &25] (on-screen), copies hazard_x + 2 / hazard_y into the missile slot,
     \ mirrors hazard_flip into hazard_missile_flip (controls vertical direction in
     \ step_hazard_missile), and sets hazard_missile_homing_dir from a player-X comparison: 1 if
-    \ player_x+3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise
-    \ (home leftward). Plays sfx_score_tick to mark the launch. The missile sprite is
-    \ gfx_icon_missile_rocket, a 4×6-px yellow-and-red rocket pointing vertically.
+    \ player_x + 3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise
+    \ (home leftward). Plays sfx_score_tick to mark the launch.
+    \
+    \ The missile sprite is `gfx_icon_missile_rocket` — a 4×6-px yellow-and-red rocket pointing
+    \ vertically.
     LDA zp_get_ready_erase
     CMP #&02
     BNE L2A3E
@@ -529,10 +537,13 @@ data_28D8        = * + 1
 
 .step_hazard_missile
     \ Step one hazard missile (X = slot index 0..1). Erases the old 1×6 position with
-    \ lev_erase_brush+&80, then advances: horizontally by hazard_missile_homing_dir (1 = INC X by 1
-    \ → home rightward, else DEC X by 2 → home leftward), vertically by hazard_missile_flip (1 =
-    \ Y+=2, else Y-=2). Bounds-checks the new (X, Y) against the playfield; out-of-bounds → mark
-    \ slot inactive. Plots gfx_icon_missile_rocket (4×6-px rocket) at the new position.
+    \ lev_erase_brush + &80, then advances:
+    \ horizontally by hazard_missile_homing_dir (1 = INC X by 1, else DEC X by 2 — homes on the
+    \ player)
+    \ vertically by hazard_missile_flip (1 = Y+=2, else Y-=2)
+    \
+    \ Bounds-checks the new (X, Y) against the playfield; out-of-bounds → mark slot inactive. Plots
+    \ gfx_icon_missile_rocket (4×6-px rocket) at the new position.
     STX scratch_28D3
     LDA hazard_missile_x,X
     LDY hazard_missile_y,X
@@ -649,10 +660,10 @@ data_28D8        = * + 1
 
 \ ----- code &2BA4..&2E8C -----
 .intro_get_ready
-    \ Level-start GET READY!: draws the score, plots 7 icon_10 'lives' sprites at row &57 col 8..&F,
-    \ shutter-fades to a black star field, plays sfx_explode for drama, then loops 75 frames
-    \ updating starfield and blitting gfx_text_get_ready (split as two 8-col halves at cols 12 and
-    \ 20) before erasing.
+    \ Level-start GET READY! intro. Draws the score, plots 7 gfx_icon_lives_intro sprites at row &57
+    \ col 8..&F, shutter-fades to a black star field, plays sfx_explode for drama, then loops 75
+    \ frames updating starfield and blitting gfx_text_get_ready (split as two 8-col halves at cols
+    \ 12 and 20) before erasing.
     JSR draw_score
     LDA #&08
     STA scratch_28D3
@@ -781,9 +792,8 @@ data_28D8        = * + 1
     JMP sfx_explode
 
 .draw_title_screen
-    \ Title screen renderer: shutter_fade + 7 icon_10 row + icon_11 indicator(s) + the 4th Dimension
-    \ logo (gfx_logo_4thdim, 56x32 at col 7 row &FD) + ampersand + 'GPR 90' + 'PRESS SPACE' (two
-    \ 10-col halves, cols 10 and 20, row &82). Called by main_init.
+    \ Draw the title screen (logo, scores, copyright) using the doubled-font printer in CODE3 + a
+    \ sequence of pre-rendered text sprites from GRAPHIX.
     JSR shutter_fade
     JSR starfield_update
     LDA #&08
@@ -1010,8 +1020,7 @@ data_28D8        = * + 1
 
 \ ----- code &2E94..&2EF6 -----
 .play_death_sequence
-    \ Death/level-end transition: shutter_fade + explosion sound + state-clear loop. Called from
-    \ CODE on death and from CODE3 game_over_or_continue.
+    \ Play the death sequence sound effects (a 3-tone descending pitch followed by a noise burst).
     LDA #&06
     NOP
     NOP
@@ -1054,7 +1063,7 @@ data_28D8        = * + 1
     JMP shutter_fade
 
 .sfx_level_start
-    \ Level-start fanfare beep — long high-pitched tone. Tail-call into OSWORD &07.
+    \ Play 'level start / pickup' sound. Param block at &2EF6 (ch=&0011 amp=4 pitch=&FF dur=&0F).
     LDA #&07
     LDX #&F6
     LDY #&2E
@@ -1068,8 +1077,8 @@ data_28D8        = * + 1
 
 \ ----- code &2EFF..&3041 -----
 .intro_or_scoreboard
-    \ Branch: if &2051==6 (fresh game, full lives) → ship_intro_anim; otherwise →
-    \ draw_final_scoreboard.
+    \ Branch: if lives_left == 6 (fresh game, full lives) → ship_intro_anim; otherwise →
+    \ draw_final_scoreboard. Called from main_init after the score restore.
     LDA lives_left
     CMP #&06
     BEQ ship_intro_anim
@@ -1077,7 +1086,7 @@ data_28D8        = * + 1
 
 .ship_intro_anim
     \ Plays the four-frame ship reveal animation (right-to-left): the player ship at
-    \ lev_player_sprite (&4E80) is plotted progressively wider from col 5 → col 2 over four vsyncs.
+    \ lev_player_sprite is plotted progressively wider from col 5 → col 2 over four vsyncs.
     LDA #&00
     STA data_2EFE
     JSR shutter_fade
@@ -1269,8 +1278,11 @@ L2FF0            = * + 1
 
 \ ----- code &30F8..&31E9 -----
 .save_score_to_loader
-    \ Save current score (score_d0..d3) and high score (&2E5A..) to the loader persistence area at
-    \ page &0CF3+. Called when handing off to the BASIC loader.
+    \ Save current score and high-score to the loader persistence area at page &0CF3+. Called when
+    \ handing off to the BASIC loader between stages.
+    \
+    \ Effects: writes loader_lives_save = lives_left, loader_score_save (6 bytes) = score[0..5],
+    \ loader_hiscore_save (6 bytes) = the high-score buffer.
     JSR L2E60
     LDX #&00
 .L30FD
@@ -1286,8 +1298,8 @@ L2FF0            = * + 1
     RTS
 
 .restore_score_from_loader
-    \ Restore score / high-score from loader area &0CF3+ back into &2051 / &2A02..&2A07 /
-    \ &2E5A..&2E5F. Called by main_init at game start.
+    \ Restore score / high-score from the loader persistence area into lives_left, score[0..5], and
+    \ the high-score buffer. Called by main_init at game start.
     LDX #&00
 .L3117
     LDA loader_score_save,X
@@ -1329,8 +1341,8 @@ L2FF0            = * + 1
     RTS
 
 .pause_game
-    \ PAUSE: plot gfx_text_pause (&4780) at col 16 row &D0, then loop waiting for SPACE (key code
-    \ &C9). Erase the sprite using lev_erase_brush (&7D80).
+    \ PAUSE handler. Loops on `OSBYTE &81 / KEY_PAUSE` until the key is released, then loops again
+    \ until KEY_PAUSE is pressed once more to resume. Returns when un-paused.
     LDX #&10
     LDY #&D0
     JSR calc_screen_addr
@@ -1363,9 +1375,8 @@ L2FF0            = * + 1
     JMP sprite_plot_xy
 
 .draw_final_scoreboard
-    \ End-of-game / scoreboard display. Calls shutter_fade then a sequence of ship/text plot
-    \ helpers; followed by a 6-iteration plot loop. Triggered when lives_left != 6 in
-    \ intro_or_scoreboard.
+    \ End-of-game scoreboard display. Calls shutter_fade then a sequence of ship/text plot helpers;
+    \ followed by a 6-iteration plot loop. Triggered when lives_left != 6 in intro_or_scoreboard.
     JSR shutter_fade
     JSR ship_intro_frame_5
     JSR ship_intro_frame_4
