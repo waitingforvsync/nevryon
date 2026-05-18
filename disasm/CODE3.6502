@@ -10,7 +10,7 @@
 \   zp_continues = &0091
 \   zp_string_ptr_lo = &0095
 \   zp_string_ptr_hi = &0096
-\   KEY_UP = &0097
+\   KEY_DOWN = &0097
 \   zp_level_num = &009D
 \   loader_lives_save = &0CF3
 \   loader_score_save = &0CF4
@@ -103,7 +103,7 @@ ORG &3300
 .L337D
     DEC str_bonus_xnnn + 7
     INY
-    STY KEY_UP
+    STY KEY_DOWN
     STX zp_98
     JSR sfx_score_tick
     JSR draw_score
@@ -116,7 +116,7 @@ ORG &3300
     LDX #&05
     LDY #&0A
     JSR print_doubled_string
-    LDY KEY_UP
+    LDY KEY_DOWN
     LDX zp_98
     LDA score + 3
     CMP #&0A

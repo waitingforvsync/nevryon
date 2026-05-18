@@ -267,7 +267,7 @@ sprite_src_hi    = * + 2
 
 \ ----- code &1236..&1307 -----
 .calc_screen_addr
-    TYA  \ Compute screen address from X (char-col) and Y (logical row); result in $76/$77
+    TYA  \ Compute screen address from X (char-col) and Y (logical row); result in $76/$77. Y is INVERTED on entry (EOR #&FF) before the row LUT — meaning the CALLER's Y origin is at the BOTTOM of the screen, not the top. So `player_y = &C8` is high on screen (= low row index after inversion), and `move_player_up` adds 4 to player_y while `move_player_down` subtracts 4. Same convention applies to hazard_y / enemy_y / pickup_y / flame_y / force_pod_y — they're all in caller-Y units (bottom = 0).
     EOR #&FF
     TAY
     AND #&07
@@ -619,7 +619,7 @@ scroll_upper_dst_hi = * + 2
     JMP update_bullets
 
 .draw_player_pod
-    LDA pod_anim_frame  \ Draw the player's force-pod (the rotating saucer that orbits the ship after a power-up). Selects one of three frames at gfx_pod_frame0/1/2 (&3900/&3960/&39C0) based on pod_anim_frame (= data_14D8, cycles 1/2/3 driven by vertical movement: move_player_down does INC, move_player_up does DEC, both wrap 1<->3). Falls through into sprite_plot_xy with X=4 byte-cols, Y=&18 lines.
+    LDA pod_anim_frame  \ Draw the player's force-pod (the rotating saucer that orbits the ship after a power-up). Selects one of three frames at gfx_pod_frame0/1/2 (&3900/&3960/&39C0) based on pod_anim_frame (= data_14D8, cycles 1/2/3 driven by vertical movement: move_player_up does INC, move_player_down does DEC, both wrap 1<->3). Falls through into sprite_plot_xy with X=4 byte-cols, Y=&18 lines.
     CMP #&01
     BEQ L14C8
     CMP #&02
@@ -638,12 +638,12 @@ scroll_upper_dst_hi = * + 2
 
 \ ----- data &14D8..&14D9 -----
 .pod_anim_frame
-    \ Force-pod animation frame (1 / 2 / 3). Selects which of the three gfx_pod_frame0/1/2 sprites draw_player_pod renders. Cycled by player vertical motion: each move_player_down INCs it (wraps 4→1), each move_player_up DECs it (wraps 0→3). Disk-initial value is 1.
+    \ Force-pod animation frame (1 / 2 / 3). Selects which of the three gfx_pod_frame0/1/2 sprites draw_player_pod renders. Cycled by player vertical motion: each move_player_up INCs it (wraps 4→1), each move_player_down DECs it (wraps 0→3). Disk-initial value is 1.
     EQUB &01
 
 \ ----- code &14D9..&1575 -----
 .read_input
-    LDA zp_9F  \ Read input: if joystick mode (zp_9F == 1) take read_joystick path; else scan KEY_RIGHT / KEY_LEFT / KEY_DOWN / KEY_UP / KEY_FIRE in turn via check_key_pressed and dispatch the matching move_player_* / on_fire_pressed routine.
+    LDA zp_9F  \ Read input: if joystick mode (zp_9F == 1) take read_joystick path; else scan KEY_RIGHT / KEY_LEFT / KEY_UP / KEY_DOWN / KEY_FIRE in turn via check_key_pressed and dispatch the matching move_player_* / on_fire_pressed routine.
     CMP #&01
     BEQ read_joystick
     LDX #KEY_RIGHT
@@ -657,15 +657,15 @@ scroll_upper_dst_hi = * + 2
     BNE L14F6
     JSR move_player_left
 .L14F6
-    LDX #KEY_DOWN
-    JSR check_key_pressed
-    BNE L1500
-    JSR move_player_down
-.L1500
     LDX #KEY_UP
     JSR check_key_pressed
-    BNE L150A
+    BNE L1500
     JSR move_player_up
+.L1500
+    LDX #KEY_DOWN
+    JSR check_key_pressed
+    BNE L150A
+    JSR move_player_down
 .L150A
     LDX #KEY_FIRE
     JSR check_key_pressed
@@ -692,12 +692,12 @@ scroll_upper_dst_hi = * + 2
     JSR OSBYTE
     CPY #&C8
     BCC L1540
-    JSR move_player_down
+    JSR move_player_up
     JMP L1547
 .L1540
     CPY #&40
     BCS L1547
-    JSR move_player_up
+    JSR move_player_down
 .L1547
     LDA #&80
     LDX #&00
@@ -901,8 +901,8 @@ scroll_upper_dst_hi = * + 2
     INC zp_player_x
     RTS
 
-.move_player_down
-    LDA zp_player_y  \ Move player one row DOWN (zp_player_y += 4, clamped at max &DC).
+.move_player_up
+    LDA zp_player_y  \ Move player one row UP (zp_player_y += 4, clamped at max &DC). NOTE: caller-Y origin is at the BOTTOM of the screen — `calc_screen_addr` does an EOR #&FF before the row LUT, so HIGHER `zp_player_y` is HIGHER on screen.
     CMP #&DC
     BNE L16B7
     RTS
@@ -919,8 +919,8 @@ scroll_upper_dst_hi = * + 2
 .L16CB
     RTS
 
-.move_player_up
-    LDA zp_player_y  \ Move player one row UP (zp_player_y -= 4, clamped at min &98).
+.move_player_down
+    LDA zp_player_y  \ Move player one row DOWN (zp_player_y -= 4, clamped at min &98). See `move_player_up` for the Y-origin note.
     CMP #&98
     BNE L16D3
     RTS

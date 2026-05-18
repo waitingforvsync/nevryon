@@ -198,8 +198,8 @@ takes over): Loader2 line 990 sets `VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` →
 0=black, 1=red, 2=cyan, 3=white. Use `NEVRYON_LOADER_PALETTE`.
 
 ### Map tile layout
-- Upper tile id table at `&7F10` (LEVD2 file offset `&B90`), 240 entries.
-- Lower tile id table at `&7E10` (file offset `&A90`), 240 entries.
+- Upper tile id table at `&7E10` (LEVD2 file offset `&A90`), 240 entries.
+- Lower tile id table at `&7F10` (file offset `&B90`), 240 entries.
 - Tile catalog at `&4F00` in LEVD1, 128 bytes per tile (4 col × 32 lines).
 - **Upper tile is rendered vertically mirrored** (`zp_sprite_dir_flag=0`
   in `L127B` draw routine — read column-major bytes in reverse).

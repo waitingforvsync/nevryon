@@ -179,8 +179,8 @@ lev_map_lower             = &7F10     \ 240-byte lower tile-id stream (drives zp
 \ 256 → INKEY -67. check_key_pressed in CODE wraps the call.
 KEY_RIGHT                 = &BD     \ INKEY -67  (the "X" key)
 KEY_LEFT                  = &9E     \ INKEY -98  (the "Z" key)
-KEY_DOWN                  = &B7     \ INKEY -73
-KEY_UP                    = &97     \ INKEY -105
+KEY_UP                    = &B7     \ INKEY -73
+KEY_DOWN                  = &97     \ INKEY -105
 KEY_FIRE                  = &B6     \ INKEY -74
 KEY_PAUSE                 = &C8     \ INKEY -56
 KEY_QUIT                  = &8F     \ INKEY -113 (force game over)
