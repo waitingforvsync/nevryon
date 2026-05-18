@@ -744,7 +744,7 @@ scroll_upper_dst_hi = * + 2
 .player_missile_active
     EQUB &EA, &EA
 
-\ ----- code &1577..&16FD -----
+\ ----- code &1577..&16E6 -----
 .fire_player_missiles
     LDA player_missiles_unlocked  \ Player-missile launch (called from on_fire_pressed). Gated on `player_missiles_unlocked == 1` (= the player has collected 7 pickups → tier 7) AND `player_missile_step == 0` (= no pair currently in flight). On launch: captures the player position into two parallel slots — upper (player_missile_x[0], player_missile_y[0] = player_x, player_y + 2) and lower (player_missile_x[1], player_missile_y[1] = player_x, player_y - &12). Activates both slots (player_missile_active = {1, 1}), sets sprite-frame = 1 and step counter = 1. Suppresses the upper missile if player_y >= &D8 (too low — would be off-screen) and suppresses the lower if player_y < &A0 (too high). On the next pass, `update_player_missiles` (called per-subframe) drives the pair.
     CMP #&01
@@ -936,30 +936,14 @@ scroll_upper_dst_hi = * + 2
 .L16E5
     RTS
 
+\ ----- data &16E6..&16F5 -----
+\ Player bullet pool state: player_bullet_x[7] at &16E6 + player_bullet_y[7] at &16ED + 1 B gap at &16F4 before data_16F5 (scratch). The arrays are 7 bytes wide because the predec iterator (LDX #n_player_bullets / DEX BNE) accesses slots 1..6 — slot 0 is unused but reserved by the array's address arithmetic.
 .player_bullet_x
-    BRK
-.data_16E7
-    BRK
-.data_16E8
-    BRK
-.data_16E9
-    BRK
-.data_16EA
-    BRK
-.data_16EB
-    BRK
-.data_16EC
-    BRK
-
+    EQUB &00, &00, &00, &00, &00, &00, &00
 .player_bullet_y
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    NOP
+    EQUB &00, &00, &00, &00, &00, &00, &00, &EA
+
+\ ----- code &16F5..&16FD -----
 .data_16F5
     NOP
 .data_16F6
@@ -2117,13 +2101,13 @@ scroll_upper_dst_hi = * + 2
     STA pickup_state
     STA player_missile_x
     STA player_bullet_x
-    STA data_16E7
-    STA data_16E8
-    STA data_16E9
+    STA player_bullet_x + 1
+    STA player_bullet_x + 2
+    STA player_bullet_x + 3
     STA enemy_pattern_len
-    STA data_16EA
-    STA data_16EB
-    STA data_16EC
+    STA player_bullet_x + 4
+    STA player_bullet_x + 5
+    STA player_bullet_x + 6
     STA zp_7E
     STA zp_88
     STA zp_get_ready_erase

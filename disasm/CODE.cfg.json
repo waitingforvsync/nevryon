@@ -27,6 +27,13 @@
       "comment": "Lives counters (player_hp, lives_left) + first three of the six per-hazard-slot state arrays (hazard_x[10], hazard_y[9], hazard_type[9]). All are pure data — the tracer otherwise mis-decodes them as `ASL zp_06` / BRK / NOP because the initial bytes happen to be valid opcodes. The remaining three arrays (hazard_flip / _hp / _step) are already in the synthesised data region at &206E..&208A."
     },
     {
+      "start": "0x16E6",
+      "end": "0x16F5",
+      "kind": "data",
+      "width": 1,
+      "comment": "Player bullet pool state: player_bullet_x[7] at &16E6 + player_bullet_y[7] at &16ED + 1 B gap at &16F4 before data_16F5 (scratch). The arrays are 7 bytes wide because the predec iterator (LDX #n_player_bullets / DEX BNE) accesses slots 1..6 — slot 0 is unused but reserved by the array's address arithmetic."
+    },
+    {
       "start": "0x1A55",
       "end": "0x1A8B",
       "kind": "data",
@@ -345,6 +352,8 @@
     "0x156F": ["player_missile_x", 2],
     "0x1571": ["player_missile_y", 2],
     "0x1575": ["player_missile_active", 2],
+    "0x16E6": ["player_bullet_x", 7],
+    "0x16ED": ["player_bullet_y", 7],
     "0x1A55": ["enemy_x", 11],
     "0x1A60": ["enemy_y", 11],
     "0x1A6B": ["enemy_state", 11],
