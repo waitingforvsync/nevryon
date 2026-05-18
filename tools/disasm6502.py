@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import sys
+import textwrap
 from dataclasses import dataclass, field
 
 
@@ -396,20 +397,27 @@ def disasm_code_region(data: bytes, base: int, region: Region,
             operand_str = ""
 
         cmt = comments.get(pc, "")
-        # Multi-line comments (literal "\\n" two-char sequence OR real newline):
-        # emit the WHOLE comment as a block of `\ ...` lines above the
-        # instruction so long dispatch tables and bullet lists render
-        # readably. Single-line comments stay inline next to the mnemonic.
-        if cmt and ("\\n" in cmt or "\n" in cmt):
-            for line in cmt.replace("\\n", "\n").split("\n"):
-                lines.append(f"    \\ {line.lstrip()}")
-            cmt_str = ""
-        else:
-            cmt_str = f"  \\ {cmt}" if cmt else ""
+        # Emit the comment ABOVE the instruction as a block of `\ ...`
+        # lines. Multi-line comments (literal "\\n" / real newline) keep
+        # their paragraph breaks; single-line comments get word-wrapped
+        # at 100 columns. The instruction line never carries an inline
+        # `\` comment — every comment is on its own line(s).
+        if cmt:
+            paragraphs = cmt.replace("\\n", "\n").split("\n")
+            for para in paragraphs:
+                para = para.lstrip()
+                if not para:
+                    lines.append("    \\")
+                    continue
+                wrapped = textwrap.wrap(para, width=94,
+                                         break_long_words=False,
+                                         break_on_hyphens=False)
+                for ln in wrapped:
+                    lines.append(f"    \\ {ln}")
         if operand_str:
-            lines.append(f"    {mnem} {operand_str}{cmt_str}")
+            lines.append(f"    {mnem} {operand_str}")
         else:
-            lines.append(f"    {mnem}{cmt_str}")
+            lines.append(f"    {mnem}")
         pc += length
 
 
