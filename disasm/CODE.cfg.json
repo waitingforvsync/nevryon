@@ -270,8 +270,8 @@
     "0x14B5": "Draw the player force-pod beside the ship. Selects one of three frames based on `pod_anim_frame`, sets sprite_src_lo to LO(gfx_pod_frame0 / _1 / _2), and falls through into sprite_plot_xy.\\n\\nThe HI byte is NOT set here — the caller (draw_player) has already done `LDA #HI(gfx_pod_frame0) / STA sprite_src_hi` just before the JSR. All three pod frames share the same HI page (&39), so the routine only has to vary the LO byte per frame.\\n\\nInputs:\\n  pod_anim_frame ∈ {1, 2, 3} — frame index\\n  X, Y = screen position (set up by caller's calc_screen_addr — typically (player_x + 5, player_y + 1))\\n  sprite_src_hi = HI(gfx_pod_frame0) (set by caller)\\n\\nDispatch table:\\n  pod_anim_frame == 1 → gfx_pod_frame0\\n  pod_anim_frame == 2 → gfx_pod_frame1\\n  else (= 3)          → gfx_pod_frame2\\n\\nNote: pod_anim_frame is driven by vertical motion — move_player_up INCs it (wraps 4→1), move_player_down DECs (wraps 0→3). The else branch handles the value 3 directly.",
     "0x198B": "Per-frame player-collision check. Tests the player ship against both NPC pools.\\n\\nTwo loops:\\n  (a) X = 8..1 over enemy slots — for any slot whose enemy_state is in 1..9 (active), test the player against a 6×&18 bounding box; on hit, mark slot &0A (expired) and JSR lose_a_life.\\n  (b) X = 0..7 over hazard slots — for any slot whose hazard_type < &14 (alive), same test; on hit same effect.\\n\\nEach hit triggers OSWRCH &07 (the BBC bell, redefined by Loader2 lines 5-9 via `*FX211..214` to be a short non-musical blip used as the in-game collision sound).",
     "0x1E47": "Player death animation. Plays sfx_explode then plots 6 frames of a 4×32 explosion sprite (lev_explosion_0..5) at the player position with `frame_delay` between frames. Frame source pointers come from slots 21..26 of lev_hazard_ptr_* (aliased as lev_explosion_ptr_lo/_hi).\\n\\nFrames 0..3 live in LEVD1 (lev_explosion_0..3); frames 4..5 live in LEVD2 (lev_explosion_4..5).\\n\\nAfter the last frame: DEC lives_left, redraw the lives-remaining indicator at row &57; if any lives left, also plays intro_get_ready and re-runs `init` to start the next ship.",
-    "0x1DEE": "Per-hit handler — runs once each time the player ship is touched by an enemy / hazard / bullet. Plays the bell sound (OSWRCH 7, redefined by Loader2 to be a short non-musical blip). Toggles `lives_blink_state` (0↔1) and DECs `player_hp` on every other call — so player_hp drops by 1 per actual death, with the blink toggle giving a two-frame flash on the ship-icon at the bottom of the screen.\\n\\nThe icon is redrawn at column (player_hp + &1F), row &5F, using `gfx_icon_lives` (blink state 0) or the alternate icon at &48B8 (state 1). When `player_hp` hits 0 AND blink-toggle is in state 1, JMP `death_anim` (= explosion + DEC lives_left + init).",
-    "0x1E46": "Lives-icon blink state — 0/1 toggle stepped by `lose_a_life`. Used both to swap the lives-icon sprite (gfx_icon_lives vs the alternate at &48B8) and to halve the rate at which player_hp DROPs (DEC only on alternate calls).",
+    "0x1DEE": "Per-hit handler — runs once each time the player ship is touched by an enemy / hazard / bullet. Plays the bell sound (OSWRCH 7, redefined by Loader2 to be a short non-musical blip). Toggles `lives_blink_state` (0↔1) and DECs `player_hp` on every other call — so player_hp drops by 1 per actual death, with the blink toggle giving a two-frame flash on the ship-icon at the bottom of the screen.\\n\\nThe icon is redrawn at column (player_hp + &1F), row &5F, using `gfx_icon_lives` (blink state 0) or `gfx_icon_lives_blink` (state 1). When `player_hp` hits 0 AND blink-toggle is in state 1, JMP `death_anim` (= explosion + DEC lives_left + init).",
+    "0x1E46": "Lives-icon blink state — 0/1 toggle stepped by `lose_a_life`. Used both to swap the lives-icon sprite (gfx_icon_lives vs gfx_icon_lives_blink) and to halve the rate at which player_hp DROPs (DEC only on alternate calls).",
     "0x2050": "Per-life HP — how many lose_a_life calls the current ship can absorb before it explodes. Reset to zp_9A by init (= zp_9A default 6, configurable from options.BAS as `?&9A = X%`). DEC'd in pairs by lose_a_life (every other call); when it hits 0 the next lose_a_life jumps to death_anim. Also used as the X-position of the lives icon in the bottom-status row (col player_hp + &1F).",
     "0x2051": "Lives counter — number of ships remaining BEFORE the current one (i.e. continues / extra lives). Initialised by restore_score_from_loader from loader_lives_save (= 3 at game start; preserved across levels). DEC'd by death_anim after the explosion plays. main_loop polls this each game_step: when it reaches 0 → JMP game_over_or_continue.",
     "0x25A9": "Dead-store flag. Written (along with force_pod_state, player_missiles_unlocked, pickup_count) by the pickup-state reset path, but no code ever reads it. Likely a vestigial flag from a planned-but-unwired pickup category.",
@@ -486,8 +486,10 @@
     "0x1D89": "HI(npc_bullet_sprite)",
     "0x1DD9": "LO(lev_erase_brush + &102)",
     "0x1DDE": "HI(lev_erase_brush + &102)",
-    "0x1E15": "LO(gfx_icon_lives)",
+    "0x1E10": "HI(gfx_icon_lives_blink)",
+    "0x1E15": "LO(gfx_icon_lives_blink)",
     "0x1E21": "HI(gfx_icon_lives)",
+    "0x1E26": "LO(gfx_icon_lives)",
     "0x211A": "LO(lev_erase_brush + &80)",
     "0x211F": "HI(lev_erase_brush + &80)",
     "0x21D7": "LO(lev_erase_brush + &80)",
@@ -565,6 +567,13 @@
     "0x1BB7": "pattern_dir_pos",
     "0x1BC4": "pattern_dir_neg",
     "0x1BD1": "pattern_dir_neg",
-    "0x1BD6": "pattern_dir_none"
+    "0x1BD6": "pattern_dir_none",
+
+    "0x1B16": "HI(lev_erase_brush + &80)",
+    "0x1B1B": "LO(lev_erase_brush + &80)",
+    "0x1F3B": "HI(gfx_icon_lives_intro)",
+    "0x1F40": "LO(gfx_icon_lives_intro)",
+    "0x1F5E": "HI(gfx_icon_11)",
+    "0x1F80": "HI(gfx_icon_11)"
   }
 }

@@ -1817,9 +1817,9 @@ scroll_upper_dst_hi = * + 2
     LDA enemy_x,X
     TAX
     JSR calc_screen_addr
-    LDA #&7D
+    LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
-    LDA #&80
+    LDA #LO(lev_erase_brush + &80)
     STA sprite_src_lo
     LDX #&04
     LDY #&18
@@ -2330,8 +2330,8 @@ scroll_upper_dst_hi = * + 2
     \ at the bottom of the screen.
     \
     \ The icon is redrawn at column (player_hp + &1F), row &5F, using `gfx_icon_lives` (blink state
-    \ 0) or the alternate icon at &48B8 (state 1). When `player_hp` hits 0 AND blink-toggle is in
-    \ state 1, JMP `death_anim` (= explosion + DEC lives_left + init).
+    \ 0) or `gfx_icon_lives_blink` (state 1). When `player_hp` hits 0 AND blink-toggle is in state
+    \ 1, JMP `death_anim` (= explosion + DEC lives_left + init).
     STX tempx
     LDA #&07
     JSR OSWRCH
@@ -2347,16 +2347,16 @@ scroll_upper_dst_hi = * + 2
     LDY #&5F
     TAX
     JSR calc_screen_addr
-    LDA #&48
+    LDA #HI(gfx_icon_lives_blink)
     STA sprite_src_hi
-    LDA #LO(gfx_icon_lives)
+    LDA #LO(gfx_icon_lives_blink)
     STA sprite_src_lo
     LDY lives_blink_state
     CPY #&00
     BNE L1E2B
     LDA #HI(gfx_icon_lives)
     STA sprite_src_hi
-    LDA #&B8
+    LDA #LO(gfx_icon_lives)
     STA sprite_src_lo
 .L1E2B
     LDX #&01
@@ -2376,8 +2376,8 @@ scroll_upper_dst_hi = * + 2
 \ ----- data &1E46..&1E47 -----
 .lives_blink_state
     \ Lives-icon blink state — 0/1 toggle stepped by `lose_a_life`. Used both to swap the lives-icon
-    \ sprite (gfx_icon_lives vs the alternate at &48B8) and to halve the rate at which player_hp
-    \ DROPs (DEC only on alternate calls).
+    \ sprite (gfx_icon_lives vs gfx_icon_lives_blink) and to halve the rate at which player_hp DROPs
+    \ (DEC only on alternate calls).
     EQUB &EA
 
 \ ----- code &1E47..&2050 -----
@@ -2485,9 +2485,9 @@ scroll_upper_dst_hi = * + 2
     JSR calc_screen_addr
     LDX #&01
     LDY #&08
-    LDA #&48
+    LDA #HI(gfx_icon_lives_intro)
     STA sprite_src_hi
-    LDA #&00
+    LDA #LO(gfx_icon_lives_intro)
     STA sprite_src_lo
     JSR sprite_plot_xy
     LDA lives_left
@@ -2500,7 +2500,7 @@ scroll_upper_dst_hi = * + 2
     LDX zp_9A
     LDY #&08
     STY sprite_src_lo
-    LDA #&48
+    LDA #HI(gfx_icon_11)
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR init
@@ -2515,7 +2515,7 @@ scroll_upper_dst_hi = * + 2
     LDX #&06
     LDY #&08
     STY sprite_src_lo
-    LDA #&48
+    LDA #HI(gfx_icon_11)
     STA sprite_src_hi
     JSR sprite_plot_xy
     LDX tempx

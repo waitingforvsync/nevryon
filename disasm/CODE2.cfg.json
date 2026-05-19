@@ -54,7 +54,7 @@
     "0x28D6": "scratch_28D6",
     "0x28D8": "death_seq_frame_counter",
     "0x29D8": "pad_29D8",
-    "0x2EFE": "pad_2EFE",
+    "0x2EFE": "muzzle_flash_toggle",
     "0x2800": "sfx_fire",
     "0x2809": "sfx_fire_params",
     "0x2811": "sfx_hit_lo",
@@ -111,10 +111,10 @@
     "0x28D7": "Per-subframe (from game_step's play_subframe): if force_pod_state == 1, animate the floating force-pod power-up — a chomping ball drawn at (force_pod_x, force_pod_y). Erases the previous frame with lev_erase_brush + &80 (2 byte-col × &0C lines), then plots one of 6 frames at gfx_ball_frame0..5 (each 2×&0C = &18 bytes).\\n\\nFrame selection: inline multiply-by-&18 — `LDA #LO(gfx_ball_frame0 - &18); CLC; LDX force_pod_frame; loop ADC #&18 / DEX / BNE` — so frame N=1 gives &60 (= gfx_ball_frame0), N=2 gives &78, ..., N=6 gives &D8. HI is hard-wired to &38.\\n\\nAfter plot, force_pod_frame INCs (wraps 7→1). Also checks (a) OSBYTE &81 / -1 INKEY for any key press, and (b) a box-collision against the player ship — either condition dismisses the pod (jumps to L299F, presumably to collect or hide).",
     "0x28D8": "200-frame counter used only by play_death_sequence. The byte is the LO operand of force_pod_anim's first instruction (`LDA force_pod_state` at &28D7..&28D9) — i.e. this scratch is aliased onto live code. Safe because play_death_sequence terminates the game; CODE2 is re-loaded from disk on the next stage-start, restoring the original operand byte. INCed each frame; loop exits at &C8 (= 200 frames at 50 Hz).",
     "0x29D8": "15 bytes of NOP padding (&EA) between update_hazard_missile and draw_score. Not referenced by anything.",
-    "0x2EFE": "Single &EA padding byte between the sfx_level_start OSWORD parameter block (&2EF6..&2EFD) and the next routine entry at &2EFF.",
+    "0x2EFE": "1-byte toggle used by the muzzle-flash plot during the ship-intro animation. Reset to 0 at the start of intro_or_scoreboard (&2F0B), then EOR'd with 1 each time the muzzle-flash sprite is drawn. While the toggle is 1, the plot uses gfx_muzzle_flash_frame1 (sprite_src_lo overridden to &C0); while 0, it uses the gfx_muzzle_flash_frame0 + &10 partial sprite. Initial on-disk value is &EA (NOP) — only the &2F0B init makes the toggle path actually fire. The byte sits in the gap between the sfx_level_start OSWORD parameter block (&2EF6..&2EFD) and the next routine entry at &2EFF.",
     "0x29E7": "Draw the 6-digit score at char-col 9, row &5F. Sets up the screen address then tail-falls into draw_score_digits_loop with X = 0.",
     "0x29F0": "Iterate the 6-byte BCD score buffer, calling draw_score_digit per byte. Shared by draw_score and draw_high_score's render path.\\n\\nInputs:\\n  X = starting index (caller pre-sets to 0)\\n  Source buffer: hardwired to `score` here (compare draw_high_score which uses high_score). The two paths happen to share this loop body because both buffers are 6 bytes wide and laid out the same way.\\n  Current screen address: set up by caller (via calc_screen_addr).\\n\\nUses `scratch_28D3` to save X across the draw_score_digit call (X is overwritten by the digit-sprite selector). Loops until CPX #&06.",
-    "0x2A08": "Draw one score digit at the current screen position.\\n\\nInputs: A = digit value (0..9), X = column offset.\\nSelects gfx_digit_N via `&3A60 + 8*N` and plots a 4×8 sprite.",
+    "0x2A08": "Draw one score digit at the current screen position.\\n\\nInputs: A = digit value (0..9), X = column offset.\\nSelects gfx_digit_N via `gfx_digit_0 + 8*N` and plots a 4×8 sprite.",
     "0x2A20": "Try to spawn a new hazard missile in one of the two slots (hazard_missile_x[0..1] == &FF = free). Called from CODE's hazard_type_dispatch for hazard_type &06. Validates the firer's hazard_x is in [&08, &25] (on-screen), copies hazard_x + 2 / hazard_y into the missile slot, mirrors hazard_flip into hazard_missile_flip (controls vertical direction in step_hazard_missile), and sets hazard_missile_homing_dir from a player-X comparison: 1 if player_x + 3 >= missile_x (player to the right of the missile → home rightward), 0 otherwise (home leftward). Plays sfx_score_tick to mark the launch.\\n\\nThe missile sprite is `gfx_icon_missile_rocket` — a 4×6-px yellow-and-red rocket pointing vertically.",
     "0x2AA2": "Per-frame: step each of the 2 hazard missiles (slots 0 and 1) then collision-check each against the player. Inactive slots (hazard_missile_x == &FF) are skipped.",
     "0x2AC4": "Step one hazard missile (X = slot index 0..1). Erases the old 1×6 position with lev_erase_brush + &80, then advances:\\n  horizontally by hazard_missile_homing_dir (1 = INC X by 1, else DEC X by 2 — homes on the player)\\n  vertically by hazard_missile_flip (1 = Y+=2, else Y-=2)\\n\\nBounds-checks the new (X, Y) against the playfield; out-of-bounds → mark slot inactive. Plots gfx_icon_missile_rocket (4×6-px rocket) at the new position.",
@@ -287,6 +287,15 @@
     "0x31A0": "LO(lev_erase_brush + &80)",
     "0x31A5": "HI(lev_erase_brush + &80)",
     "0x31D2": "LO(lev_player_sprite)",
-    "0x31D7": "HI(lev_player_sprite)"
+    "0x31D7": "HI(lev_player_sprite)",
+
+    "0x2A0F": "LO(gfx_digit_0)",
+    "0x2A14": "HI(gfx_digit_0)",
+    "0x2F23": "LO(lev_player_sprite + &58)",
+    "0x2F30": "LO(lev_player_sprite + &42)",
+    "0x2F3D": "LO(lev_player_sprite + &2C)",
+    "0x2F4A": "LO(lev_player_sprite + &16)",
+    "0x2F5E": "HI(lev_player_sprite)",
+    "0x2FBF": "LO(gfx_muzzle_flash_frame1)"
   }
 }

@@ -448,15 +448,15 @@ death_seq_frame_counter = * + 1
     \ Draw one score digit at the current screen position.
     \
     \ Inputs: A = digit value (0..9), X = column offset.
-    \ Selects gfx_digit_N via `&3A60 + 8*N` and plots a 4×8 sprite.
+    \ Selects gfx_digit_N via `gfx_digit_0 + 8*N` and plots a 4×8 sprite.
     STX scratch_28D3
     ASL A
     ASL A
     ASL A
     CLC
-    ADC #&60
+    ADC #LO(gfx_digit_0)
     STA sprite_src_lo
-    LDA #&3A
+    LDA #HI(gfx_digit_0)
     STA sprite_src_hi
     LDX #&01
     LDY #&08
@@ -1104,9 +1104,14 @@ death_seq_frame_counter = * + 1
 \ ----- data &2EF6..&2EFF -----
 .sfx_level_start_params
     EQUB &11, &00, &04, &00, &FF, &00, &0F, &00
-.pad_2EFE
-    \ Single &EA padding byte between the sfx_level_start OSWORD parameter block (&2EF6..&2EFD) and
-    \ the next routine entry at &2EFF.
+.muzzle_flash_toggle
+    \ 1-byte toggle used by the muzzle-flash plot during the ship-intro animation. Reset to 0 at the
+    \ start of intro_or_scoreboard (&2F0B), then EOR'd with 1 each time the muzzle-flash sprite is
+    \ drawn. While the toggle is 1, the plot uses gfx_muzzle_flash_frame1 (sprite_src_lo overridden
+    \ to &C0); while 0, it uses the gfx_muzzle_flash_frame0 + &10 partial sprite. Initial on-disk
+    \ value is &EA (NOP) — only the &2F0B init makes the toggle path actually fire. The byte sits in
+    \ the gap between the sfx_level_start OSWORD parameter block (&2EF6..&2EFD) and the next routine
+    \ entry at &2EFF.
     EQUB &EA
 
 \ ----- code &2EFF..&3041 -----
@@ -1122,7 +1127,7 @@ death_seq_frame_counter = * + 1
     \ Plays the four-frame ship reveal animation (right-to-left): the player ship at
     \ lev_player_sprite is plotted progressively wider from col 5 → col 2 over four vsyncs.
     LDA #&00
-    STA pad_2EFE
+    STA muzzle_flash_toggle
     JSR shutter_fade
     JSR ship_intro_frame_5
     JSR ship_intro_frame_4
@@ -1132,28 +1137,28 @@ death_seq_frame_counter = * + 1
 
 .ship_intro_frame_5
     JSR ship_intro_blit_setup
-    LDA #&D8
+    LDA #LO(lev_player_sprite + &58)
     STA sprite_src_lo
     LDX #&01
     JMP sprite_plot_xy
 
 .ship_intro_frame_4
     JSR ship_intro_blit_setup
-    LDA #&C2
+    LDA #LO(lev_player_sprite + &42)
     STA sprite_src_lo
     LDX #&02
     JMP sprite_plot_xy
 
 .ship_intro_frame_3
     JSR ship_intro_blit_setup
-    LDA #&AC
+    LDA #LO(lev_player_sprite + &2C)
     STA sprite_src_lo
     LDX #&03
     JMP sprite_plot_xy
 
 .ship_intro_frame_2
     JSR ship_intro_blit_setup
-    LDA #&96
+    LDA #LO(lev_player_sprite + &16)
     STA sprite_src_lo
     LDX #&04
     JMP sprite_plot_xy
@@ -1165,7 +1170,7 @@ death_seq_frame_counter = * + 1
     LDX #&00
     LDY #&C8
     JSR calc_screen_addr
-    LDA #&4E
+    LDA #HI(lev_player_sprite)
     STA sprite_src_hi
     LDY #&16
     RTS
@@ -1214,15 +1219,15 @@ death_seq_frame_counter = * + 1
     STA sprite_src_lo
     LDA #HI(gfx_muzzle_flash_frame0 + &10)
     STA sprite_src_hi
-    LDA pad_2EFE
+    LDA muzzle_flash_toggle
     CMP #&01
     BNE L2FC4
-    LDA #&C0
+    LDA #LO(gfx_muzzle_flash_frame1)
     STA sprite_src_lo
 .L2FC4
-    LDA pad_2EFE
+    LDA muzzle_flash_toggle
     EOR #&01
-    STA pad_2EFE
+    STA muzzle_flash_toggle
     JSR sprite_plot_xy
     LDA zp_print_idx
     SEC

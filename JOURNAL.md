@@ -4,6 +4,78 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-19 — Session 33: sprite-address immediates and corrected lives-icon labels
+
+Swept the disasm for `LDA #&NN / STA sprite_src_lo|_hi` pairs where
+the resulting 16-bit address points at a known sprite, but the LDA
+operands were still being emitted as bare hex. Added 22 new
+immediate_overrides; the disasm now resolves these to
+`LO(label)` / `HI(label)` / `LO(label + offset)` forms.
+
+### New overrides
+
+| PC | Site | Label |
+|----|------|-------|
+| CODE &1B16/&1B1B | update_enemies slot-erase brush | `HI/LO(lev_erase_brush + &80)` |
+| CODE &1E10/&1E26 | lose_a_life — blink-state icon picker | `HI(gfx_icon_lives_blink)` / `LO(gfx_icon_lives)` |
+| CODE &1F3B/&1F40 | init — lives-remaining row | `HI/LO(gfx_icon_lives_intro)` |
+| CODE &1F5E, &1F80 | init — current-life indicator | `HI(gfx_icon_11)` |
+| CODE2 &2A0F/&2A14 | draw_score_digit — gfx_digit_0 base | `LO/HI(gfx_digit_0)` |
+| CODE2 &2F23/&2F30/&2F3D/&2F4A | ship_intro_frame_5/4/3/2 | `LO(lev_player_sprite + &58/&42/&2C/&16)` |
+| CODE2 &2F5E | ship_intro_blit_setup | `HI(lev_player_sprite)` |
+| CODE2 &2FBF | muzzle-flash plot (toggled second frame) | `LO(gfx_muzzle_flash_frame1)` |
+
+### Lives-icon labels were mis-located
+
+While doing this I discovered three GRAPHIX label addresses were wrong:
+
+* `gfx_icon_lives` was at &3A38 — but the lose_a_life code
+  actually plots from `&3AB8` (when blink_state == 0). The original
+  label was attached to a different icon entirely.
+* The "alternate icon" (blink_state == 1) was labelled
+  `gfx_icon_17` at &4838 — also wrong, this IS a lives icon.
+
+Renamed:
+
+| Old | New | Address |
+|-----|-----|---------|
+| `gfx_icon_lives` | `gfx_icon_03` (placeholder — content unknown) | &3A38 |
+| `gfx_icon_09` | `gfx_icon_lives` (the actual lives icon, blink_state 0) | &3AB8 |
+| `gfx_icon_17` | `gfx_icon_lives_blink` (the alternate, blink_state 1) | &4838 |
+
+The existing `&1E15`/`&1E21` overrides emitted right-bytes-by-coincidence
+because LO(&3A38) == LO(&4838) == &38 and HI(&3A38) == HI(&3AB8) == &3A.
+Both have been corrected to the right semantic labels (`LO(gfx_icon_lives_blink)`
+and `HI(gfx_icon_lives)`), and the lose_a_life / lives_blink_state
+comments are updated to reflect the truth (no more "alternate icon at
+&48B8" — that was a typo for &4838, now superseded by the proper label).
+
+### `pad_2EFE` was not padding
+
+`pad_2EFE` (renamed last session) turned out to be actively used as
+the 1-bit toggle that flips the muzzle-flash sprite between frame 0
+(partial, at gfx_muzzle_flash_frame0 + &10) and frame 1 during the
+ship-intro animation. Renamed to `muzzle_flash_toggle` with an
+explanatory comment. Reset to 0 at the start of intro_or_scoreboard
+(&2F0B), then EOR'd with 1 each draw call. The on-disk &EA initial
+value would defeat the toggle path; the &2F0B reset is what makes it
+actually work.
+
+### Discovery: ship-intro frames live PAST lev_player_sprite
+
+The four `ship_intro_frame_2..5` routines plot from `lev_player_sprite
++ &16/&2C/&42/&58` — i.e. column 1/2/3/4 onward of the player ship —
+with widths 4/3/2/1, producing a right-to-left reveal. The visible
+strip narrows as the ship "slides in" over four vsyncs. This matches
+the existing cfg comment ("plotted progressively wider from col 5 →
+col 2 over four vsyncs"), but I'd misread it as a "col 5 → col 2"
+range, when it really means "frame 5 → frame 2" of the animation,
+with the visible columns going from {4} → {3,4} → {2,3,4} → {1,2,3,4}.
+
+Build verifies byte-identical on all four binaries.
+
+---
+
 ## 2026-05-19 — Session 32: kill the last default-named data labels
 
 Swept all remaining auto-promoted `data_XXXX` / `tbl_XXXX` / `LXXXX`
