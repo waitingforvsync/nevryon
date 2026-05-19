@@ -416,7 +416,9 @@ ORG &3300
     LDX zp_print_idx
 
 .print_str_lda_sm
+\ Self-mod operand LO byte of the LDA at print_str_lda_sm.
 print_str_src_lo = * + 1
+\ Self-mod operand HI byte of the LDA at print_str_lda_sm.
 print_str_src_hi = * + 2
     \ Self-modified LDA &XXXX,X — the operand bytes at print_str_src_lo / print_str_src_hi were
     \ patched from at routine entry to point at the source string.

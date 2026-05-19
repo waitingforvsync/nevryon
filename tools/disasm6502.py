@@ -369,6 +369,12 @@ def disasm_code_region(data: bytes, base: int, region: Region,
             if byte_pc in sm_operand_labels:
                 name = sm_operand_labels[byte_pc]
                 offset = byte_pc - pc
+                # If the cfg has a comment keyed by the operand byte's
+                # PC, emit it as a wrapped `\ ...` block above the equate
+                # so callers can flag SMC quirks at the equate site.
+                sm_cmt = comments.get(byte_pc, "")
+                if sm_cmt:
+                    emit_comment_block(sm_cmt, lines, indent="")
                 lines.append(f"{name:16} = * + {offset}")
         opcode = data[off]
         info = OPCODES.get(opcode)

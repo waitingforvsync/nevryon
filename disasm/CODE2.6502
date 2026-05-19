@@ -230,14 +230,29 @@ ORG &2800
 .scratch_28D4
     EQUB &EA
 .scratch_28D5
-    \ Two-byte scratch slot (&28D5..&28D6). Currently unused by the engine — likely paired storage
-    \ left over for whatever scratch_28D3 / scratch_28D4 hold.
+    \ Per-loop frame counter scratch byte. Used by `ship_intro_anim` (at &2BD4) for the 75-frame
+    \ GET-READY countdown, by `intro_get_ready` (multiple sites in &2C52..&2C76), and by the bonus /
+    \ death-tick paths. The companion byte at &28D6 (scratch_28D6) is unreferenced.
     EQUB &EA
 .scratch_28D6
     EQUB &EA
 
 \ ----- code &28D7..&2973 -----
 .force_pod_anim
+\ 200-frame counter used only by play_death_sequence (sites &2EA1 / &2EA4 / &2EA8). Initialised to
+\ 0, INCed each frame, loop exits at &C8 (= 200 frames at 50 Hz ≈ 4 seconds).
+\
+\ WARNING — SMC ALIAS: this byte is the LO operand of force_pod_anim's first instruction (`LDA
+\ force_pod_state` at &28D7..&28D9). While the death loop runs, force_pod_anim's first instruction
+\ is mutated from `LDA &25A5` (force_pod_state) into `LDA &2500`, `LDA &2501`, ... `LDA &25C8` in
+\ turn. The corruption persists in RAM until CODE2 is reloaded from disk by the BASIC loader after
+\ `JMP stage_loading_screen` — both callers of play_death_sequence (main_loop QUIT path and CODE3's
+\ continue-countdown timeout) follow that pattern, so force_pod_anim is never re-entered with a
+\ broken operand.
+\
+\ Both scratch_28D6 (unreferenced) and several zero-page slots were available as safer scratch — the
+\ choice of &28D8 is either deliberate SMC abuse exploiting the CODE2 reload, or an author mistake
+\ that happens to be saved by it. From the binary alone we can't tell which.
 death_seq_frame_counter = * + 1
     \ Per-subframe (from game_step's play_subframe): if force_pod_state == 1, animate the floating
     \ force-pod power-up — a chomping ball drawn at (force_pod_x, force_pod_y). Erases the previous
