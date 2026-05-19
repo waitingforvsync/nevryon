@@ -343,37 +343,48 @@ def render_map_with_hazards(levd1: bytes, levd2: bytes, graphix: bytes,
         py = SPAWN_Y_PIXEL(y_row)
         px = col * tile_px_w
 
+        # Stage-aware sprite lookup: use the stage's LEVD2-region
+        # data (i.e. the LEVD3 overlay on stage 2) so hazard sprites
+        # come from the right stage. levd2 is passed through so
+        # resolve_sprite's bounds-check on LEVD2_LOAD still works.
+        addr = (enemy_ptr_hi[slot_type] << 8) | enemy_ptr_lo[slot_type]
+        resolved = resolve_sprite(addr, levd1, stage_levd, graphix)
+        if resolved is not None:
+            data, off, _ = resolved
+            if off + SPRITE_W_COLS * SPRITE_H_LINES <= len(data):
+                rgb_sp, sw, sh = render_column_major(
+                    data, off, SPRITE_W_COLS, SPRITE_H_LINES,
+                    palette, bg=(0, 0, 0))
+                blit(img, w, rgb_sp, sw, sh, px, py,
+                     mirror_v=v_flip, transparent_black=True)
+
         if slot_type == 7:
-            # Force-field — procedural strip. Draw a 16×32 yellow
-            # rectangle as a placeholder; the real one is pixel noise
-            # from a sideways ROM via lfsr_random.
+            # Force-field — the sprite plotted above is the per-stage
+            # `hazard_06` slot (= the cap), at the spawn anchor with
+            # mirroring per v_flip. The engine ALSO draws a procedural
+            # noise strip at hazard_y ± &20 — `forcefield_render` in
+            # CODE walks hazard_flip to pick which side:
+            #   hazard_flip == 0 (= attr-bit-7 SET, v_flip=1 here):
+            #       strip drawn at hazard_y - &20  →  BELOW the cap on
+            #       screen (lower hazard_y = lower on screen)
+            #   hazard_flip == 1 (= attr-bit-7 CLEAR, v_flip=0 here):
+            #       strip drawn at hazard_y + &20  →  ABOVE the cap.
+            # In image (top-origin) coords that's +32 / -32 px from
+            # the cap's py. A force-field spawn-pair (one at y_row=0
+            # v_flip=1 + one at y_row=2 v_flip=0) produces cap-noise-
+            # cap stacked across the playfield gap. Render the strip
+            # as a yellow placeholder; the real one is per-frame ROM
+            # noise via lfsr_random.
+            strip_py = py + 32 if v_flip else py - 32
             for yy in range(32):
                 for xx in range(tile_px_w):
                     x = px + xx
-                    y = py + yy
+                    y = strip_py + yy
                     if 0 <= x < w and 0 <= y < h:
                         di = (y * w + x) * 3
                         img[di] = 200
                         img[di + 1] = 180
                         img[di + 2] = 0
-            continue
-
-        addr = (enemy_ptr_hi[slot_type] << 8) | enemy_ptr_lo[slot_type]
-        # Stage-aware sprite lookup: use the stage's LEVD2-region
-        # data (i.e. the LEVD3 overlay on stage 2) so hazard sprites
-        # come from the right stage. levd2 is passed through so
-        # resolve_sprite's bounds-check on LEVD2_LOAD still works.
-        resolved = resolve_sprite(addr, levd1, stage_levd, graphix)
-        if resolved is None:
-            continue   # erase brush or unused slot
-        data, off, _ = resolved
-        if off + SPRITE_W_COLS * SPRITE_H_LINES > len(data):
-            continue
-        rgb_sp, sw, sh = render_column_major(data, off, SPRITE_W_COLS,
-                                             SPRITE_H_LINES, palette,
-                                             bg=(0, 0, 0))
-        blit(img, w, rgb_sp, sw, sh, px, py,
-             mirror_v=v_flip, transparent_black=True)
     return bytes(img), w, h
 
 
