@@ -375,10 +375,18 @@ def render_map_with_hazards(levd1: bytes, levd2: bytes, graphix: bytes,
             # cap stacked across the playfield gap. Render the strip
             # as a yellow placeholder; the real one is per-frame ROM
             # noise via lfsr_random.
+            #
+            # Width: the engine plots the strip with X=2 byte-cols =
+            # 8 px wide (vs. the cap's 4 cols = 16 px). The cap's
+            # visible content sits in the central 2 cols (cols 0/3
+            # are nearly empty in hazard_06), so the strip aligns
+            # with the cap's visible body — render it at the central
+            # 2 cols of the tile (px+4..px+12).
             strip_py = py + 32 if v_flip else py - 32
+            strip_x0 = px + tile_px_w // 4         # = px + 4
+            strip_x1 = strip_x0 + tile_px_w // 2   # = px + 12
             for yy in range(32):
-                for xx in range(tile_px_w):
-                    x = px + xx
+                for x in range(strip_x0, strip_x1):
                     y = strip_py + yy
                     if 0 <= x < w and 0 <= y < h:
                         di = (y * w + x) * 3
