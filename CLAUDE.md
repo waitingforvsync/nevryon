@@ -56,6 +56,7 @@ graphix/                     # per-sprite atlas dumps from $.GRAPHIX
 work/                        # PNG previews, scratch
 
 docs/
+  engine_overview.md         # how Nevryon actually runs — pipeline, NPC pools, state machines, projectiles, pickups
   file_layout.md             # per-file content reference (load addrs, byte maps, routine names)
   memory_map.md              # single-page CPU memory layout (zp, each binary, LEVD data, ...)
 CLAUDE.md                    # this file — workflow & conventions
@@ -268,6 +269,13 @@ see `docs/file_layout.md`.
 For a single-page picture of the whole CPU memory map (zero page,
 each binary's window, screen RAM, per-level data sub-blocks, and
 the spawn-attribute encoding), see `docs/memory_map.md`.
+
+For a walk through how the engine actually runs — the per-frame
+pipeline, the two NPC pools and their state machines, hazard types
+(including the force-field's spawn-pair convention and the flame's
+one-shot dispatch), enemy motion patterns 1..6, the pickup tier
+ladder, force-pod / player-missile unlocks, animation cycles —
+see `docs/engine_overview.md`.
 
 For per-level visualisations (tile catalog, enemies, hazards, the
 map strip with and without spawn pins, raw binary table dumps, and

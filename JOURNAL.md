@@ -4,6 +4,65 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-19 — Session 36: engine overview document + force-field render fixes
+
+Rich asked for a single-page tour of how the engine actually
+works — hazard / enemy types, spawning, animation cycles,
+pickups, force-fields, flames. Wrote `docs/engine_overview.md`
+covering:
+
+* Three-level loop: `main_loop` → `game_step` (= 1 tile column)
+  → 4 × `play_subframe` (= 4 px scroll each).
+* The two NPC pools — enemies (moving spawned, pattern-script
+  motion, INC-driven state machine) vs hazards (scrolling
+  destructible scenery, HP + type-mutation state machine).
+* Hazard spawn schedule and the `lev_spawn_col` / `lev_spawn_attr`
+  encoding (attr bits 0..4 = type, 5..6 = Y-row, 7 = flip-INVERTED).
+* The full `hazard_type` state machine table — values 0..&1C,
+  per-frame action via `hazard_type_dispatch`, animation step
+  via `hazard_anim_advance`, death-anim path &14..&1B → &1C clear.
+* Force-field (type 7): the spawn-pair convention (top entry
+  `attr=&87` + bottom `&47`), the cap being `hazard_06` per
+  scenario, the procedural strip plotted from sideways-ROM
+  noise via `lfsr_random`, the `forcefield_active` serialisation.
+* Flame (type 8 ↔ 9): one-shot, mutates self to &09 on success,
+  ping-pongs back to &08 to re-arm.
+* NPC bullets (types 4 / &13) and homing missiles (type 6).
+* Enemy motion patterns 1..6: scripts at GRAPHIX `&4500` /
+  `&4574` / `&4614` / `&4680` (4 valid + 2 special-cased homing
+  patterns). The `(dy_dir, dx_dir)` byte-pair encoding using
+  `pattern_dir_none` / `_pos` / `_neg`.
+* `enemy_state` state machine: per-pattern initial values
+  (1 / 3 / 5), kill thresholds (3 / 5 / 7 — i.e. initial + 2),
+  death-anim path &0A..&0D.
+* Player projectiles (bullets, missiles, force-pod twin-shot).
+* Pickup tier ladder: tiers 1/3/5/7 unlock fast-fire / pod
+  attached / force-pod / paired missiles; tiers 2/4/6 are dead
+  flags (planned-but-unwired scaffolding).
+* Player state: `player_hp` / `lives_left` / `lives_blink_state`
+  and the death-anim flow.
+* Force-pod (attached vs floating power-up form).
+* Zero-page state glossary.
+
+Linked from CLAUDE.md alongside the existing
+`docs/file_layout.md` and `docs/memory_map.md` references.
+
+Two earlier sessions in the same day were prep-work for this:
+
+* **Session 35** added per-stage hazard PNGs after Rich noticed
+  the 14 hazards differ between LEVD2 / LEVD3.
+* **Force-field render fixes** (post-Session 35): the
+  `map_with_hazards_*.png` schematic was drawing the type-7
+  spawns as a single yellow rectangle. Corrected to render the
+  cap sprite (`hazard_06`) at the spawn anchor + the noise
+  strip at `py ± 32` (the engine plots noise at
+  `hazard_y ± &20`). Then narrowed the strip from 16 px to 8 px
+  wide and centred it in the 4-col tile, since the engine plots
+  it with X=2 byte-cols and `hazard_06`'s visible content is in
+  the middle two cols of the 4-col stamp.
+
+---
+
 ## 2026-05-19 — Session 35: per-stage hazard PNGs
 
 Rich asked whether the 14 hazard sprites really are shared between
