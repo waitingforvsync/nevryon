@@ -4,6 +4,128 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-19 — Session 34: death_seq_frame_counter SMC investigation + tool support
+
+Rich flagged that `death_seq_frame_counter = * + 1` looked wrong —
+the label sits at &28D8, which is inside force_pod_anim's first
+instruction (`LDA force_pod_state` at &28D7..&28D9). I dug through
+the binary, and it is exactly what it appears to be: live code is
+being used as scratch.
+
+### What the SMC actually does
+
+The two relevant code paths:
+
+**force_pod_anim (CODE2 &28D7):** first instruction is `LDA &25A5`
+(force_pod_state); the byte at &28D8 is the LO operand byte.
+
+**play_death_sequence (CODE2 &2E94):** runs the 200-frame death
+explosion. The loop body:
+
+```
+LDX #&00              ; init counter
+STX &28D8             ; → mutates force_pod_anim's operand
+.L2EA4
+LDX &28D8             ; read counter
+INX
+STX &28D8
+CPX #&C8              ; exit at 200 (≈ 4 s)
+BEQ exit
+...                    ; starfield update + explosion plot
+JMP L2EA4
+```
+
+So while the death loop runs, force_pod_anim's first instruction
+is mutated from `LDA &25A5` into `LDA &2500`, `LDA &2501`, ...,
+`LDA &25C8`. The corruption persists in RAM.
+
+### Why nothing visibly breaks
+
+Both callers of `play_death_sequence` finish with `JMP
+stage_loading_screen`. That routine prints LOADING / PLEASE WAIT
+and chains to the BASIC loader, which `*LOAD CODE2` — restoring
+&28D8 to its original &A5 before force_pod_anim is ever entered
+again. During the death sequence itself, force_pod_anim is
+unreachable because the game's frame loop has been replaced by
+play_death_sequence's own loop.
+
+### Deliberate or accidental?
+
+We can't tell from the binary alone. Two readings:
+
+1. **Deliberate**: the author exploited an unused-during-death code
+   byte as scratch, knowing CODE2 reloads.
+2. **Accidental**: the author meant to use a scratch slot but typed
+   &28D8 by mistake. The game works because of the reload.
+
+What weighs against "deliberate" is that scratch_28D6 was sitting
+right next door, completely unreferenced and available. Other
+similar frame-counter loops in CODE2 (ship_intro_anim at &2BD4,
+the BONUS countdown around &2C52..&2C76) all use scratch_28D5
+properly. The pattern was understood. Whatever the reason for
+&28D8, it sticks out.
+
+### Tool support to flag this inline
+
+The disassembler now emits cfg-block comments keyed by an SMC
+operand-byte address as a wrapped `\ ...` block above the
+corresponding `name = * + N` declaration. The relevant change is
+five lines in `tools/disasm6502.py` (look up `comments[byte_pc]`
+when emitting the SMC equate, and run it through the existing
+`emit_comment_block` helper).
+
+force_pod_anim now reads:
+
+```
+.force_pod_anim
+\ 200-frame counter used only by play_death_sequence (sites
+\ &2EA1 / &2EA4 / &2EA8). Initialised to 0, INCed each frame, loop
+\ exits at &C8 (= 200 frames at 50 Hz ≈ 4 seconds).
+\
+\ WARNING — SMC ALIAS: this byte is the LO operand of
+\ force_pod_anim's first instruction (`LDA force_pod_state` at
+\ &28D7..&28D9). ... [full SMC story] ...
+death_seq_frame_counter = * + 1
+    \ Per-subframe (from game_step's play_subframe): if
+    \ force_pod_state == 1, animate the floating force-pod ...
+    LDA force_pod_state
+```
+
+The warning is impossible to miss when reading the routine.
+
+### Side-effects of the tool change
+
+* **CODE3** picked up two new inline comments for free —
+  `print_str_src_lo` / `_hi` already had cfg comments at &3588 /
+  &3589 but the tool was discarding them. They now appear inline
+  above their `= * + N` declarations.
+* The earlier `scratch_28D5` comment claimed "currently unused" —
+  wrong. It's heavily used as a frame-counter scratch in five
+  separate sites. Updated. `scratch_28D6` IS unused.
+
+### Doc updates
+
+* `docs/memory_map.md`: replaced `data_1E46` → `lives_blink_state`,
+  `data_2050` → `player_hp`, `data_2051` → `lives_left`,
+  `data_25A0..data_25AB` → the named pickup-tier flag group
+  (`pod_attached` / `force_pod_state` / `player_missiles_unlocked`
+  / `pickup_count` / `pickup_kill_count` / `unused_pickup_flag`).
+* `docs/file_layout.md`: replaced `gfx_orphan_4500` →
+  `enemy_pattern_1..4` (now that we know it's motion scripts);
+  fixed `data_1E46` / `data_2050` references in the `lose_a_life`
+  row; relabelled `gfx_icon_08` / `gfx_icon_09` at &3AB0 as
+  `gfx_icon_missile_rocket` / `gfx_icon_lives` (the actual
+  in-game lives icon).
+
+Note: `docs/file_layout.md` still has several stale `enemy_*`
+references that should really say `hazard_*` (from the Session 22
+wholesale rename). Out of scope for this commit; deserves its own
+sweep.
+
+Build verifies byte-identical on all four binaries.
+
+---
+
 ## 2026-05-19 — Session 33: sprite-address immediates and corrected lives-icon labels
 
 Swept the disasm for `LDA #&NN / STA sprite_src_lo|_hi` pairs where

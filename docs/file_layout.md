@@ -226,7 +226,7 @@ in parentheses. Renders of every sprite are in `graphix/`.
 | `&3A08`  | — (24)         | Trailing blank                                                      |
 | `&3A20`  |  4×8 (8) ×8    | `icon_00..icon_07` — 8 small 4×8 glyphs (small-char bank, first 8)  |
 | `&3A60`  |  4×8 (8) ×10   | `digit_0..digit_9` — 10 small 4×8 digits                            |
-| `&3AB0`  |  4×8 (8) ×2    | `gfx_icon_08`, `gfx_icon_09` — two more small 4×8 glyphs                    |
+| `&3AB0`  |  4×8 (8) ×2    | `gfx_icon_missile_rocket`, `gfx_icon_lives` — two more small 4×8 glyphs (the second is the in-game lives icon; pairs with `gfx_icon_lives_blink` at &4838 for the blink-state-1 flash) |
 | `&3AC0`  | — (64)         | Blank pad — unused tail of the 28-slot small-char bank              |
 | `&3B00`  | 32×8 (64)      | `gfx_flame_frame0` — engine flame, frame 0                              |
 | `&3B40`  | 32×8 (64)      | `gfx_flame_frame1`                                                      |
@@ -255,7 +255,7 @@ in parentheses. Renders of every sprite are in `graphix/`.
 | `&4488`  | 20×8 (40)      | `gfx_missile_3`                                                         |
 | `&44B0`  | 20×8 (40)      | `gfx_missile_4`                                                         |
 | `&44D8`  | — (40)         | Post-missile pad                                                    |
-| `&4500`  | — (592)        | `gfx_orphan_4500` — 592 B of sprite-like bytes (`00 03 00 03 …` MODE 5 pattern). No references in CODE/CODE2/CODE3 or any BASIC loader; treated as dead data left over from build. |
+| `&4500`  | — (592)        | `enemy_pattern_1..4` — four NPC motion-script tables: `&4500` (len &78), `&4574` (&9C), `&4614` (&60), `&4680` (&D6). Each is a sequence of `(dy_dir, dx_dir)` byte pairs walked per-enemy-per-frame by `enemy_select_motion` (CODE &1B87). Indexed via `enemy_pattern_ptr_lo / _hi / _len_lut` LUTs at CODE &16FB+. (Was originally mis-labelled `gfx_orphan_4500` and assumed dead; corrected in Session 27.) |
 | `&4750`  |  8×16 (32)     | `gfx_pickup_white` — 4th pickup variant                                 |
 | `&4770`  | — (16)         | Pad                                                                 |
 | `&4780`  | 36×14 (126)    | `gfx_text_pause` — "PAUSE"                                              |
@@ -326,7 +326,7 @@ The main game binary. Annotated in `disasm/CODE.beebasm` (driven by
 | `&1847`  | `check_bullet_hits`         | Two collision loops over the current bullet's position: (a) X=8..1 over `hazard_x/y/state` — INC `hazard_state`, milestones at 3/5/7 play OSWRCH 7 + INC `data_25A0`; (b) X=0..7 over the enemy slots — DEC `enemy_hp`, on kill play explode. Bullet erases itself either way. |
 | `&198B`  | `check_player_collisions`   | Per-frame player collision check. Two 6×&18 bounding-box loops: (a) hazard slots, (b) enemy slots. Hit → OSWRCH 7 (the Loader2-redefined bell, used as a short blip) + `lose_a_life`. |
 | `&1AEB`  | `update_hazards`            | Per-frame hazard mover. Iterates 8 hazard slots, moves each ±1 X / ±4 Y per direction flags, erases + redraws the 4×24 sprite. Deactivates on `hazard_state == 0`. |
-| `&1DEE`  | `lose_a_life`               | Plays OSWRCH 7; toggles `data_1E46`, decrements `data_2050` every other call; redraws the lives icon. |
+| `&1DEE`  | `lose_a_life`               | Plays OSWRCH 7; toggles `lives_blink_state`, decrements `player_hp` every other call; redraws the lives icon (`gfx_icon_lives` or `gfx_icon_lives_blink` per blink state). When `player_hp` hits 0 + blink-state 1 → `death_anim`. |
 | `&1F8E`  | `init`                      | Per-level init. Player pos `&05, &C8`, scroll counter `&80=0`, zero-fills the six 9-slot enemy state tables (`enemy_x/y/type/hp/step/flip`), bullet slots, force-pod registers; sets `fire_cooldown_reload=6` and `hazard_state` markers to `&FF`. |
 | `&208A`  | `spawn_check_step`          | Matches `zp_scroll_col` against `&7B00[&7B]`; on hit, fills an enemy slot from the attribute byte at `&7B80[X]` (type → `enemy_type`, Y-row → `enemy_y`, v-flip → `enemy_flip`). |
 | `&22B2`  | `enemy_type_dispatch`       | Switch on `enemy_type[X]`: 4/&13 → multi-shot, 6 → CODE2 `spawn_enemy_missile`, 7 → `forcefield_render`, 8 → `L2464`, &10 → high-HP boss path, others → default sprite plot from `&7A80/&7AC0[type]`. |

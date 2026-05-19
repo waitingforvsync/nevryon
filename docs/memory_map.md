@@ -170,15 +170,15 @@ Loaded at `&1100`, length 5863 B = `&16E7`, ends at `&27E6`.
 | `&1AEB..&1C11` | `update_enemies` | Per-frame mover for the 8 enemy slots (move ±1 X / ±4 Y, erase + replot 4×24) |
 | `&1C12..&1DED` | (decor-sprite + LEVD1 logic) | Various LEVD1-accessing draw paths (CODE &1C25 / &1C36 push into the LEVD1 decoration banks — still TBD) |
 | `&1DEE..&1E45` | `lose_a_life` | Play OSWRCH 7 + toggle/decrement the lives indicator |
-| `&1E46` | `data_1E46` | 1-byte blink flip-flop for lives icon |
+| `&1E46` | `lives_blink_state` | 1-byte blink flip-flop for lives icon (toggled by `lose_a_life`; 0 → draw `gfx_icon_lives`, 1 → draw `gfx_icon_lives_blink`) |
 | `&1E47..&206D` | `death_anim` | 6-frame explosion at player position via `lev_explosion_ptr_lo/hi` (frames 0..3 from `lev_explosion_00..03` in LEVD1, frames 4..5 from `lev_explosion_04` / `lev_explosion_05` in LEVD2) |
 | `&206E..&2080` | `tbl_206E` / `hazard_step` | Active hazard v-flip flag + step counter (parallel to `hazard_x/y/type/hp`) |
-| `&2050..&209F` | `data_2050` / `data_2051` / `hazard_x` / `hazard_y` / `hazard_type` / `hazard_hp` | The 9-slot active-hazard state tables, plus the lives counter (`data_2051`) and "lives lost" counter (`data_2050`) |
+| `&2050..&209F` | `player_hp` / `lives_left` / `hazard_x` / `hazard_y` / `hazard_type` / `hazard_hp` | The 9-slot active-hazard state tables, plus the lives counter (`lives_left` = remaining-ships-before-current) and per-life HP (`player_hp` — DECs in pairs via `lose_a_life`, when 0 → `death_anim`) |
 | `&208A..&21EE` | `spawn_check_step` / `hazard_type_dispatch` | Per-frame: match `zp_scroll_col` against `lev_spawn_col`, install the next free hazard slot from `lev_spawn_attr` |
 | `&232C..&23C4` | `forcefield_render` / `forcefield_draw_or_erase` / `forcefield_erase` | Procedural vertical strip (uses `lfsr_random` byte as the low byte of an `&80XX` source — i.e. reads sideways ROM as cheap noise) |
 | `&23C5..&2553` | various L<addr> | Spawn + per-type dispatch helpers (TBD) |
 | `&2554` | `fire_cooldown_reload` | Default cooldown value (= 6 from `init`) |
-| `&25A0..&25AB` | `data_25A0..data_25AB` | Force-pod state group (`data_25A3` = "pod attached" flag) |
+| `&25A0..&25AB` | `pickup_count` / `pickup_kill_count` / `pod_attached` / `force_pod_state` / `player_missiles_unlocked` / `unused_pickup_flag` | Pickup-tier state group: `pod_attached` (= tier 3 flag, force-pod sprite + collisions enabled), `force_pod_state` (= tier 5, twin-shot enabled), `player_missiles_unlocked` (= tier 7, paired missiles), plus the kill-milestone counter (`pickup_kill_count` — INCed in `check_bullet_hits` at enemy-hit values 3/5/7, triggers pickup spawn every 10). `unused_pickup_flag` is a dead store. |
 | `&2656..&268F` | `starfield_init` + helpers | One-shot at level start: walks the 60-star arrays and plants the initial pixel byte at each starting screen address |
 | `&2690..&27E6` | various L<addr> | Trampolines + utility code (TBD) |
 
