@@ -86,7 +86,7 @@ representation, lifetime model, or rendering path:
 | Movement | Per-frame `(dy, dx)` from a pattern script in GRAPHIX; player-homing for patterns 5/6 | DECs `hazard_x` by 1 per frame; never moves vertically |
 | HP model | 2 player-bullet hits → dies (`enemy_state` walks 1→3 or 3→5 or 5→7) | `hazard_hp` counter, DECs on hit; death at 0 |
 | Death anim | 3 hit-frames (`enemy_state` &0A..&0C) then erase (&0D) | 8 explosion frames (`hazard_type` &14..&1B) then clear |
-| Spawn source | `spawn_periodic_enemy` — paced timer, picks pattern from a 1..6 cycle | `spawn_check_step` — column-driven schedule from `lev_spawn_col / lev_spawn_attr` |
+| Spawn source | `spawn_periodic_enemy` — time-paced (one per game_step, no map reference); pattern selector cycles 1..6 deterministically. Same on every run of every scenario. | `spawn_check_step` — column-driven schedule from `lev_spawn_col / lev_spawn_attr`. Per-scenario AND per-stage. |
 | Per-frame driver | `update_enemies` (CODE &1AEB) | `update_hazards` (CODE &210A) |
 | Plays NPC bullets via | `enemy_try_fire_bullet` (random chance) | `hazard_type_dispatch` (deterministic on `hazard_type == 4 / &13`) |
 
@@ -332,6 +332,11 @@ threshold (`hazard_type < &14` → "alive, can damage player").
 
 ### Enemy periodic spawner
 
+Enemies are **time-paced, not map-positioned**. Unlike the
+hazard pool there's no per-column schedule — the same six-
+pattern cycle plays on every run of every scenario, only
+gated by an end-of-map cutoff.
+
 `spawn_periodic_enemy` (CODE `&1712`) runs once per `game_step`.
 It paces on `zp_87` (sub-counter, cycles 0..&0A):
 
@@ -353,8 +358,23 @@ So each pattern produces ~10 enemies over ~10 game_step calls
 (= ~10 tile columns of progress), then the cycle drains, then
 the next pattern starts.
 
-After the map wraps (`zp_scroll_col == &F0`), the routine
-returns immediately — no more enemies spawn.
+The only `zp_scroll_col` reference in the whole routine is a
+hard cutoff at `&F0` (end-of-map) — the routine returns
+immediately after that, so no more enemies spawn for the rest
+of the level. Otherwise enemy pacing has no relation to where
+the player is on the map.
+
+**Design consequence**: the level-design data
+(`lev_spawn_col` / `lev_spawn_attr` in LEVD2/3) only describes
+hazards. Whatever editor Graeme used in 1990 had to support
+hazard placement only; enemy difficulty is identical across all
+four scenarios because both the pacing (`spawn_periodic_enemy`
+in CODE) and the four pattern scripts (`enemy_pattern_1..4` in
+GRAPHIX) are level-agnostic. That's also why the per-stage
+`levels/<n>/` directories only ship per-stage hazard renders +
+spawn tables; there's no equivalent "stage 1 enemy spawn map"
+because the answer is uniformly "just off the right edge, one
+per game_step".
 
 Initial enemy slot state per pattern:
 
