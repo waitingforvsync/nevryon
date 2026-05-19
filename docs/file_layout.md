@@ -323,13 +323,13 @@ The main game binary. Annotated in `disasm/CODE.beebasm` (driven by
 | `&16CC`  | `move_player_up`            | `zp_player_y -= 4`, clamped at min `&98`. Also `DEC pod_anim_frame` (wraps 0→3).                                   |
 | `&17B9`  | `on_fire_pressed`           | If `zp_8A` cooldown elapsed, find an empty `player_bullet_x` slot, store player position there, reload cooldown from `fire_cooldown_reload`, play `sfx_fire`. |
 | `&17E7`  | `update_bullets`            | Per-frame: iterate the 6 player_bullet slots; for each active one move +2 px/frame to the right; erase + clear off-screen; else replot the 3×2 bullet sprite and run `check_bullet_hits`. Finally decrement `zp_8A`. |
-| `&1847`  | `check_bullet_hits`         | Two collision loops over the current bullet's position: (a) X=8..1 over `hazard_x/y/state` — INC `hazard_state`, milestones at 3/5/7 play OSWRCH 7 + INC `data_25A0`; (b) X=0..7 over the enemy slots — DEC `enemy_hp`, on kill play explode. Bullet erases itself either way. |
-| `&198B`  | `check_player_collisions`   | Per-frame player collision check. Two 6×&18 bounding-box loops: (a) hazard slots, (b) enemy slots. Hit → OSWRCH 7 (the Loader2-redefined bell, used as a short blip) + `lose_a_life`. |
-| `&1AEB`  | `update_hazards`            | Per-frame hazard mover. Iterates 8 hazard slots, moves each ±1 X / ±4 Y per direction flags, erases + redraws the 4×24 sprite. Deactivates on `hazard_state == 0`. |
+| `&1847`  | `check_bullet_hits`         | Two collision loops over the current bullet's position: (a) X=8..1 over the enemy slots in `enemy_x/_y/enemy_state` — INC `enemy_state[X]`, milestones at values 3/5/7 play OSWRCH 7 + INC `pickup_kill_count`; (b) X=0..7 over the hazard slots in `hazard_x/_y/hazard_type` — DEC `hazard_hp`, on kill mutate `hazard_type` to `&14` to start the death animation. Bullet erases itself either way. |
+| `&198B`  | `check_player_collisions`   | Per-frame player collision check. Two 6×&18 bounding-box loops: (a) X=8..1 over enemy slots (active iff `enemy_state` in 1..9), (b) X=0..7 over hazard slots (active iff `hazard_type < &14`). Hit → OSWRCH 7 (the Loader2-redefined bell, used as a short blip) + the slot marked expired + `lose_a_life`. |
+| `&1AEB`  | `update_enemies`            | Per-frame enemy-pool driver. Iterates X = n_enemies..1; for each active slot calls `enemy_check_collisions`, `enemy_select_motion` (reads next `(dy_dir, dx_dir)` from the active pattern script), then `L1B2D` to apply motion + erase/redraw + maybe fire. Slot deactivates and is erased when `enemy_state` drops to 0. |
 | `&1DEE`  | `lose_a_life`               | Plays OSWRCH 7; toggles `lives_blink_state`, decrements `player_hp` every other call; redraws the lives icon (`gfx_icon_lives` or `gfx_icon_lives_blink` per blink state). When `player_hp` hits 0 + blink-state 1 → `death_anim`. |
-| `&1F8E`  | `init`                      | Per-level init. Player pos `&05, &C8`, scroll counter `&80=0`, zero-fills the six 9-slot enemy state tables (`enemy_x/y/type/hp/step/flip`), bullet slots, force-pod registers; sets `fire_cooldown_reload=6` and `hazard_state` markers to `&FF`. |
-| `&208A`  | `spawn_check_step`          | Matches `zp_scroll_col` against `&7B00[&7B]`; on hit, fills an enemy slot from the attribute byte at `&7B80[X]` (type → `enemy_type`, Y-row → `enemy_y`, v-flip → `enemy_flip`). |
-| `&22B2`  | `enemy_type_dispatch`       | Switch on `enemy_type[X]`: 4/&13 → multi-shot, 6 → CODE2 `spawn_enemy_missile`, 7 → `forcefield_render`, 8 → `L2464`, &10 → high-HP boss path, others → default sprite plot from `&7A80/&7AC0[type]`. |
+| `&1F8E`  | `init`                      | Per-level init. Player pos `&05, &C8`, scroll counter `&80=0`, zero-fills the combined 9-slot state arrays at `&2052..&208A` (covers both hazard and enemy state), the 6 player_bullet slots, force-pod registers; sets `fire_cooldown_reload=6` and the 7 `npc_bullet_x` slots to `&FF` (inactive). |
+| `&208A`  | `spawn_check_step`          | Matches `zp_scroll_col` against `lev_spawn_col[zp_7B]`; on hit, fills a hazard slot from the attribute byte at `lev_spawn_attr[X]`: bits 0..4 → `hazard_type`, bits 5..6 → Y-row, bit 7 → `hazard_flip`. |
+| `&22B2`  | `hazard_type_dispatch`      | Per-frame per-active-hazard immediate-action dispatch. Switch on `hazard_type[X]`: `&04` / `&13` → `enqueue_npc_bullet` (fires a leftward 4×2-px bullet); `&06` → CODE2 `spawn_hazard_missile` (homing rocket); `&07` → `forcefield_render` (the slot IS the force-field strip); `&08` → `spawn_flame` (one-shot 32×8-px flame, mutates self to `&09`); else → RTS. |
 | `&232C`  | `forcefield_render`         | Procedural vertical strip. Calls `lfsr_random`, uses the result as the **low byte of `&80XX`** (i.e. reads from whatever sideways ROM is paged in at `&8000+`) as the sprite source, then plots 2 bytes × 32 lines. |
 | `&234D`  | `forcefield_draw_or_erase`  | The draw path within `forcefield_render`.                                                                          |
 | `&23A8`  | `forcefield_erase`          | The "blank out" path — plots 2 × 32 from `&7D80` (= zero-fill region = transparent erase).                          |
@@ -345,9 +345,9 @@ indexed addressing from code):
 
 | Address       | Size | Description                                                                 |
 |---------------|------|------------------------------------------------------------------------------|
-| `tbl_1A55-95` | 64×5 | 5 parallel arrays × ≤11 entries: object slot X position, Y position, type/alive flag, ?, attribute carry. Used by the "secondary object" (= bullet / spark / pickup) subsystem. |
-| `tbl_2052-86` | 9×6+ | Active-enemy object slots. Fields per slot: spawn column (`&2052,X`), spawn Y (`&205C,X`), type (`&2065,X`), v-flip (`&206E,X`), HP / timer (`&2077,X`), state (`&2080,X`). |
-| `tbl_2065`    | 9    | Subset of the above — the type field, read by `enemy_type_dispatch`.        |
+| `&1A55..&1A98` | 7×11 | Enemy slot pool: `enemy_x[11]` / `enemy_y[11]` / `enemy_state[11]` / `enemy_pattern_step[11]` / `enemy_pattern_id[10]` at `&1A55/&1A60/&1A6B/&1A76/&1A81`, then `npc_bullet_x[7]` / `npc_bullet_y[7]` at `&1A8B/&1A92` (the shared NPC bullet pool, used by both enemies and hazards). Only slots 1..8 of each are active; slot 0 is unused. |
+| `&2052..&2088` | 6×9  | Hazard slot pool: `hazard_x` / `hazard_y` / `hazard_type` / `hazard_flip` / `hazard_hp` / `hazard_step` at `&2052/&205C/&2065/&206E/&2077/&2080`. 9 entries wide; slots 0..7 active. The arrays at `&2065..` overlap the parallel `enemy_state` clear region used by `init`. |
+| `&2065`       | 9    | `hazard_type[X]` — read by `hazard_type_dispatch` and `hazard_anim_advance`. |
 | `tbl_268F`    | 4    | NOP-pad before routine at `&2693` (no semantic content).                    |
 
 (Several smaller `data_XXXX` blocks in the disasm are 2-4 byte state
@@ -362,8 +362,9 @@ Currently unannotated. Known facts:
 
 - Starts with a sound-queue setup: `LDA #&07 / LDX #&09 / LDY #&28 /
   JMP OSWORD`. So the top of CODE2 is the SFX driver.
-- Contains the routine at `&2A20` reached from `enemy_type_dispatch`
-  (type 6) — purpose not yet identified.
+- Contains `spawn_hazard_missile` at `&2A20`, reached from
+  `hazard_type_dispatch` (type 6). Launches a vertical 4×6-px
+  yellow-red rocket that homes horizontally on the player.
 - Contains some of the trampoline routines that JMP back into
   `sprite_plot_xy` after configuring `sprite_src` for specific
   decoration sprites.
@@ -402,11 +403,11 @@ dense file on the disk.
 
 | File off       | CPU            | Size | Contents                                                                                                                          |
 |----------------|----------------|------|-----------------------------------------------------------------------------------------------------------------------------------|
-| `0x0000-0x06FF`| `&7380-&7A7F`  | 1792 | **In-scenario enemy sprite graphics.** 14 sprites of 128 bytes each (4×32 col-major), filling slots 1-14 of the pointer table.    |
-| `0x0700-0x073F`| `&7A80-&7ABF`  |   64 | **Enemy sprite pointer LOW byte** (64 slots).                                                                                     |
-| `0x0740-0x077F`| `&7AC0-&7AFF`  |   64 | **Enemy sprite pointer HIGH byte** (paired with LOW). Slot N's sprite address = `(hi[N]<<8) \| lo[N]`. Resolves into one of GRAPHIX / LEVD1 / inside LEVD2 itself. |
-| `0x0780-0x07FF`| `&7B00-&7B7F`  |  128 | **Spawn-column schedule.** Sorted ascending list of scroll-column indices at which an enemy spawns. `&FF` terminator.             |
-| `0x0800-0x087F`| `&7B80-&7BFF`  |  128 | **Spawn attribute byte** per schedule entry. Bits 0-4 = type (→ `enemy_type_dispatch`); bits 5-6 = Y-row (0=&DF, 1=&BF, 2=&9F, 3=&7F → char rows 4/8/12/16); bit 7 = v-flip. |
+| `0x0000-0x06FF`| `&7380-&7A7F`  | 1792 | **In-scenario hazard sprite graphics** (14 sprites × 128 B each, 4×32 col-major; slots 0-13 in `lev_hazard_*`). Includes the 8 frames of the hazard death-anim used by `hazard_death_step` at types `&14..&1B`. |
+| `0x0700-0x073F`| `&7A80-&7ABF`  |   64 | `lev_hazard_ptr_lo` — sprite-pointer LO byte, 32 slots. Slots 21..26 are aliased as `lev_explosion_ptr_lo` (the player-explosion frame pointers). |
+| `0x0740-0x077F`| `&7AC0-&7AFF`  |   64 | `lev_hazard_ptr_hi` — paired HI byte. Slot N's sprite address = `(hi[N]<<8) \| lo[N]`. Resolves into one of GRAPHIX (slots 15/16/19), LEVD1 (per-scenario sprite slots), or LEVD2 itself. |
+| `0x0780-0x07FF`| `&7B00-&7B7F`  |  128 | `lev_spawn_col` — sorted ascending list of scroll-column indices at which a hazard spawns. `&FF` terminator. |
+| `0x0800-0x087F`| `&7B80-&7BFF`  |  128 | `lev_spawn_attr` — paired attribute byte per schedule entry. Bits 0..4 = `hazard_type` (→ `hazard_type_dispatch`); bits 5..6 = Y-row (0=&DF / 1=&BF / 2=&9F / 3=&7F); bit 7 = `hazard_flip` (vertical-mirror, INVERTED: 0 in attr = upright). |
 | `0x0880-0x08FF`| `&7C00-&7C7F`  |  128 | **Shootable item sprite — intact frame** (slot 25 in the ptr table). Per-scenario: arch / egg / figure-8 / organic blob.          |
 | `0x0900-0x097F`| `&7C80-&7CFF`  |  128 | **Shootable item sprite — damaged frame** (slot 26).                                                                              |
 | `0x0980-0x0A8F`| `&7D00-&7E0F`  |  272 | **All-zero region.** Doubles as the universal "erase brush" — `&7D80` (referenced by the default `zp_sprite_src` init in `L1F8E` and many small-effect erase calls) and `&7E02` (small 3×2 / 2×2 effect erases). |
