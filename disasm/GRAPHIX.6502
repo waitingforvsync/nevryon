@@ -812,7 +812,11 @@ ORG &3680
     RTS
 
 \ ----- data &49A5..&4A00 -----
-.data_49A5
+.gfx_unused_tail
+    \ 91 bytes of unreferenced tail data (&49A5..&49FF). irq_install ends at &49A3 with a `RTS`
+    \ (followed by one stray `RTS` at &49A4). The remaining bytes are leftover memory captured when
+    \ the original GRAPHIX file was saved on the master disk — nothing in the engine reads or writes
+    \ this range. Safe to ignore.
     EQUB &09, &16, &09, &00, &04, &00, &08, &8C
     EQUB &84, &08, &00, &00, &00, &00, &80, &00
     EQUB &08, &8C, &84, &08, &80, &00, &00, &00

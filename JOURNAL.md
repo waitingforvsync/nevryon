@@ -4,6 +4,61 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-19 — Session 32: kill the last default-named data labels
+
+Swept all remaining auto-promoted `data_XXXX` / `tbl_XXXX` / `LXXXX`
+labels out of the disasm. After this pass the only L-form labels
+left are genuine local branch targets inside named routines — every
+data byte or scratch slot the engine touches now has a real name.
+
+### Renames
+
+| Old | New | What |
+|-----|-----|------|
+| `data_16F5` | `tempx` | The most-used register-save scratch byte. Stashes the current slot index across nested JSRs in update_enemies / check_bullet_hits / etc. |
+| `data_16F6` | `dy_dir` | Per-frame enemy vertical direction (pattern walker output). Also dual-purpose as a saved-X scratch in other routines — kept the dy_dir name because that's the load-bearing use. |
+| `data_16F7` | `dx_dir` | Per-frame enemy horizontal direction. Same dual-purpose note. |
+| `data_16F8` | `tempx2` | forcefield_draw_or_erase's saved-X scratch. |
+| `data_25A9` | `unused_pickup_flag` | Vestigial pickup-state flag that gets WRITTEN by the pickup-reset path but never READ. Likely scaffolding for an unimplemented power-up. Comment notes the dead-store status. |
+| `data_70FF` | `scoreboard_guard_byte` | One byte at the last screen-RAM address before SCOREBD. play_subframe zeros it every frame as a defensive erase of the trailing 4 px of the bottom playfield row. Lies in the CRTC-trimmed strip so the write is invisible anyway. |
+| `data_28D5` | `scratch_28D5` / `scratch_28D6` | Paired with the existing scratch_28D3/_28D4. Both currently unused. |
+| `data_28D8` | `death_seq_frame_counter` | The 200-frame counter that play_death_sequence uses to time the death-explosion. Aliased onto force_pod_anim's first-instruction operand byte; safe because death_sequence terminates the game and CODE2 reloads from disk on restart. |
+| `data_29D8` | `pad_29D8` | 15 bytes of `&EA` NOP padding between update_hazard_missile and draw_score. |
+| `data_2EFE` | `pad_2EFE` | 1 byte of padding between sfx_level_start_params and the next routine. |
+| `data_49A5` | `gfx_unused_tail` | 91 bytes of unreferenced tail data at the end of GRAPHIX (&49A5..&49FF). Leftover memory captured at file-save time; nothing in the engine touches it. |
+
+### Removals
+
+* `tbl_20A2` (CODE &20A2) — was an auto-generated **mislabel**: the
+  address is a fall-through code path inside spawn_check_step that
+  resets `zp_7C` to 0 when the round-robin counter wraps past
+  `n_hazards`. Calling it `tbl_*` (a "table") was confusing. Removed
+  the explicit label; the disasm now flows from `BCC L20A6` /
+  fall-through correctly without the spurious section break.
+* `L2016` (CODE &2016) — was a stale SMC-operand label declaration
+  (`L2016 = * + 1`) for the LO byte of `STA force_pod_state`. Nothing
+  in the engine writes to &2016, so the SMC-style declaration was a
+  no-op artifact. Removed.
+* `0x2051: data_2051` (CODE.cfg.json labels block) — duplicate of the
+  authoritative `lives_left` entry; the comment in Nevryon.6502 that
+  referenced "data_2051 at &2051 in CODE" was also stale and is now
+  fixed to say `lives_left`.
+
+### Master Nevryon.6502 changes
+
+* `scoreboard_guard_byte = &70FF` added as a real extern equate (the
+  address lies outside CODE's binary range so it needs an explicit
+  master declaration; tempx / dy_dir / dx_dir / tempx2 /
+  unused_pickup_flag all live inside CODE so their labels emit
+  inline at the data region).
+* Comment updates: `data_16F6, _16F7` → `dy_dir, dx_dir` in the
+  pattern_dir enumeration block; `data_2051` → `lives_left` in the
+  cross-file-labels note.
+
+Build verifies byte-identical on all four binaries.
+
+---
+
 ## 2026-05-19 — Session 31: name and document the last JSR'd L#### routines
 
 Found and named the seven remaining anonymous routine entries (JSR'd

@@ -87,7 +87,7 @@ n_player_fire_slots       = 4     \ Number of in-flight bullets the fire button 
 
 \ ---- State-machine enumerations ----------------------------
 \ Named values that appear in the enemy_state / hazard_type bytes
-\ and in the per-axis pattern-direction scratch (data_16F6, _16F7).
+\ and in the per-axis pattern-direction scratch (dy_dir, dx_dir).
 \ Reflected in the disasm via immediate_overrides at the sites that
 \ literally compare against or store these values; the underlying
 \ bytes are unchanged and the build still roundtrips bit-identical.
@@ -138,7 +138,7 @@ hazard_type_death_clear       = &1C     \ hazard_death_step clears the slot when
 \ consumed by L1B2D. Convention: 0 = no motion, 1 = positive
 \ (Y += 4 = UP / X += 1 = right), anything else (3 is the stored
 \ value) = negative (Y -= 4 = DOWN / X -= 1 = left). Stored in
-\ data_16F6 (dy) and data_16F7 (dx); the consumer tests CMP #&01
+\ dy_dir (&16F6) and dx_dir (&16F7); the consumer tests CMP #&01
 \ BNE → "negative" so any non-zero non-one value falls through.
 pattern_dir_none              = &00
 pattern_dir_pos               = &01
@@ -215,6 +215,7 @@ lev_hazard_ptr_hi          = &7AC0     \ 32-slot hazard sprite-pointer table (HI
 \ tail of lev_hazard_ptr_*.
 lev_explosion_ptr_lo      = &7A95     \ = lev_hazard_ptr_lo + &15 (slots 21..26)
 lev_explosion_ptr_hi      = &7AD5     \ = lev_hazard_ptr_hi + &15
+scoreboard_guard_byte     = &70FF     \ One-byte guard slot at the last screen-RAM address before $.SCOREBD (&7100). play_subframe writes 0 here every frame (defensive zero of the trailing 4 pixels of the bottom playfield row, in case a right-edge sprite spilled over the band boundary). Lies in the CRTC-trimmed strip so the write is invisible.
 lev_spawn_col             = &7B00     \ 128-byte spawn-column schedule (sorted ascending; &FF = end-of-list)
 lev_spawn_attr            = &7B80     \ 128-byte spawn attribute table, parallel with lev_spawn_col. Bits 0..4 = hazard type / dispatch (→ hazard_type_dispatch), bits 5..6 = Y row (0 = &DF, 1 = &BF, 2 = &9F, 3 = &7F), bit 7 = vertical-flip flag (mirrors the sprite, used to pair ceiling-hanging and floor-rising decoration hazards).
 lev_explosion_4           = &7C00     \ 4×32 (128 B) — frame 4 of the 6-frame explosion. Same bytes accessible via lev_hazard_ptr_*[25].
@@ -252,7 +253,7 @@ loader_score_save         = &0CF4
 loader_hiscore_save       = &0CFA
 
 \ Cross-file labels referencing bytes that LIVE inside one of the
-\ binaries (e.g. score_dN at &2A02 in CODE2, data_2051 at &2051 in
+\ binaries (e.g. score at &2A02 in CODE2, lives_left at &2051 in
 \ CODE) are defined inline by that binary's cfg, not here — the
 \ disassembler emits them at the byte location and they're visible
 \ globally once BeebAsm has INCLUDE'd the binary.

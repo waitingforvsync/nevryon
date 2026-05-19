@@ -52,6 +52,7 @@
 \   stage_clear_screen = &3325
 \   game_over_or_continue = &3432
 \   get_ready_overlay = &3513
+\   scoreboard_guard_byte = &70FF
 \   lev_hazard_ptr_lo = &7A80
 \   lev_explosion_ptr_lo = &7A95
 \   lev_hazard_ptr_hi = &7AC0
@@ -84,7 +85,6 @@ zp_89            = &89
 zp_8A            = &8A
 zp_9A            = &9A
 zp_9F            = &9F
-data_70FF        = &70FF
 
 ORG &1100
 
@@ -699,7 +699,7 @@ scroll_upper_dst_hi = * + 2
     JSR update_enemies
     JSR scroll_step
     LDX #&00
-    STX data_70FF
+    STX scoreboard_guard_byte
     INX
     STX zp_sprite_dir_flag
     JSR update_pickup
@@ -1166,13 +1166,13 @@ scroll_upper_dst_hi = * + 2
     EQUB &00, &00, &00, &00, &00, &00, &00
 .player_bullet_y
     EQUB &00, &00, &00, &00, &00, &00, &00, &EA
-.data_16F5
+.tempx
     EQUB &EA
-.data_16F6
+.dy_dir
     EQUB &EA
-.data_16F7
+.dx_dir
     EQUB &EA
-.data_16F8
+.tempx2
     EQUB &EA, &EA, &EA
 .enemy_pattern_ptr_lo
     EQUB &EA
@@ -1362,12 +1362,12 @@ scroll_upper_dst_hi = * + 2
     INC player_bullet_x,X
     INC player_bullet_x,X
     LDA player_bullet_x,X
-    STX data_16F5
+    STX tempx
     TAX
     CPX #&25
     BCC L1824
     JSR calc_screen_addr
-    LDX data_16F5
+    LDX tempx
     LDA #&00
     STA player_bullet_x,X
     LDX #&02
@@ -1377,7 +1377,7 @@ scroll_upper_dst_hi = * + 2
     LDA #HI(lev_erase_brush + &102)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     JMP L183D
 .L1824
     JSR calc_screen_addr
@@ -1389,7 +1389,7 @@ scroll_upper_dst_hi = * + 2
     STA sprite_src_hi
     JSR sprite_plot_xy
     JSR check_bullet_hits
-    LDX data_16F5
+    LDX tempx
 .L183D
     DEX
     BNE L17E9
@@ -1411,7 +1411,7 @@ scroll_upper_dst_hi = * + 2
     \ kill, mutates hazard_type to &14 to start the death animation.
     \
     \ On either hit: the bullet erases itself (3×2 brush) and the slot is freed.
-    LDX data_16F5
+    LDX tempx
     LDY player_bullet_x,X
     INY
     INY
@@ -1422,17 +1422,17 @@ scroll_upper_dst_hi = * + 2
 .L1858
     DEX
     BNE L1861
-    LDX data_16F5
+    LDX tempx
     JMP L18F7
 .L1861
     LDA enemy_state,X
     BEQ L1858
-    STX data_16F7
+    STX dx_dir
     LDY enemy_x,X
     CPY zp_test_x
     BEQ L1889
     BCC L1878
-    LDX data_16F7
+    LDX dx_dir
     JMP L1858
 .L1878
     INY
@@ -1443,7 +1443,7 @@ scroll_upper_dst_hi = * + 2
     BCC L1883
     JMP L1889
 .L1883
-    LDX data_16F7
+    LDX dx_dir
     JMP L1858
 .L1889
     LDA enemy_y,X
@@ -1456,7 +1456,7 @@ scroll_upper_dst_hi = * + 2
     BEQ L18A1
     BCC L18A1
 .L189B
-    LDX data_16F7
+    LDX dx_dir
     JMP L1858
 .L18A1
     LDY enemy_state,X
@@ -1481,10 +1481,10 @@ scroll_upper_dst_hi = * + 2
     STA enemy_state,X
     JSR add_score_x1
     INC pickup_kill_count
-    LDX data_16F5
+    LDX tempx
     RTS
 .L18D1
-    LDX data_16F5
+    LDX tempx
     LDY player_bullet_y,X
     LDA player_bullet_x,X
     TAX
@@ -1496,7 +1496,7 @@ scroll_upper_dst_hi = * + 2
     LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     LDA #&00
     STA player_bullet_x,X
 .L18F7
@@ -1505,17 +1505,17 @@ scroll_upper_dst_hi = * + 2
     INX
     CPX #&08
     BNE L1902
-    LDX data_16F5
+    LDX tempx
     RTS
 .L1902
     LDA hazard_type,X
     BEQ L18F9
-    STX data_16F7
+    STX dx_dir
     LDY hazard_x,X
     CPY zp_test_x
     BEQ L192B
     BCC L1919
-    LDX data_16F7
+    LDX dx_dir
     JMP L18F9
 .L1919
     INY
@@ -1527,7 +1527,7 @@ scroll_upper_dst_hi = * + 2
     BCC L1925
     JMP L192B
 .L1925
-    LDX data_16F7
+    LDX dx_dir
     JMP L18F9
 .L192B
     LDA hazard_y,X
@@ -1540,10 +1540,10 @@ scroll_upper_dst_hi = * + 2
     BEQ L1943
     BCC L1943
 .L193D
-    LDX data_16F7
+    LDX dx_dir
     JMP L18F9
 .L1943
-    LDX data_16F5
+    LDX tempx
     LDY player_bullet_y,X
     LDA player_bullet_x,X
     TAX
@@ -1555,10 +1555,10 @@ scroll_upper_dst_hi = * + 2
     LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     LDA #&00
     STA player_bullet_x,X
-    LDX data_16F7
+    LDX dx_dir
     DEC hazard_hp,X
     LDA hazard_hp,X
     BNE L1983
@@ -1566,10 +1566,10 @@ scroll_upper_dst_hi = * + 2
     STA hazard_type,X
     JSR add_score_x10
     JSR sfx_explode
-    LDX data_16F5
+    LDX tempx
     RTS
 .L1983
-    LDX data_16F5
+    LDX tempx
     LDA #&07
     JMP OSWRCH
 
@@ -1594,7 +1594,7 @@ scroll_upper_dst_hi = * + 2
     BEQ L198D
     CMP #enemy_state_hit_frame_1
     BCS L198D
-    STX data_16F5
+    STX tempx
     LDA enemy_y,X
     SEC
     SBC #&0C
@@ -1605,7 +1605,7 @@ scroll_upper_dst_hi = * + 2
     LDA zp_player_x
     CMP zp_test_x
     BCC L19BA
-    LDX data_16F5
+    LDX tempx
     JMP L198D
 .L19BA
     LDA zp_test_x
@@ -1613,7 +1613,7 @@ scroll_upper_dst_hi = * + 2
     SBC #&06
     STA zp_test_x
     LDA zp_player_x
-    LDX data_16F5
+    LDX tempx
     CMP zp_test_x
     BCC L198D
     LDA zp_player_y
@@ -1625,12 +1625,12 @@ scroll_upper_dst_hi = * + 2
     BEQ L19E0
     BCC L19E0
 .L19DA
-    LDX data_16F5
+    LDX tempx
     JMP L198D
 .L19E0
     LDA #&07
     JSR OSWRCH
-    LDX data_16F5
+    LDX tempx
     LDA #enemy_state_hit_frame_1
     STA enemy_state,X
     JSR add_score_x1
@@ -1648,7 +1648,7 @@ scroll_upper_dst_hi = * + 2
     BEQ L19F8
     CMP #hazard_type_death_start
     BCS L19F8
-    STX data_16F5
+    STX tempx
     LDA hazard_y,X
     SEC
     SBC #&10
@@ -1660,7 +1660,7 @@ scroll_upper_dst_hi = * + 2
     LDA zp_player_x
     CMP zp_test_x
     BCC L1A26
-    LDX data_16F5
+    LDX tempx
     JMP L19F8
 .L1A26
     LDA zp_test_x
@@ -1668,7 +1668,7 @@ scroll_upper_dst_hi = * + 2
     SBC #&06
     STA zp_test_x
     LDA zp_player_x
-    LDX data_16F5
+    LDX tempx
     CMP zp_test_x
     BCC L19F8
     LDA zp_player_y
@@ -1680,7 +1680,7 @@ scroll_upper_dst_hi = * + 2
     BEQ L1A4C
     BCC L1A4C
 .L1A46
-    LDX data_16F5
+    LDX tempx
     JMP L19F8
 .L1A4C
     LDA #&07
@@ -1709,7 +1709,7 @@ scroll_upper_dst_hi = * + 2
     \ Enemy per-slot pattern-step counter — byte-offset into the per-pattern motion script that
     \ update_enemies/L1B87 is currently walking. The script (pointed at by zp_88, length
     \ enemy_pattern_len bytes) is a sequence of (dy_dir, dx_dir) byte pairs. L1B87 reads `(zp_88),Y`
-    \ at Y = enemy_pattern_step[X] into data_16F6 (vertical-dir) and `(zp_88),Y+1` into data_16F7
+    \ at Y = enemy_pattern_step[X] into dy_dir (vertical-dir) and `(zp_88),Y+1` into dx_dir
     \ (horizontal-dir), then INYs twice; the next frame's L1B2D stashes the new Y back here.
     \ Wrap-around at enemy_pattern_len.
     EQUB &EA, &EA, &EA, &EA, &EA, &EA, &EA, &EA
@@ -1768,18 +1768,18 @@ scroll_upper_dst_hi = * + 2
     BNE L1AB8
     RTS
 .L1AC3
-    STX data_16F6
-    LDX data_16F5
+    STX dy_dir
+    LDX tempx
     LDA enemy_x,X
     CLC
     ADC #&02
-    LDX data_16F6
+    LDX dy_dir
     STA npc_bullet_x,X
-    LDX data_16F5
+    LDX tempx
     LDA enemy_y,X
     SEC
     SBC #&08
-    LDX data_16F6
+    LDX dy_dir
     STA npc_bullet_y,X
     LDA #&08
     STA zp_7E
@@ -1824,12 +1824,12 @@ scroll_upper_dst_hi = * + 2
     LDX #&04
     LDY #&18
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     JMP L1AED
 .L1B2D
     TYA
     STA enemy_pattern_step,X
-    LDA data_16F6
+    LDA dy_dir
     BEQ L1B4F
     CMP #pattern_dir_pos
     BEQ L1B46
@@ -1844,7 +1844,7 @@ scroll_upper_dst_hi = * + 2
     ADC #&04
     STA enemy_y,X
 .L1B4F
-    LDA data_16F7
+    LDA dx_dir
     BEQ L1B61
     CMP #pattern_dir_pos
     BNE L1B5E
@@ -1864,7 +1864,7 @@ scroll_upper_dst_hi = * + 2
     LDY #&18
     JSR sprite_plot_xy
     JSR enemy_try_fire_bullet
-    LDX data_16F5
+    LDX tempx
     DEX
     BEQ L1B84
     JMP L1AED
@@ -1873,7 +1873,7 @@ scroll_upper_dst_hi = * + 2
 
 .enemy_select_motion
     \ Pick the next (dy_dir, dx_dir) pair for one enemy slot, write it into the per-axis direction
-    \ scratch (data_16F6 / data_16F7) ready for L1B2D to apply.
+    \ scratch (dy_dir / dx_dir) ready for L1B2D to apply.
     \
     \ For enemy_pattern_id in 1..4: reads a (dy, dx) byte pair from the active pattern script at
     \ offset enemy_pattern_step,X via (zp_88),Y, INYs twice, then CPYs against enemy_pattern_len
@@ -1895,8 +1895,8 @@ scroll_upper_dst_hi = * + 2
     \ zp_player_y — used by pattern 5 only
     \
     \ Outputs:
-    \ data_16F6 = dy_dir (pattern_dir_none / _pos / _neg)
-    \ data_16F7 = dx_dir
+    \ dy_dir = dy_dir (pattern_dir_none / _pos / _neg)
+    \ dx_dir = dx_dir
     \ Y = next pattern_step value (= old + 2 for patterns 1..4, or old + 1 for 5/6)
     \ Z-flag set iff Y == enemy_pattern_len (script reached end this frame)
     LDA enemy_pattern_id,X
@@ -1906,10 +1906,10 @@ scroll_upper_dst_hi = * + 2
     BEQ L1BD1
     LDY enemy_pattern_step,X
     LDA (zp_88),Y
-    STA data_16F6
+    STA dy_dir
     INY
     LDA (zp_88),Y
-    STA data_16F7
+    STA dx_dir
     INY
     CPY enemy_pattern_len
     RTS
@@ -1918,28 +1918,28 @@ scroll_upper_dst_hi = * + 2
     CMP #&04
     BNE L1BD1
     LDA #pattern_dir_neg
-    STA data_16F7
+    STA dx_dir
     LDA zp_player_y
     CMP enemy_y,X
     BCC L1BC4
     LDA #pattern_dir_pos
-    STA data_16F6
+    STA dy_dir
     LDY enemy_pattern_step,X
     INY
     CPY enemy_pattern_len
     RTS
 .L1BC4
     LDA #pattern_dir_neg
-    STA data_16F6
+    STA dy_dir
     LDY enemy_pattern_step,X
     INY
     CPY enemy_pattern_len
     RTS
 .L1BD1
     LDA #pattern_dir_neg
-    STA data_16F7
+    STA dx_dir
     LDA #pattern_dir_none
-    STA data_16F6
+    STA dy_dir
     LDY enemy_pattern_step,X
     INY
     CPY enemy_pattern_len
@@ -1957,9 +1957,9 @@ scroll_upper_dst_hi = * + 2
     \ &0C → enemy_hit_frame3 (lev_enemy_hit_3)
     \ &0D → enemy_hit_erase (sprite = lev_erase_brush + &80, and enemy_state cleared)
     \
-    \ Inputs: data_16F5 = enemy slot index.
+    \ Inputs: tempx = enemy slot index.
     \ Outputs: sprite_src_lo / _hi set for the caller to plot.
-    LDX data_16F5
+    LDX tempx
     LDA enemy_state,X
     CMP #enemy_state_hit_frame_1
     BCC L1BFB
@@ -1976,7 +1976,7 @@ scroll_upper_dst_hi = * + 2
     STA sprite_src_lo
     LDA enemy_anim_ptr_hi,X
     STA sprite_src_hi
-    LDX data_16F5
+    LDX tempx
     RTS
 
 \ ----- data &1C0C..&1C1A -----
@@ -2079,11 +2079,11 @@ scroll_upper_dst_hi = * + 2
     \ X = enemy slot index
     \
     \ Effects:
-    \ data_16F5 = X (saved across the hazard/missile sub-loops)
+    \ tempx = X (saved across the hazard/missile sub-loops)
     \ On hazard hit: enemy_state[X] = enemy_state_hit_frame_1; rings the bell.
     \ On missile hit (via enemy_vs_player_missile): both the missile and the enemy are killed (see
     \ that routine).
-    STX data_16F5
+    STX tempx
     LDA enemy_state,X
     CMP #enemy_state_hit_frame_1
     BCC L1C68
@@ -2101,7 +2101,7 @@ scroll_upper_dst_hi = * + 2
     INX
     CPX #&08
     BNE L1C83
-    LDX data_16F5
+    LDX tempx
     JMP L1CB1
 .L1C83
     LDA hazard_type,X
@@ -2118,7 +2118,7 @@ scroll_upper_dst_hi = * + 2
     ADC #&20
     CMP hazard_y,X
     BCC L1C78
-    LDX data_16F5
+    LDX tempx
     LDA #enemy_state_hit_frame_1
     STA enemy_state,X
     LDA #&07
@@ -2165,12 +2165,12 @@ scroll_upper_dst_hi = * + 2
     \
     \ Inputs:
     \ Y = player missile slot (0 = upper, 1 = lower)
-    \ data_16F5 = enemy slot index (saved by enemy_check_collisions)
+    \ tempx = enemy slot index (saved by enemy_check_collisions)
     \ zp_test_x / zp_test_y = missile box-origin position (set by caller)
     \
     \ Note: player_missile_x is a singleton (both missiles share the same X), but player_missile_y /
     \ _active are 2-element pairs.
-    LDX data_16F5
+    LDX tempx
     LDA enemy_x,X
     CMP zp_test_x
     BCC L1CEC
@@ -2206,7 +2206,7 @@ scroll_upper_dst_hi = * + 2
     LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     LDA #enemy_state_hit_frame_1
     STA enemy_state,X
     JSR add_score_x1
@@ -2233,14 +2233,14 @@ scroll_upper_dst_hi = * + 2
     DEC npc_bullet_x,X
     DEC npc_bullet_x,X
     LDA npc_bullet_x,X
-    STX data_16F5
+    STX tempx
     TAX
     CMP #&27
     BCC L1D75
 .L1D52
     INX
     JSR calc_screen_addr
-    LDX data_16F5
+    LDX tempx
     LDA #&FF
     STA npc_bullet_x,X
     LDX #&02
@@ -2250,7 +2250,7 @@ scroll_upper_dst_hi = * + 2
     LDA #HI(lev_erase_brush + &102)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     JMP L1D94
 .L1D75
     CMP #&00
@@ -2265,7 +2265,7 @@ scroll_upper_dst_hi = * + 2
     LDA #HI(npc_bullet_sprite)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
 .L1D94
     JSR npc_bullet_collide_player
     DEX
@@ -2318,7 +2318,7 @@ scroll_upper_dst_hi = * + 2
     LDA #HI(lev_erase_brush + &102)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     LDA #&FF
     STA npc_bullet_x,X
 
@@ -2332,7 +2332,7 @@ scroll_upper_dst_hi = * + 2
     \ The icon is redrawn at column (player_hp + &1F), row &5F, using `gfx_icon_lives` (blink state
     \ 0) or the alternate icon at &48B8 (state 1). When `player_hp` hits 0 AND blink-toggle is in
     \ state 1, JMP `death_anim` (= explosion + DEC lives_left + init).
-    STX data_16F5
+    STX tempx
     LDA #&07
     JSR OSWRCH
     LDA lives_blink_state
@@ -2364,13 +2364,13 @@ scroll_upper_dst_hi = * + 2
     JSR sprite_plot_xy
     LDA player_hp
     BEQ L1E3B
-    LDX data_16F5
+    LDX tempx
     RTS
 .L1E3B
     LDA lives_blink_state
     CMP #&01
     BEQ death_anim
-    LDX data_16F5
+    LDX tempx
     RTS
 
 \ ----- data &1E46..&1E47 -----
@@ -2506,7 +2506,7 @@ scroll_upper_dst_hi = * + 2
     JSR init
     LDA lives_left
     BEQ L1F72
-    LDX data_16F5
+    LDX tempx
     RTS
 .L1F72
     LDX #&20
@@ -2518,7 +2518,7 @@ scroll_upper_dst_hi = * + 2
     LDA #&48
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     LDY #&00
     RTS
 
@@ -2591,12 +2591,11 @@ scroll_upper_dst_hi = * + 2
     STA pickup_kill_count
     STA pickup_tier_flag
     STA pod_attached
-L2016            = * + 1
     STA force_pod_state
     STA player_missiles_unlocked
-    STA data_25A9
+    STA unused_pickup_flag
     STA pickup_count
-    LDX data_16F5
+    LDX tempx
     LDY #&00
     LDA #&FF
     STA npc_bullet_x
@@ -2679,8 +2678,6 @@ L2016            = * + 1
     LDA zp_7C
     CMP #n_hazards
     BCC L20A6
-
-.tbl_20A2
     LDA #&00
     STA zp_7C
 .L20A6
@@ -2789,7 +2786,7 @@ L2016            = * + 1
 .L2151
     INC zp_frame_progress
     INC zp_frame_progress
-    STX data_16F5
+    STX tempx
     JSR update_hazard_slot
     LDA zp_scroll_col
     CMP #&F0
@@ -2804,7 +2801,7 @@ L2016            = * + 1
     LDY hazard_y,X
     TAX
     JSR calc_screen_addr
-    LDX data_16F5
+    LDX tempx
     LDA hazard_flip,X
     STA zp_sprite_dir_flag
     LDA hazard_type,X
@@ -2814,7 +2811,7 @@ L2016            = * + 1
     STA sprite_src_lo
     LDA lev_hazard_ptr_hi,X
     STA sprite_src_hi
-    LDX data_16F5
+    LDX tempx
     LDA hazard_x,X
     CMP #&25
     BCC L21BA
@@ -2832,7 +2829,7 @@ L2016            = * + 1
 .L21AC
     LDY #&20
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     JSR missile_collide_hazard
     JMP L2140
 .L21BA
@@ -2840,7 +2837,7 @@ L2016            = * + 1
 .L21BC
     LDY #&20
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     LDA zp_scroll_col
     CMP #&F0
     BEQ L21EB
@@ -2856,7 +2853,7 @@ L2016            = * + 1
     LDX #&01
     LDY #&20
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
 .L21EB
     JSR missile_collide_hazard
     JMP L2140
@@ -2866,7 +2863,7 @@ L2016            = * + 1
     LDY hazard_y,X
     TAX
     JSR calc_screen_addr
-    LDX data_16F5
+    LDX tempx
     DEC hazard_step,X
     LDY hazard_step,X
     BEQ L2237
@@ -2885,7 +2882,7 @@ L2016            = * + 1
     LDA lev_hazard_ptr_lo,X
     ADC sprite_src_lo
     STA sprite_src_lo
-    LDX data_16F5
+    LDX tempx
     LDA hazard_flip,X
     STA zp_sprite_dir_flag
     LDA hazard_step,X
@@ -2899,7 +2896,7 @@ L2016            = * + 1
     LDX #&01
     LDY #&20
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     LDA #&00
     STA hazard_type,X
     JMP L2140
@@ -3045,7 +3042,7 @@ L2016            = * + 1
     \ Suppresses the fire if `hazard_x[firer] < &08` (almost off-screen left) — there's not enough
     \ screen left for it to fly.
     \
-    \ Inputs: data_16F5 = firer's slot index.
+    \ Inputs: tempx = firer's slot index.
     \ Effects: writes one slot of npc_bullet_x / _y; plays sfx_fire.
     \
     \ Per-frame mover: update_npc_bullets. The bullet sprite is `npc_bullet_sprite` (4×2 px white).
@@ -3061,28 +3058,28 @@ L2016            = * + 1
     BEQ L22FC
     DEX
     BNE L22EE
-    LDX data_16F5
+    LDX tempx
     RTS
 .L22FC
-    STX data_16F6
-    LDX data_16F5
+    STX dy_dir
+    LDX tempx
     LDA hazard_x,X
     CMP #&08
     BCS L230D
-    LDX data_16F5
+    LDX tempx
     RTS
 .L230D
-    LDX data_16F6
+    LDX dy_dir
     STA npc_bullet_x,X
     DEC npc_bullet_x,X
-    LDX data_16F5
+    LDX tempx
     LDA hazard_y,X
-    LDX data_16F6
+    LDX dy_dir
     SEC
     SBC #&10
     STA npc_bullet_y,X
     JSR sfx_fire
-    LDX data_16F5
+    LDX tempx
     RTS
 
 .forcefield_render
@@ -3093,7 +3090,7 @@ L2016            = * + 1
 .L2334
     LDA #&01
     STA forcefield_active
-    LDX data_16F5
+    LDX tempx
     LDA hazard_y,X
     LDY hazard_flip,X
     BNE L234A
@@ -3107,7 +3104,7 @@ L2016            = * + 1
 .forcefield_draw_or_erase
     STA forcefield_y
     LDA hazard_x,X
-    STX data_16F8
+    STX tempx2
     STA forcefield_x
     LDY forcefield_y
     TAX
@@ -3141,8 +3138,8 @@ L2016            = * + 1
     BCS L23A1
     JSR lose_a_life
 .L23A1
-    LDX data_16F8
-    STX data_16F5
+    LDX tempx2
+    STX tempx
     RTS
 
 .forcefield_erase
@@ -3156,7 +3153,7 @@ L2016            = * + 1
     JSR sprite_plot_xy
     LDA #&00
     STA forcefield_active
-    LDX data_16F5
+    LDX tempx
     RTS
 
 \ ----- data &23C5..&23C8 -----
@@ -3176,7 +3173,7 @@ L2016            = * + 1
 \ ----- code &23C8..&2554 -----
 .missile_collide_hazard
     \ Per-frame test of both player missiles against the current hazard slot (X = hazard slot index,
-    \ passed in via data_16F5). Sets up zp_test_x = upper_x + 3 and zp_test_y = upper_y - 4, calls
+    \ passed in via tempx). Sets up zp_test_x = upper_x + 3 and zp_test_y = upper_y - 4, calls
     \ `missile_hazard_box_test` with Y = 0 if the upper slot is active; then repeats with the lower
     \ slot's Y (zp_test_y = lower_y - 4) and Y = 1. Called from update_hazards' per-slot tail.
     LDY player_missile_x
@@ -3207,13 +3204,13 @@ L2016            = * + 1
     RTS
 
 .missile_hazard_box_test
-    \ Box-test the hazard at slot X (= data_16F5) against the test point (zp_test_x, zp_test_y). Hit
+    \ Box-test the hazard at slot X (= tempx) against the test point (zp_test_x, zp_test_y). Hit
     \ window: hazard_x in [test_x - 5, test_x] AND hazard_y in [test_y, test_y + &20]. On hit →
     \ `missile_hit_hazard`.
     \
     \ Inputs: Y on entry = which missile is being tested (0 = upper, 1 = lower) — used by the hit
     \ path to deactivate the right slot and pick the right Y coordinate.
-    LDX data_16F5
+    LDX tempx
     LDA hazard_x,X
     CMP zp_test_x
     BCC L2404
@@ -3256,7 +3253,7 @@ L2016            = * + 1
     LDA #HI(lev_erase_brush + &80)
     STA sprite_src_hi
     JSR sprite_plot_xy
-    LDX data_16F5
+    LDX tempx
     LDA hazard_hp,X
     SEC
     SBC #&04
@@ -3264,13 +3261,13 @@ L2016            = * + 1
     BEQ L2458
     CMP #&08
     BCS L2458
-    LDX data_16F5
+    LDX tempx
     RTS
 .L2458
     LDA #hazard_type_death_start
-    LDX data_16F5
+    LDX tempx
     STA hazard_type,X
-    LDX data_16F5
+    LDX tempx
     RTS
 
 .spawn_flame
@@ -3401,7 +3398,7 @@ L2016            = * + 1
     \ frame, drifts off the left edge, or has hit the player.
     LDA #&00
     STA flame_state
-    LDX data_16F5
+    LDX tempx
     RTS
 
 .flame_collide_player
@@ -3519,7 +3516,10 @@ L2016            = * + 1
     EQUB &EA, &EA
 .player_missiles_unlocked
     EQUB &EA, &EA
-.data_25A9
+.unused_pickup_flag
+    \ Dead-store flag. Written (along with force_pod_state, player_missiles_unlocked, pickup_count)
+    \ by the pickup-state reset path, but no code ever reads it. Likely a vestigial flag from a
+    \ planned-but-unwired pickup category.
     EQUB &EA
 
 \ ----- code &25AA..&268F -----
