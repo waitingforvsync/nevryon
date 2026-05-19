@@ -4,6 +4,46 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-19 — Session 31: name and document the last JSR'd L#### routines
+
+Found and named the seven remaining anonymous routine entries (JSR'd
+`LXXXX` auto-labels). Each got an Inputs / Outputs / Effects header
+comment so callers' meaning is now obvious from the disasm.
+
+| Old | New | What |
+|-----|-----|------|
+| L1B87 | `enemy_select_motion` | Picks next (dy_dir, dx_dir) for one enemy slot — either from the pattern script for patterns 1..4, or via the homing/straight logic for patterns 5/6 |
+| L1C5D | `enemy_check_collisions` | Per-enemy hit-test vs (a) hazards (kills enemy on overlap) and (b) both player missiles (delegates to enemy_vs_player_missile). Skipped if already dying |
+| L1CE1 | `enemy_vs_player_missile` | Bounding-box test for one player missile vs the current enemy. On hit: sfx_explode, missile deactivated and erased, enemy → hit_frame_1, +score, +pickup_kill_count |
+| L29F0 | `draw_score_digits_loop` | The 6-iteration BCD-render loop. Tail of draw_score |
+| L2E3F | `draw_high_score` | Same loop, different buffer and screen position — renders `high_score` at (col &11, row &96) |
+| L2E60 | `check_new_high_score` | Compares `score` against `high_score` MSD-first; copies if higher |
+| L34D7 | `sfx_tick_then_pause_1s` | sfx_score_tick + 50 vsync ticks. Drives the per-second digit step in the continue countdown |
+
+Plus one data label promoted from `tbl_2E5A`:
+* `high_score` — the 6-byte BCD high-score buffer at &2E5A. Same
+  layout as `score`. Updated by check_new_high_score, rendered by
+  draw_high_score.
+
+This makes `update_enemies` now read as `JSR enemy_check_collisions
+/ JSR enemy_select_motion / BNE L1B2D` — the per-frame enemy step is
+explicit in the routine names rather than hiding behind L-labels.
+
+Side observation while writing the headers: `draw_score` and
+`draw_high_score` share `draw_score_digits_loop` only by accident —
+both buffers are 6 bytes wide and laid out identically, so the loop
+body works against either. If a refactor ever splits them by buffer
+identity, the comment will need updating.
+
+After this pass, the only JSR'd L-labels left are local branch
+targets (e.g. L1BA5 / L1BD1 / L1B2D inside the pattern walker, and
+similar within already-named routines) — every callable routine
+entry now has a real name and a header.
+
+Build verifies byte-identical across all four binaries.
+
+---
+
 ## 2026-05-18 — Session 30: state-machine enumerations (enemy_state / hazard_type / pattern_dir)
 
 Added named constants for the three small state machines so that the

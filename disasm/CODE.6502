@@ -1788,11 +1788,10 @@ scroll_upper_dst_hi = * + 2
 .update_enemies
     \ Per-frame ENEMY (moving spawned) pool update. Iterates X = n_enemies..1 (predec); for each
     \ active slot (enemy_state[X] != 0):
-    \ - per-frame motion via L1B87 (reads the active pattern script's next (dy, dx) pair, applies to
-    \ enemy_x / _y)
-    \ - erase + redraw the 4×24 sprite at the new position (sprite_src looked up via
-    \ enemy_anim_dispatch)
-    \ - call enemy_try_fire_bullet for a random chance to fire
+    \ - enemy_check_collisions (test self against hazards and player missiles)
+    \ - enemy_select_motion (read next (dy, dx) pair from pattern script, or compute homing dir for
+    \ patterns 5/6)
+    \ - if script not yet at end → L1B2D (apply motion, erase + redraw, fire bullet chance)
     \
     \ Slot deactivates and is erased when enemy_state drops to 0. Enemies damage the player on
     \ contact (check_player_collisions) and are destructible by player bullets (check_bullet_hits)
@@ -1808,8 +1807,8 @@ scroll_upper_dst_hi = * + 2
     INC zp_frame_progress
     INC zp_frame_progress
     JSR pod_collide_enemy
-    JSR L1C5D
-    JSR L1B87
+    JSR enemy_check_collisions
+    JSR enemy_select_motion
     BNE L1B2D
 .L1B07
     LDA #&00
@@ -1872,7 +1871,34 @@ scroll_upper_dst_hi = * + 2
 .L1B84
     JMP update_npc_bullets
 
-.L1B87
+.enemy_select_motion
+    \ Pick the next (dy_dir, dx_dir) pair for one enemy slot, write it into the per-axis direction
+    \ scratch (data_16F6 / data_16F7) ready for L1B2D to apply.
+    \
+    \ For enemy_pattern_id in 1..4: reads a (dy, dx) byte pair from the active pattern script at
+    \ offset enemy_pattern_step,X via (zp_88),Y, INYs twice, then CPYs against enemy_pattern_len
+    \ (the script's wrap-around length). Caller's BNE L1B2D check decides whether the script has
+    \ more pairs to consume.
+    \
+    \ For pattern 5 (player-homing): JSR L1BA5 — sets dx_dir = neg (constant left motion) and dy_dir
+    \ to pos / neg based on whether player_y is above or below the enemy.
+    \
+    \ For pattern 6 (straight-at-player): JSR L1BD1 — sets dx_dir = neg, dy_dir = none (locked
+    \ horizontal motion).
+    \
+    \ Inputs:
+    \ X = enemy slot index
+    \ enemy_pattern_id[X] — selects script (1..4) or homing mode (5/6)
+    \ enemy_pattern_step[X] — current byte offset into the script
+    \ zp_88 / zp_89 — pointer to active script (set by spawn_periodic_enemy)
+    \ enemy_pattern_len — script wrap point
+    \ zp_player_y — used by pattern 5 only
+    \
+    \ Outputs:
+    \ data_16F6 = dy_dir (pattern_dir_none / _pos / _neg)
+    \ data_16F7 = dx_dir
+    \ Y = next pattern_step value (= old + 2 for patterns 1..4, or old + 1 for 5/6)
+    \ Z-flag set iff Y == enemy_pattern_len (script reached end this frame)
     LDA enemy_pattern_id,X
     CMP #&05
     BEQ L1BA5
@@ -2034,7 +2060,29 @@ scroll_upper_dst_hi = * + 2
     STA enemy_state,X
     RTS
 
-.L1C5D
+.enemy_check_collisions
+    \ Per-enemy collision check against the other NPC pools. Runs from update_enemies once per
+    \ active enemy slot, BEFORE motion is applied.
+    \
+    \ Skipped if the enemy is already dying (enemy_state >= enemy_state_hit_frame_1).
+    \
+    \ Otherwise sets a 6×&20 box around this enemy at (enemy_x + 1, enemy_y - &0C) and runs two
+    \ checks:
+    \ (a) Against all 8 hazard slots — if any active hazard (hazard_type != 0) overlaps the box,
+    \ mark this enemy enemy_state_hit_frame_1 and play the bell (OSWRCH 7). The enemy dies; the
+    \ hazard is unaffected.
+    \ (b) Against both player missiles (slot 0 upper, slot 1 lower) — for each active missile
+    \ (player_missile_active[i] == 1), set zp_test_x = player_missile_x[i] + 2, zp_test_y =
+    \ player_missile_y[i] - 4 and JSR enemy_vs_player_missile (which does the actual hit test).
+    \
+    \ Inputs:
+    \ X = enemy slot index
+    \
+    \ Effects:
+    \ data_16F5 = X (saved across the hazard/missile sub-loops)
+    \ On hazard hit: enemy_state[X] = enemy_state_hit_frame_1; rings the bell.
+    \ On missile hit (via enemy_vs_player_missile): both the missile and the enemy are killed (see
+    \ that routine).
     STX data_16F5
     LDA enemy_state,X
     CMP #enemy_state_hit_frame_1
@@ -2088,7 +2136,7 @@ scroll_upper_dst_hi = * + 2
     CMP #&01
     BNE L1CCC
     LDY #&00
-    JSR L1CE1
+    JSR enemy_vs_player_missile
 .L1CCC
     LDA player_missile_y + 1
     SEC
@@ -2098,11 +2146,30 @@ scroll_upper_dst_hi = * + 2
     CMP #&01
     BNE L1CE0
     LDY #&01
-    JSR L1CE1
+    JSR enemy_vs_player_missile
 .L1CE0
     RTS
 
-.L1CE1
+.enemy_vs_player_missile
+    \ Bounding-box hit test for one active player missile against the current enemy slot. Called
+    \ from enemy_check_collisions once per active missile.
+    \
+    \ The test box around the enemy is 5 px wide × &20 tall starting at (enemy_x, enemy_y). On hit:
+    \ - sfx_explode
+    \ - player_missile_active[Y] = 0 (kill the missile)
+    \ - erase the missile's 5×8 sprite at (player_missile_x, player_missile_y[Y]) using
+    \ lev_erase_brush + &80
+    \ - enemy_state[X] = enemy_state_hit_frame_1 (start enemy death anim)
+    \ - add_score_x1
+    \ - INC pickup_kill_count
+    \
+    \ Inputs:
+    \ Y = player missile slot (0 = upper, 1 = lower)
+    \ data_16F5 = enemy slot index (saved by enemy_check_collisions)
+    \ zp_test_x / zp_test_y = missile box-origin position (set by caller)
+    \
+    \ Note: player_missile_x is a singleton (both missiles share the same X), but player_missile_y /
+    \ _active are 2-element pairs.
     LDX data_16F5
     LDA enemy_x,X
     CMP zp_test_x

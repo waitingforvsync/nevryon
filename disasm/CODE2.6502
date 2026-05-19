@@ -400,22 +400,33 @@ data_28D8        = * + 1
 
 \ ----- code &29E7..&2A02 -----
 .draw_score
-    \ Draw the 6-digit score at char-col 9, row &5F. Loops X = 0..5 reading score[X] and calls
-    \ draw_score_digit per digit. Score is most-significant-digit first; rightmost byte is always 0
-    \ (Nevryon awards in multiples of 10).
+    \ Draw the 6-digit score at char-col 9, row &5F. Sets up the screen address then tail-falls into
+    \ draw_score_digits_loop with X = 0.
     LDX #&09
     LDY #&5F
     JSR calc_screen_addr
     LDX #&00
 
-.L29F0
+.draw_score_digits_loop
+    \ Iterate the 6-byte BCD score buffer, calling draw_score_digit per byte. Shared by draw_score
+    \ and draw_high_score's render path.
+    \
+    \ Inputs:
+    \ X = starting index (caller pre-sets to 0)
+    \ Source buffer: hardwired to `score` here (compare draw_high_score which uses high_score). The
+    \ two paths happen to share this loop body because both buffers are 6 bytes wide and laid out
+    \ the same way.
+    \ Current screen address: set up by caller (via calc_screen_addr).
+    \
+    \ Uses `scratch_28D3` to save X across the draw_score_digit call (X is overwritten by the
+    \ digit-sprite selector). Loops until CPX #&06.
     LDA score,X
     STX scratch_28D3
     JSR draw_score_digit
     LDX scratch_28D3
     INX
     CPX #&06
-    BNE L29F0
+    BNE draw_score_digits_loop
     RTS
 
 \ ----- data &2A02..&2A08 -----
@@ -663,7 +674,7 @@ data_28D8        = * + 1
 .hazard_missile_homing_dir
     EQUB &EA, &EA
 
-\ ----- code &2BA4..&2E8C -----
+\ ----- code &2BA4..&2E5A -----
 .intro_get_ready
     \ Level-start GET READY! intro. Draws the score, plots 7 gfx_icon_lives_intro sprites at row &57
     \ col 8..&F, shutter-fades to a black star field, plays sfx_explode for drama, then loops 75
@@ -890,12 +901,12 @@ data_28D8        = * + 1
     LDX #&0A
     LDY #&10
     JSR sprite_plot_xy
-    JSR L2E60
+    JSR check_new_high_score
     LDX #&11
     LDY #&BE
     JSR calc_screen_addr
     LDX #&00
-    JSR L29F0
+    JSR draw_score_digits_loop
     LDA #&00
     LDX #&00
     NOP
@@ -907,7 +918,7 @@ data_28D8        = * + 1
     NOP
     NOP
     JSR draw_score
-    JSR L2E3F
+    JSR draw_high_score
 .L2DC1
     JSR starfield_update
     LDX #&0F
@@ -965,13 +976,17 @@ data_28D8        = * + 1
     JSR shutter_fade
     JMP intro_get_ready
 
-.L2E3F
+.draw_high_score
+    \ Render the 6-digit high_score buffer onto the screen at (col &11, row &96). Loops X = 0..5
+    \ reading high_score[X] and calls draw_score_digit per byte (same render style as draw_score,
+    \ just from a different buffer at a different screen position). Called from the stage-clear /
+    \ game-over UI.
     LDX #&11
     LDY #&96
     JSR calc_screen_addr
     LDX #&00
 .L2E48
-    LDA tbl_2E5A,X
+    LDA high_score,X
     STX scratch_28D3
     JSR draw_score_digit
     LDX scratch_28D3
@@ -979,18 +994,26 @@ data_28D8        = * + 1
     CPX #&06
     BNE L2E48
     RTS
-.tbl_2E5A
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
-    BRK
 
-.L2E60
+\ ----- data &2E5A..&2E60 -----
+\ High score: 6-byte BCD buffer, same layout as `score`. Initialised to all zero on disk. Compared
+\ against `score` by check_new_high_score after each life lost and after each stage clear; if the
+\ current score is higher, copied over byte-by-byte. Rendered by draw_high_score onto the
+\ stage-clear screen.
+.high_score
+    EQUB &00, &00, &00, &00, &00, &00
+
+\ ----- code &2E60..&2E8C -----
+.check_new_high_score
+    \ Compare current `score` against `high_score` byte-by-byte MSD-first. If the current score is
+    \ strictly greater (any score byte > the matching high_score byte before equality runs out),
+    \ copies all 6 bytes of score into high_score so subsequent draw_high_score calls show the new
+    \ value.
+    \
+    \ Used at game-over / stage-clear to roll the leaderboard.
     LDX #&00
 .L2E62
-    LDA tbl_2E5A,X
+    LDA high_score,X
     CMP score,X
     BEQ L2E6F
     BCS L2E74
@@ -1005,7 +1028,7 @@ data_28D8        = * + 1
     LDX #&00
 .L2E77
     LDA score,X
-    STA tbl_2E5A,X
+    STA high_score,X
     INX
     CPX #&06
     BNE L2E77
@@ -1289,12 +1312,12 @@ L2FF0            = * + 1
     \
     \ Effects: writes loader_lives_save = lives_left, loader_score_save (6 bytes) = score[0..5],
     \ loader_hiscore_save (6 bytes) = the high-score buffer.
-    JSR L2E60
+    JSR check_new_high_score
     LDX #&00
 .L30FD
     LDA score,X
     STA loader_score_save,X
-    LDA tbl_2E5A,X
+    LDA high_score,X
     STA loader_hiscore_save,X
     INX
     CPX #&06
@@ -1311,7 +1334,7 @@ L2FF0            = * + 1
     LDA loader_score_save,X
     STA score,X
     LDA loader_hiscore_save,X
-    STA tbl_2E5A,X
+    STA high_score,X
     INX
     CPX #&06
     BNE L3117

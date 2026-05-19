@@ -246,7 +246,7 @@ ORG &3300
     STA str_two_digits
     LDA #&39
     STA str_two_digits + 1
-    JSR L34D7
+    JSR sfx_tick_then_pause_1s
 .L349F
     LDA #LO(str_two_digits)
     STA zp_string_ptr_lo
@@ -256,7 +256,7 @@ ORG &3300
     LDX #&09
     LDY #&08
     JSR print_doubled_string
-    JSR L34D7
+    JSR sfx_tick_then_pause_1s
     LDX #&9D
     LDY #&FF
     LDA #&81
@@ -274,7 +274,13 @@ ORG &3300
     JSR play_death_sequence
     JMP stage_loading_screen
 
-.L34D7
+.sfx_tick_then_pause_1s
+    \ Play one beep of sfx_score_tick then wait ~1 second (50 vsync ticks via OSBYTE &13 in a CPX
+    \ loop). Used by the continue-countdown loop in game_over_or_continue to advance
+    \ str_two_digits[1] one digit per second with an audible tick.
+    \
+    \ Inputs: none — sfx_score_tick is self-contained, the loop counter is hardwired to &32.
+    \ Clobbers: A, X, zp_string_ptr_lo (used as the count scratch).
     JSR sfx_score_tick
     LDX #&32
 .L34DC
