@@ -324,7 +324,9 @@ def render_map_with_hazards(levd1: bytes, levd2: bytes, graphix: bytes,
     pointing at the erase brush or unused slots are skipped.
 
     The map strip itself is per-LEVEL (stage 1 and 2 share the same
-    map tiles); only the spawn overlay changes per stage."""
+    map tiles); the spawn schedule AND the hazard sprite block change
+    per stage — `stage_levd` is the LEVD2-with-LEVD3-overlay for
+    stage 2, so it supplies the right hazards via `resolve_sprite`."""
     rgb_bytes, w, h = render_map_strip(levd1, stage_levd, palette)
     img = bytearray(rgb_bytes)
     tile_px_w = SPRITE_W_COLS * 4    # 16
@@ -357,7 +359,11 @@ def render_map_with_hazards(levd1: bytes, levd2: bytes, graphix: bytes,
             continue
 
         addr = (enemy_ptr_hi[slot_type] << 8) | enemy_ptr_lo[slot_type]
-        resolved = resolve_sprite(addr, levd1, levd2, graphix)
+        # Stage-aware sprite lookup: use the stage's LEVD2-region
+        # data (i.e. the LEVD3 overlay on stage 2) so hazard sprites
+        # come from the right stage. levd2 is passed through so
+        # resolve_sprite's bounds-check on LEVD2_LOAD still works.
+        resolved = resolve_sprite(addr, levd1, stage_levd, graphix)
         if resolved is None:
             continue   # erase brush or unused slot
         data, off, _ = resolved
