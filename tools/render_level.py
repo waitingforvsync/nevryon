@@ -140,15 +140,9 @@ def build_sprite_inventory() -> list[SpriteBlock]:
                                   SPRITE_SIZE, SPRITE_W_COLS, SPRITE_H_LINES,
                                   f'tile_{tid:02d}'))
 
-    # --- LEVD2: 14 hazard sprites + 2 explosion-tail sprites ---
-    for i in range(LEVD2_ENEMY_COUNT):
-        off = LEVD2_ENEMY_OFF + i * SPRITE_SIZE
-        blocks.append(SpriteBlock('LEVD2', off, LEVD2_LOAD + off,
-                                  SPRITE_SIZE, SPRITE_W_COLS, SPRITE_H_LINES,
-                                  f'hazard_{i:02d}'))
-
-    # The two LEVD2 blocks at &7C00 / &7C80 are explosion frames 4
-    # and 5 (also alias enemy_ptr_*[25] / [26]).
+    # --- LEVD2: explosion frames 4-5 (shared between stages — bytes are
+    # identical in scenarios 1-3 because LEVD3 is too short to overlay
+    # this region, and identical in scenario 4 by coincidence) ---
     blocks.append(SpriteBlock('LEVD2', HAZARD_A_OFF, LEVD2_LOAD + HAZARD_A_OFF,
                               SPRITE_SIZE, SPRITE_W_COLS, SPRITE_H_LINES,
                               'explosion_04'))
@@ -156,6 +150,25 @@ def build_sprite_inventory() -> list[SpriteBlock]:
                               SPRITE_SIZE, SPRITE_W_COLS, SPRITE_H_LINES,
                               'explosion_05'))
 
+    # NOTE: the 14 hazard sprites at &7380..&7A7F are per-stage
+    # (LEVD2 = stage 1, LEVD3 = stage 2 — the ptr LUT offsets are
+    # identical between the two files, only the sprite bytes differ).
+    # They're rendered separately by build_level() so each stage gets
+    # its own `hazard_stage{1,2}_NN.png`.
+
+    return blocks
+
+
+def build_hazard_blocks(stage: int) -> list[SpriteBlock]:
+    """The 14 hazard sprites of one stage. Source file is LEVD2 for
+    stage 1, LEVD3 for stage 2 — same offsets within the file."""
+    src_file = 'LEVD2' if stage == 1 else 'LEVD3'
+    blocks: list[SpriteBlock] = []
+    for i in range(LEVD2_ENEMY_COUNT):
+        off = LEVD2_ENEMY_OFF + i * SPRITE_SIZE
+        blocks.append(SpriteBlock(src_file, off, LEVD2_LOAD + off,
+                                  SPRITE_SIZE, SPRITE_W_COLS, SPRITE_H_LINES,
+                                  f'hazard_stage{stage}_{i:02d}'))
     return blocks
 
 
@@ -220,8 +233,11 @@ def blit(dst: bytearray, dst_w: int, src: bytes, src_w: int, src_h: int,
 # ---- sprite + map renderers -------------------------------------------
 
 def write_sprites(out_dir: str, blocks: list[SpriteBlock],
-                  levd1: bytes, levd2: bytes, palette):
+                  levd1: bytes, levd2: bytes, palette,
+                  levd3: bytes | None = None):
     file_data = {'LEVD1': levd1, 'LEVD2': levd2}
+    if levd3 is not None:
+        file_data['LEVD3'] = levd3
     for b in blocks:
         data = file_data[b.file]
         rgb, w, h = render_column_major(data, b.file_off, b.w_cols, b.h_lines,
@@ -439,7 +455,11 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
     explosion_lo = [by_label[f'explosion_{i:02d}'] for i in range(LEVD1_EXPLOSION_COUNT)]
     enemy_anim_sp = [by_label[lab] for _, lab in ENEMY_ANIM_OFFS]
     tile_sprite = [by_label[f'tile_{i:02d}'] for i in range(TILE_COUNT)]
-    hazard_sprite = [by_label[f'hazard_{i:02d}'] for i in range(LEVD2_ENEMY_COUNT)]
+    # Hazard sprites are per-stage (LEVD2 vs LEVD3); rendered separately.
+    # The README references them as a count rather than by-label lookup
+    # since the SpriteBlock list passed in only contains the shared
+    # LEVD1/LEVD2 inventory.
+    hazard_count = LEVD2_ENEMY_COUNT
     explosion_04 = by_label['explosion_04']
     explosion_05 = by_label['explosion_05']
     player_sprite = by_label['player_sprite']
@@ -488,7 +508,7 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
         f.write("| `enemy_hit_NN` | `enemy_hit_01..03` | 3 frames of the same enemy's hit / destruction cycle. 4×24 (96 B) each; state machine states `&0A..&0C`. Numbered 01..03 to keep the index in step with the state-machine state values (the LEVD1 designer left `enemy_hit_00` empty / unused). |\n")
         f.write("| `player_sprite` | `player_sprite` | The 6×22 (132 B) player ship at LEVD1 `&4E80`. |\n")
         f.write("| `tile_NN` | `tile_00..17` | The 18-slot per-scenario map tile catalog (LEVD1 `&4F00 + N*&80`, each 4×32 = 128 B). |\n")
-        f.write("| `hazard_NN` | `hazard_00..13` | The 14 per-stage hazard sprites (large stationary threats — gun-towers, tanks, structures). LEVD2 `&7380..&7A00`, each 4×32 = 128 B. Reachable via `lev_enemy_ptr_*` slots 1..14. |\n")
+        f.write("| `hazard_stageN_NN` | `hazard_stage1_00..13` + `hazard_stage2_00..13` | The 14 hazard sprites for each stage (large stationary threats — gun-towers, tanks, structures). 4×32 (128 B) each. Stage 1 sprites come from LEVD2 `&7380..&7A00`, stage 2 sprites from LEVD3 at the same offsets (LEVD3 overlays the LEVD2 sprite block in RAM when stage 2 loads). The ptr LUT entries at `&7A80..&7AFF` are identical between LEVD2 and LEVD3, so slot N points at the same offset in both; only the sprite bytes differ. |\n")
 
         f.write("\n### Per-sprite details\n\n")
         f.write("| PNG | File | Bytes (file off) | CPU addr | Shape | Render dims |\n")
@@ -610,9 +630,10 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
         f.write("Total 3200 B. Every byte accounted for:\n\n")
         f.write("| File off | CPU addr | Size | Content |\n")
         f.write("|----------|----------|-----:|---------|\n")
-        for i, sp in enumerate(hazard_sprite):
-            f.write(f"| `{sp.file_off:#06x}` | `&{sp.cpu_addr:04X}` | {sp.size:4d} | "
-                    f"`{sp.filename}` (= `lev_enemy_ptr_*[{i + 1}]`) |\n")
+        for i in range(hazard_count):
+            off = LEVD2_ENEMY_OFF + i * SPRITE_SIZE
+            f.write(f"| `{off:#06x}` | `&{LEVD2_LOAD + off:04X}` | {SPRITE_SIZE:4d} | "
+                    f"`hazard_stage1_{i:02d}.png` (= `lev_hazard_ptr_*[{i + 1}]` for stage 1) |\n")
         f.write(f"| `{ENEMY_PTR_LO_OFF:#06x}` | `&{LEVD2_LOAD + ENEMY_PTR_LO_OFF:04X}` |   64 | `lev_enemy_ptr_lo` (32 × 1-byte) |\n")
         f.write(f"| `{ENEMY_PTR_HI_OFF:#06x}` | `&{LEVD2_LOAD + ENEMY_PTR_HI_OFF:04X}` |   64 | `lev_enemy_ptr_hi` (32 × 1-byte) |\n")
         f.write(f"| `{SPAWN_COL_OFF:#06x}` | `&{LEVD2_LOAD + SPAWN_COL_OFF:04X}` |  128 | `lev_spawn_col` (sorted asc, `&FF` end) |\n")
@@ -625,25 +646,29 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
         f.write(f"| `{MAP_UPPER_OFF:#06x}` | `&{LEVD2_LOAD + MAP_UPPER_OFF:04X}` |  240 | `lev_map_upper` (one tile id per scroll col) |\n")
         f.write(f"| `{MAP_PAD_OFF:#06x}` | `&{LEVD2_LOAD + MAP_PAD_OFF:04X}` |   16 | gap / pad between the two map streams |\n")
         f.write(f"| `{MAP_LOWER_OFF:#06x}` | `&{LEVD2_LOAD + MAP_LOWER_OFF:04X}` |  240 | `lev_map_lower` |\n")
-        bytes_in_levd2 = (sum(sp.size for sp in hazard_sprite) + 64 + 64 + 128 + 128 +
+        bytes_in_levd2 = (hazard_count * SPRITE_SIZE + 64 + 64 + 128 + 128 +
                           explosion_04.size + explosion_05.size + 272 + 240 + 16 + 240)
         f.write(f"\n(Sum: {bytes_in_levd2} B = 14×128 (hazards) + 64 + 64 + 128 + 128 + 128 + 128 + 272 + 240 + 16 + 240 = 3200 ✓)\n")
 
-        # ---- LEVD3 note
+        # ---- LEVD3 note + stage 2 hazards
         if len(levd3) >= len(levd2):
             f.write("\n## LEVD3 byte map\n\n")
             f.write("LEVD3 is the same shape as LEVD2 (3200 B, full overlay).\n")
             f.write("See LEVD2 byte map above for the layout; for this scenario\n")
-            f.write("the byte values may differ but the sprite count, table\n")
-            f.write("offsets and map-stream positions are identical.\n")
+            f.write("the sprite count, table offsets and map-stream positions are\n")
+            f.write("identical, but the sprite bytes differ — stage 2 swaps in a\n")
+            f.write("new set of 14 hazards (rendered as `hazard_stage2_NN.png`)\n")
+            f.write("and a new spawn schedule.\n")
         else:
             f.write("\n## LEVD3 byte map\n\n")
-            f.write(f"LEVD3 is 2176 B (`&880`) — only the lower half of the LEVD2 layout is\n")
-            f.write("overlaid. The map tile streams (`lev_map_upper` / `lev_map_lower`)\n")
-            f.write("and the trailing gap are inherited from LEVD2 unchanged. Layout\n")
-            f.write("from `&0000..&087F` matches the LEVD2 byte map above — that is, 14\n")
-            f.write("enemy sprites + pointer tables + spawn tables + hazard sprites; everything\n")
-            f.write("from `&0880` onwards keeps the LEVD2 bytes.\n")
+            f.write(f"LEVD3 is 2176 B (`&880`) — only the first 2176 B of the\n")
+            f.write("LEVD2 layout is overlaid. The 14 hazard sprites, the ptr LUT\n")
+            f.write("and the spawn-column / spawn-attr tables ARE replaced (= the\n")
+            f.write("stage-2-specific data); everything from `&0880` onwards —\n")
+            f.write("explosion frames 4/5, erase brush, map tile streams — keeps\n")
+            f.write("the LEVD2 bytes in RAM unchanged. So stage 2 has its own\n")
+            f.write("hazards and spawn schedule but inherits the stage-1 map.\n")
+            f.write("Stage-2 hazards are rendered as `hazard_stage2_NN.png`.\n")
 
         # ---- Map + spawn outputs
         f.write("\n## Map + spawn outputs\n\n")
@@ -696,8 +721,12 @@ def build_level(level: int):
     graphix = open('extracted/$.GRAPHIX', 'rb').read()
     palette = palette_for_level(level)
     blocks = build_sprite_inventory()
+    hazard_blocks_s1 = build_hazard_blocks(1)
+    hazard_blocks_s2 = build_hazard_blocks(2)
 
     write_sprites(out_dir, blocks, levd1, levd2, palette)
+    write_sprites(out_dir, hazard_blocks_s1, levd1, levd2, palette)
+    write_sprites(out_dir, hazard_blocks_s2, levd1, levd2, palette, levd3=levd3)
 
     # Map is shared between stages 1 and 2 (LEVD3 for scenarios 1-3
     # overlays only the lower half of LEVD2 — tile-id streams inherit;

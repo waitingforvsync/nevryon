@@ -20,7 +20,7 @@ all of the per-level sprite data:
 | `enemy_hit_NN` | `enemy_hit_01..03` | 3 frames of the same enemy's hit / destruction cycle. 4×24 (96 B) each; state machine states `&0A..&0C`. Numbered 01..03 to keep the index in step with the state-machine state values (the LEVD1 designer left `enemy_hit_00` empty / unused). |
 | `player_sprite` | `player_sprite` | The 6×22 (132 B) player ship at LEVD1 `&4E80`. |
 | `tile_NN` | `tile_00..17` | The 18-slot per-scenario map tile catalog (LEVD1 `&4F00 + N*&80`, each 4×32 = 128 B). |
-| `hazard_NN` | `hazard_00..13` | The 14 per-stage hazard sprites (large stationary threats — gun-towers, tanks, structures). LEVD2 `&7380..&7A00`, each 4×32 = 128 B. Reachable via `lev_enemy_ptr_*` slots 1..14. |
+| `hazard_stageN_NN` | `hazard_stage1_00..13` + `hazard_stage2_00..13` | The 14 hazard sprites for each stage (large stationary threats — gun-towers, tanks, structures). 4×32 (128 B) each. Stage 1 sprites come from LEVD2 `&7380..&7A00`, stage 2 sprites from LEVD3 at the same offsets (LEVD3 overlays the LEVD2 sprite block in RAM when stage 2 loads). The ptr LUT entries at `&7A80..&7AFF` are identical between LEVD2 and LEVD3, so slot N points at the same offset in both; only the sprite bytes differ. |
 
 ### Per-sprite details
 
@@ -56,20 +56,6 @@ all of the per-level sprite data:
 | `tile_15.png` | LEVD1 | `0x0c80..0x0cff` (128) | `&5680..&56FF` | 4×32 col-major | 16×32 px |
 | `tile_16.png` | LEVD1 | `0x0d00..0x0d7f` (128) | `&5700..&577F` | 4×32 col-major | 16×32 px |
 | `tile_17.png` | LEVD1 | `0x0d80..0x0dff` (128) | `&5780..&57FF` | 4×32 col-major | 16×32 px |
-| `hazard_00.png` | LEVD2 | `0x0000..0x007f` (128) | `&7380..&73FF` | 4×32 col-major | 16×32 px |
-| `hazard_01.png` | LEVD2 | `0x0080..0x00ff` (128) | `&7400..&747F` | 4×32 col-major | 16×32 px |
-| `hazard_02.png` | LEVD2 | `0x0100..0x017f` (128) | `&7480..&74FF` | 4×32 col-major | 16×32 px |
-| `hazard_03.png` | LEVD2 | `0x0180..0x01ff` (128) | `&7500..&757F` | 4×32 col-major | 16×32 px |
-| `hazard_04.png` | LEVD2 | `0x0200..0x027f` (128) | `&7580..&75FF` | 4×32 col-major | 16×32 px |
-| `hazard_05.png` | LEVD2 | `0x0280..0x02ff` (128) | `&7600..&767F` | 4×32 col-major | 16×32 px |
-| `hazard_06.png` | LEVD2 | `0x0300..0x037f` (128) | `&7680..&76FF` | 4×32 col-major | 16×32 px |
-| `hazard_07.png` | LEVD2 | `0x0380..0x03ff` (128) | `&7700..&777F` | 4×32 col-major | 16×32 px |
-| `hazard_08.png` | LEVD2 | `0x0400..0x047f` (128) | `&7780..&77FF` | 4×32 col-major | 16×32 px |
-| `hazard_09.png` | LEVD2 | `0x0480..0x04ff` (128) | `&7800..&787F` | 4×32 col-major | 16×32 px |
-| `hazard_10.png` | LEVD2 | `0x0500..0x057f` (128) | `&7880..&78FF` | 4×32 col-major | 16×32 px |
-| `hazard_11.png` | LEVD2 | `0x0580..0x05ff` (128) | `&7900..&797F` | 4×32 col-major | 16×32 px |
-| `hazard_12.png` | LEVD2 | `0x0600..0x067f` (128) | `&7980..&79FF` | 4×32 col-major | 16×32 px |
-| `hazard_13.png` | LEVD2 | `0x0680..0x06ff` (128) | `&7A00..&7A7F` | 4×32 col-major | 16×32 px |
 | `explosion_04.png` | LEVD2 | `0x0880..0x08ff` (128) | `&7C00..&7C7F` | 4×32 col-major | 16×32 px |
 | `explosion_05.png` | LEVD2 | `0x0900..0x097f` (128) | `&7C80..&7CFF` | 4×32 col-major | 16×32 px |
 
@@ -132,20 +118,20 @@ Always `player_sprite.png` — the only entry in this table.
 | Slot | Pointer | Resolves to | Aliases |
 |-----:|---------|-------------|---------|
 |    0 | `&7D80` | *(no sprite — points at &7D80)* |  |
-|    1 | `&7380` | `hazard_00.png` (hazard_00) |  |
-|    2 | `&7400` | `hazard_01.png` (hazard_01) |  |
-|    3 | `&7480` | `hazard_02.png` (hazard_02) |  |
-|    4 | `&7500` | `hazard_03.png` (hazard_03) |  |
-|    5 | `&7580` | `hazard_04.png` (hazard_04) |  |
-|    6 | `&7600` | `hazard_05.png` (hazard_05) |  |
-|    7 | `&7680` | `hazard_06.png` (hazard_06) |  |
-|    8 | `&7700` | `hazard_07.png` (hazard_07) |  |
-|    9 | `&7780` | `hazard_08.png` (hazard_08) |  |
-|   10 | `&7800` | `hazard_09.png` (hazard_09) |  |
-|   11 | `&7880` | `hazard_10.png` (hazard_10) |  |
-|   12 | `&7900` | `hazard_11.png` (hazard_11) |  |
-|   13 | `&7980` | `hazard_12.png` (hazard_12) |  |
-|   14 | `&7A00` | `hazard_13.png` (hazard_13) |  |
+|    1 | `&7380` | *(no sprite — points at &7380)* |  |
+|    2 | `&7400` | *(no sprite — points at &7400)* |  |
+|    3 | `&7480` | *(no sprite — points at &7480)* |  |
+|    4 | `&7500` | *(no sprite — points at &7500)* |  |
+|    5 | `&7580` | *(no sprite — points at &7580)* |  |
+|    6 | `&7600` | *(no sprite — points at &7600)* |  |
+|    7 | `&7680` | *(no sprite — points at &7680)* |  |
+|    8 | `&7700` | *(no sprite — points at &7700)* |  |
+|    9 | `&7780` | *(no sprite — points at &7780)* |  |
+|   10 | `&7800` | *(no sprite — points at &7800)* |  |
+|   11 | `&7880` | *(no sprite — points at &7880)* |  |
+|   12 | `&7900` | *(no sprite — points at &7900)* |  |
+|   13 | `&7980` | *(no sprite — points at &7980)* |  |
+|   14 | `&7A00` | *(no sprite — points at &7A00)* |  |
 |   15 | `&3700` | GRAPHIX `gfx_enemy_slot15` *(not exported here)* |  |
 |   16 | `&3780` | GRAPHIX `gfx_enemy_slot16` *(not exported here)* |  |
 |   17 | `&5180` | `tile_05.png` (tile_05) |  |
@@ -235,20 +221,20 @@ Total 3200 B. Every byte accounted for:
 
 | File off | CPU addr | Size | Content |
 |----------|----------|-----:|---------|
-| `0x0000` | `&7380` |  128 | `hazard_00.png` (= `lev_enemy_ptr_*[1]`) |
-| `0x0080` | `&7400` |  128 | `hazard_01.png` (= `lev_enemy_ptr_*[2]`) |
-| `0x0100` | `&7480` |  128 | `hazard_02.png` (= `lev_enemy_ptr_*[3]`) |
-| `0x0180` | `&7500` |  128 | `hazard_03.png` (= `lev_enemy_ptr_*[4]`) |
-| `0x0200` | `&7580` |  128 | `hazard_04.png` (= `lev_enemy_ptr_*[5]`) |
-| `0x0280` | `&7600` |  128 | `hazard_05.png` (= `lev_enemy_ptr_*[6]`) |
-| `0x0300` | `&7680` |  128 | `hazard_06.png` (= `lev_enemy_ptr_*[7]`) |
-| `0x0380` | `&7700` |  128 | `hazard_07.png` (= `lev_enemy_ptr_*[8]`) |
-| `0x0400` | `&7780` |  128 | `hazard_08.png` (= `lev_enemy_ptr_*[9]`) |
-| `0x0480` | `&7800` |  128 | `hazard_09.png` (= `lev_enemy_ptr_*[10]`) |
-| `0x0500` | `&7880` |  128 | `hazard_10.png` (= `lev_enemy_ptr_*[11]`) |
-| `0x0580` | `&7900` |  128 | `hazard_11.png` (= `lev_enemy_ptr_*[12]`) |
-| `0x0600` | `&7980` |  128 | `hazard_12.png` (= `lev_enemy_ptr_*[13]`) |
-| `0x0680` | `&7A00` |  128 | `hazard_13.png` (= `lev_enemy_ptr_*[14]`) |
+| `0x0000` | `&7380` |  128 | `hazard_stage1_00.png` (= `lev_hazard_ptr_*[1]` for stage 1) |
+| `0x0080` | `&7400` |  128 | `hazard_stage1_01.png` (= `lev_hazard_ptr_*[2]` for stage 1) |
+| `0x0100` | `&7480` |  128 | `hazard_stage1_02.png` (= `lev_hazard_ptr_*[3]` for stage 1) |
+| `0x0180` | `&7500` |  128 | `hazard_stage1_03.png` (= `lev_hazard_ptr_*[4]` for stage 1) |
+| `0x0200` | `&7580` |  128 | `hazard_stage1_04.png` (= `lev_hazard_ptr_*[5]` for stage 1) |
+| `0x0280` | `&7600` |  128 | `hazard_stage1_05.png` (= `lev_hazard_ptr_*[6]` for stage 1) |
+| `0x0300` | `&7680` |  128 | `hazard_stage1_06.png` (= `lev_hazard_ptr_*[7]` for stage 1) |
+| `0x0380` | `&7700` |  128 | `hazard_stage1_07.png` (= `lev_hazard_ptr_*[8]` for stage 1) |
+| `0x0400` | `&7780` |  128 | `hazard_stage1_08.png` (= `lev_hazard_ptr_*[9]` for stage 1) |
+| `0x0480` | `&7800` |  128 | `hazard_stage1_09.png` (= `lev_hazard_ptr_*[10]` for stage 1) |
+| `0x0500` | `&7880` |  128 | `hazard_stage1_10.png` (= `lev_hazard_ptr_*[11]` for stage 1) |
+| `0x0580` | `&7900` |  128 | `hazard_stage1_11.png` (= `lev_hazard_ptr_*[12]` for stage 1) |
+| `0x0600` | `&7980` |  128 | `hazard_stage1_12.png` (= `lev_hazard_ptr_*[13]` for stage 1) |
+| `0x0680` | `&7A00` |  128 | `hazard_stage1_13.png` (= `lev_hazard_ptr_*[14]` for stage 1) |
 | `0x0700` | `&7A80` |   64 | `lev_enemy_ptr_lo` (32 × 1-byte) |
 | `0x0740` | `&7AC0` |   64 | `lev_enemy_ptr_hi` (32 × 1-byte) |
 | `0x0780` | `&7B00` |  128 | `lev_spawn_col` (sorted asc, `&FF` end) |
@@ -266,8 +252,10 @@ Total 3200 B. Every byte accounted for:
 
 LEVD3 is the same shape as LEVD2 (3200 B, full overlay).
 See LEVD2 byte map above for the layout; for this scenario
-the byte values may differ but the sprite count, table
-offsets and map-stream positions are identical.
+the sprite count, table offsets and map-stream positions are
+identical, but the sprite bytes differ — stage 2 swaps in a
+new set of 14 hazards (rendered as `hazard_stage2_NN.png`)
+and a new spawn schedule.
 
 ## Map + spawn outputs
 

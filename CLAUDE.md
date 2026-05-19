@@ -43,7 +43,8 @@ build.sh / build.bat         # regen disasm sources + invoke BeebAsm + verify by
 
 levels/1/ levels/2/ ...      # per-scenario reverse-engineered data + visualisations
   explosion_NN.png           # see "Per-level naming convention" below
-  enemy_NN.png  enemy_hit_NN.png  player_sprite.png  tile_NN.png  hazard_NN.png
+  enemy_NN.png  enemy_hit_NN.png  player_sprite.png  tile_NN.png
+  hazard_stage{1,2}_NN.png   # 14 hazards per stage — DIFFERENT bytes per stage
   map_strip.png              # full 240-col playfield strip (both stages share)
   map_with_spawns_{1,2}.png  # strip + spawn-pin overlay (per stage)
   map_with_hazards_{1,2}.png # strip with actual hazard sprites at spawn positions
@@ -222,7 +223,7 @@ they hid the per-frame structure).
 | Enemy hit        | `lev_enemy_hit_1..3`        | `enemy_hit_01..03`    | 4×24   | 96 each, 3 frames in LEVD1 (column-shared) |
 | Player ship      | `lev_player_sprite`         | `player_sprite`       | 6×22   | 132, LEVD1 |
 | Tile catalog     | `lev_tile_catalog + N*&80`  | `tile_00..17`         | 4×32   | 128 each, 18 slots in LEVD1 |
-| Hazards          | `lev_hazard_0..13`          | `hazard_00..13`       | 4×32   | 128 each, 14 in LEVD2 |
+| Hazards          | `lev_hazard_0..13`          | `hazard_stage{1,2}_00..13` | 4×32   | 128 each, 14 in LEVD2 (stage 1) + 14 in LEVD3 (stage 2) — stages share offsets in the file, the sprite bytes differ. The 14 ptr LUT entries at `&7A80..&7A8D / &7AC0..&7ACD` are byte-identical between LEVD2 and LEVD3 in every scenario. |
 
 The 32-entry `lev_enemy_ptr_lo/hi` table also has fixed aliasing:
 slots 21..26 are the explosion-frame source pointers

@@ -4,6 +4,90 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-19 — Session 35: per-stage hazard PNGs
+
+Rich asked whether the 14 hazard sprites really are shared between
+stage 1 and stage 2 of each level, or whether they differ. The
+short answer: **they differ**, in every scenario.
+
+### What LEVD3 actually overlays
+
+LEVD3 loads at &7380 (= same address as LEVD2) and replaces the
+RAM bytes there when stage 2 starts. In scenarios 1-3 the file
+is 2176 B (`&880`) — so it only covers the first half of the
+LEVD2 layout. In scenario 4 it's 3200 B (full overlay).
+
+Per-page diff between `1.LEVD2` and `1.LEVD3`:
+
+```
++&0000 (CPU &7380): 187 / 256 bytes differ — hazard sprites
++&0100 (CPU &7480): 207 / 256                  (same)
++&0200 (CPU &7580): 109 / 256                  (same)
++&0300 (CPU &7680): 104 / 256                  (same)
++&0400 (CPU &7780): 231 / 256                  (same)
++&0500 (CPU &7880): 114 / 256                  (same)
++&0600 (CPU &7980): 177 / 256                  (same)
++&0700 (CPU &7A80):  72 / 256 — hazard ptr LUT (slots > 14 only)
++&0800 (CPU &7B80):  69 / 256 — spawn-attr / spawn-col tables
+```
+
+Pages 9-11 of LEVD2 (explosion frames 4/5, erase brush, map tile
+streams) are absent from the 2176-B LEVD3 in scenarios 1-3 and
+byte-identical to LEVD2 in scenario 4 — so the map and the
+explosion frames are shared across stages.
+
+### Per-scenario hazard differences
+
+For each level, how many of the 14 hazards differ between stages:
+
+| Scenario | Hazards differing | Identical |
+|---------:|:-----------------:|:---------:|
+| 1        | 11                | 4, 6, 10  |
+| 2        |  8                | 0,1,2,6,7,8 |
+| 3        | 13                | 5         |
+| 4        |  8                | 6,9,10,11,12,13 |
+
+Different sprites = different on-screen graphics. The 14 ptr LUT
+entries at `&7A80..` are byte-identical between LEVD2 and LEVD3
+in every scenario, so slot N points at the same offset in both
+files — only the sprite bytes at that offset change.
+
+### Render changes
+
+`tools/render_level.py`:
+* Split the LEVD2 hazard block out of `build_sprite_inventory()`
+  into a new `build_hazard_blocks(stage)` that emits 14 blocks
+  per stage, sourced from LEVD2 (stage 1) or LEVD3 (stage 2),
+  with PNG basenames `hazard_stage{1,2}_NN`.
+* `write_sprites` accepts an optional `levd3` argument so the
+  stage 2 hazards can render from the LEVD3 file.
+* `build_level` calls `write_sprites` three times: once for the
+  shared LEVD1 + LEVD2 inventory, then once each for stage 1 /
+  stage 2 hazards.
+* The README writer was updated to refer to `hazard_stage1_NN` /
+  `hazard_stage2_NN` and to note in the LEVD3 byte map that the
+  stage 2 hazards live at the same file offsets as stage 1's.
+
+`CLAUDE.md`:
+* `levels/<n>/` layout now lists `hazard_stage{1,2}_NN.png`.
+* The per-level-data naming-convention table gained the
+  per-stage note for hazards.
+
+### Build verification
+
+All 4 levels regenerated; each now contains 14 + 14 hazard PNGs
+plus the shared sprite inventory (explosion, enemy anim, player
+ship, tile catalog). Spot-checked md5sums against the
+expected-differs list — exact match on all 4 scenarios.
+
+The other questions in this session (different sprites for
+explosion 4/5 across stages? different maps?) all came back
+negative — those genuinely are shared, so the existing single
+`map_strip.png` / `explosion_04.png` / `explosion_05.png`
+remain correct.
+
+---
+
 ## 2026-05-19 — Session 34: death_seq_frame_counter SMC investigation + tool support
 
 Rich flagged that `death_seq_frame_counter = * + 1` looked wrong —
