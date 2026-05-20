@@ -68,7 +68,7 @@ Key signal:
 * **Hazards**: denser; longest run anywhere is 30 bytes; 52 %
   of bytes are isolated single literals.
 
-## Two scheme candidates — both prototyped, round-trip verified
+## Three scheme candidates — all prototyped, round-trip verified
 
 ### Scheme A — 5+3 with `c+1` literal-escape (per-byte branch)
 
@@ -151,6 +151,98 @@ loop. No per-byte branch in either path:
 the LUT is folded in. Decoder code ≈ 25 bytes (vs ≈ 40 for
 scheme A).
 
+### Scheme C — per-sprite 5+3 with XOR encoding (Rich's morning-after refinement)
+
+The killer simplification of scheme A. Two combined ideas:
+
+1. **Per-sprite FLAG**, not per-set. Each 128-byte sprite picks
+   its OWN unused 5-bit prefix. This is empirically always
+   possible (see "Per-sprite feasibility" below) so we never
+   need the `c + 1` escape-the-escape path.
+
+2. **Store bytes XORed with FLAG_BYTE** (where `FLAG_BYTE =
+   FLAG << 3`). After the XOR:
+   * A byte whose top 5 bits matched FLAG (= a run-code) has
+     top 5 bits zero → encoded value is 0..7.
+   * Any other byte has at least one of its top 5 bits flipped
+     → encoded value is ≥ 8.
+
+   The decoder distinguishes the two with a single `CMP #8 /
+   BCS`. No mask, no equality test against the flag.
+
+Encoded blob shape (per sprite):
+
+```
++0:    flag-byte (FLAG << 3; bottom 3 bits zero)
++1..:  encoded stream
+         each stream byte b:
+             b < 8   →  run code. count = b + 3 (= 3..10).
+                        next byte d follows; emit (d XOR FLAG_BYTE)
+                        `count` times.
+             b ≥ 8   →  literal. emit (b XOR FLAG_BYTE) once.
+```
+
+(Uncompressed length is always 128 per sprite, so no length
+header is needed inline. If we ship a per-set blob containing
+multiple sprites, a per-set sprite-count + per-sprite start
+offsets in a small directory work — TBD when the binary layout
+lands.)
+
+**Decoder**:
+
+```asm
+.decode_sprite
+    LDA sprite_flag_byte   ; the +0 header
+    STA .lit_eor + 1       ; self-mod the EOR operands
+    STA .run_eor + 1
+    LDY #0
+.decode_loop
+    LDA (zp_src),Y         ; encoded byte
+    INC zp_src             ; (16-bit carry handling elided here)
+    CMP #8
+    BCS .literal
+    ; A < 8: run code. count = A + 3.
+    CLC : ADC #3
+    TAX                    ; X = repeat count (3..10)
+    LDA (zp_src),Y         ; the value byte
+    INC zp_src
+.run_eor
+    EOR #00                ; self-modified to FLAG_BYTE
+.run_loop
+    ; ... wire the 2bpp→4bpp LUT here ...
+    STA (zp_dst),Y / INC zp_dst
+    STA (zp_dst),Y / INC zp_dst    ; two output bytes per source
+    DEX / BNE .run_loop
+    JMP .decode_loop
+.literal
+.lit_eor
+    EOR #00                ; self-modified to FLAG_BYTE
+    ; ... LUT here ...
+    STA (zp_dst),Y / INC zp_dst
+    STA (zp_dst),Y / INC zp_dst
+    JMP .decode_loop
+```
+
+Decoder code ≈ 35 bytes (with the LUT lookups it's a bit larger
+than the bare scheme).
+
+Per source byte:
+* Literal: `LDA / INC / CMP / BCS / EOR / LUT / 2×STA / 2×INC /
+  JMP` ≈ **~22 cyc / literal source byte** — about 4 cyc
+  faster per literal than scheme A.
+* Run-body: same as scheme A (~15 cyc/source-byte amortised).
+
+### Per-sprite feasibility (scheme C)
+
+Direct check of all 184 sprites (72 tiles + 112 hazards) shows
+**every sprite has at least one unused 5-bit prefix**. Stats:
+
+| min unused | max unused | mean | sprites with ≤ 5 unused |
+|---:|---:|---:|---:|
+|  3 | 31 | 16.1 | 4 (= 2 %) |
+
+So per-sprite scheme C works universally with no special cases.
+
 ### `min_run` break-even for scheme B
 
 For scheme B, runs of 3 and runs of 4 produce identical encoded
@@ -171,28 +263,40 @@ emitted, same total size).
 
 ## Survey results — round-trip verified
 
-| Set                | Raw   | Scheme A (5+3 c+1)   | Scheme B (alt-block) | B − A |
-|--------------------|------:|---------------------:|---------------------:|------:|
-| L1 tiles           |  2304 |  **1 442** (62.6 %)  |  **1 437** (62.4 %)  |  −  5 |
-| L2 tiles           |  2304 |  **1 139** (49.4 %)  |  **1 099** (47.7 %)  |  − 40 |
-| L3 tiles           |  2304 |  **1 347** (58.5 %)  |   1 356  (58.9 %)    |  +  9 |
-| L4 tiles           |  2304 |  **1 536** (66.7 %)  |  **1 524** (66.1 %)  |  − 12 |
-| L1S1 hazards       |  1792 |  **1 331** (74.3 %)  |   1 391  (77.6 %)    |  + 60 |
-| L1S2 hazards       |  1792 |  **1 440** (80.4 %)  |   1 524  (85.0 %)    |  + 84 |
-| L2S1 hazards       |  1792 |  **1 471** (82.1 %)  |   1 533  (85.5 %)    |  + 62 |
-| L2S2 hazards       |  1792 |  **1 418** (79.1 %)  |   1 485  (82.9 %)    |  + 67 |
-| L3S1 hazards       |  1792 |  **1 361** (75.9 %)  |   1 421  (79.3 %)    |  + 60 |
-| L3S2 hazards       |  1792 |  **1 341** (74.8 %)  |   1 466  (81.8 %)    |  +125 |
-| L4S1 hazards       |  1792 |  **1 493** (83.3 %)  |   1 600  (89.3 %)    |  +107 |
-| L4S2 hazards       |  1792 |  **1 373** (76.6 %)  |   1 446  (80.7 %)    |  + 73 |
-| **TOTAL**          | 23 552 | **16 692** (70.9 %)  |  17 282 (73.4 %)     |  +590 |
+`A` = scheme A (per-set, 5+3 c+1). `B` = scheme B (per-set,
+alt-block). `C-data` = scheme C compressed stream only (no
+per-sprite headers). `C+hdr` = scheme C with one flag-byte per
+sprite added.
 
-* **Tiles** are mostly a wash; scheme B wins 3 of 4 by a handful
+| Set            | Raw    | A      | B      | C-data | C+hdr  |
+|----------------|-------:|-------:|-------:|-------:|-------:|
+| L1 tiles       |  2 304 | 1 442  | 1 437  | 1 442  | 1 460  |
+| L2 tiles       |  2 304 | 1 139  | 1 099  | 1 139  | 1 157  |
+| L3 tiles       |  2 304 | 1 347  | 1 356  | 1 347  | 1 365  |
+| L4 tiles       |  2 304 | 1 536  | 1 524  | 1 534  | 1 552  |
+| L1S1 hazards   |  1 792 | 1 331  | 1 391  | 1 331  | 1 345  |
+| L1S2 hazards   |  1 792 | 1 440  | 1 524  | 1 440  | 1 454  |
+| L2S1 hazards   |  1 792 | 1 471  | 1 533  | 1 466  | 1 480  |
+| L2S2 hazards   |  1 792 | 1 418  | 1 485  | 1 413  | 1 427  |
+| L3S1 hazards   |  1 792 | 1 361  | 1 421  | 1 361  | 1 375  |
+| L3S2 hazards   |  1 792 | 1 341  | 1 466  | 1 341  | 1 355  |
+| L4S1 hazards   |  1 792 | 1 493  | 1 600  | 1 489  | 1 503  |
+| L4S2 hazards   |  1 792 | 1 373  | 1 446  | 1 371  | 1 385  |
+| **TOTAL**      | 23 552 | **16 692** (70.9 %) | 17 282 (73.4 %) | **16 674** (70.8 %) | 16 858 (71.6 %) |
+
+* **Scheme C data** is **18 bytes smaller** than scheme A —
+  per-sprite optimisation can pick a better flag for each
+  sprite, and the 4 sets that needed `c+1` collisions in scheme
+  A no longer pay that cost in scheme C (every individual
+  sprite has an unused prefix).
+* **With per-sprite headers**: scheme C costs +166 bytes
+  vs scheme A (≈ 1 %). Negligible.
+* **Tiles** under scheme B win 3 of 4 vs scheme A by a handful
   of bytes thanks to no per-byte FLAG overhead in the long
   zero-pad regions.
-* **Hazards** favour scheme A by +60 to +125 bytes per set
-  because they're denser (more short runs, more isolated
-  literals → more per-block framing overhead in scheme B).
+* **Hazards** favour scheme A (and C) by +60 to +125 bytes per
+  set vs scheme B because they're denser (more short runs, more
+  isolated literals → more per-block framing overhead in B).
 * Scheme A's chosen flag per set:
     * L1 tiles `&12`, L2 tiles `&12`, L3 tiles `&0B`, L4 tiles `&17`
     * L1S1 `&13`, L1S2 `&0D`, L2S1 `&08`, L2S2 `&07`
@@ -200,7 +304,8 @@ emitted, same total size).
 * Scheme A's L4 sets all needed the `c + 1` literal-escape path
   (2-6 collision bytes each — no fully-unused 5-bit prefix
   exists in those sets). The refinement absorbed those at
-  effectively zero overhead.
+  effectively zero overhead. Scheme C side-steps the issue
+  entirely by picking flags per-sprite.
 
 ## Decode-speed estimate for the frame-1 unpack pipeline
 
@@ -208,61 +313,92 @@ Cycle estimates with the 2bpp→4bpp LUT folded into the emit
 loop. Per **source** byte (each source byte emits two 4bpp
 output bytes):
 
-| Path                          | Scheme A    | Scheme B    |
-|-------------------------------|------------:|------------:|
-| Decide literal vs escape      | ~17 cyc     | (per-block, amortises away) |
-| Literal: LUT lookup + 2 STAs  | +~25 cyc    | ~25 cyc     |
-| **Per literal source byte**   | **~42 cyc** | **~25 cyc** |
-| Run body (LUT once, copy N)   | ~15 cyc     | ~15 cyc     |
+| Path                          | Scheme A    | Scheme B    | Scheme C    |
+|-------------------------------|------------:|------------:|------------:|
+| Decide literal vs escape      | ~17 cyc (LDA/AND/CMP/Bxx) | per-block, amortises away | ~9 cyc (CMP/BCS) |
+| Literal: LUT lookup + 2 STAs  | +~25 cyc    | ~25 cyc     | EOR + ~25 cyc |
+| **Per literal source byte**   | **~42 cyc** | **~25 cyc** | **~36 cyc** |
+| Run body (LUT once, copy N)   | ~15 cyc     | ~15 cyc     | ~15 cyc     |
 
-The literal path is where scheme B's "no per-byte branch" wins
-— roughly **1.7 × faster per literal byte**. Run bodies are a
-wash because the LUT lookup amortises identically in both.
+Scheme C's literal path beats scheme A by ~6 cyc/byte (the
+`CMP #8 / BCS` is cheaper than `AND / CMP / BEQ`) but still
+costs the EOR per byte — so scheme B remains the fastest of
+the three on the literal path.
 
 Weighted by the actual data:
 
-* **Hazards** (52 % length-1 literals): scheme A ≈ 0.52·42 +
-  0.48·15 ≈ 29 cyc/source-byte; scheme B ≈ 0.52·25 + 0.48·15 ≈
-  20 cyc. **Scheme B ≈ 31 % faster per source byte.**
-* **Tiles** (35 % literals): scheme A ≈ 0.35·42 + 0.65·15 ≈ 25
-  cyc; scheme B ≈ 0.35·25 + 0.65·15 ≈ 19 cyc. **Scheme B ≈
-  24 % faster per source byte.**
+* **Hazards** (52 % length-1 literals):
+  * A ≈ 0.52·42 + 0.48·15 ≈ **29 cyc/source-byte**
+  * B ≈ 0.52·25 + 0.48·15 ≈ **20 cyc/source-byte** (~31 % faster)
+  * C ≈ 0.52·36 + 0.48·15 ≈ **26 cyc/source-byte** (~10 % faster)
+* **Tiles** (35 % literals):
+  * A ≈ 0.35·42 + 0.65·15 ≈ **25 cyc/source-byte**
+  * B ≈ 0.35·25 + 0.65·15 ≈ **19 cyc/source-byte** (~24 % faster)
+  * C ≈ 0.35·36 + 0.65·15 ≈ **22 cyc/source-byte** (~12 % faster)
 
 Per game-tick budget: a 32 000-cycle vsync frame (BBC 2 MHz)
-can unpack roughly **1 500** source bytes under scheme A or
-**2 000 under scheme B** for hazard-shaped data. Big difference
-for the per-tick on-screen sprite budget.
+can unpack roughly **1 500** source bytes under scheme A,
+**2 000** under scheme B, or **1 700** under scheme C for
+hazard-shaped data.
 
-## Recommendation — scheme B (alt-block)
+## Recommendation — pick B for raw speed, C for the cleanest binary
 
-For the MODE 2 remake's hot path (decompress + LUT-unpack every
-game tick), scheme B is meaningfully faster on the literal-heavy
-hazard data — which is the byte category that dominates unpack
-work. The +590 bytes (3.5 %) larger compressed corpus is a fine
-trade for ~24-31 % faster unpacking.
+For the MODE 2 remake's hot path, the choice is now between B
+and C — scheme A is dominated by both. Trade-off:
 
-If a different scenario emerges (e.g. multiple sprite sets
-decompressed at level load only, never during play), scheme A's
-smaller size could be more valuable. The Python tool will
-implement both regardless, so swapping later is cheap.
+| | Scheme B | Scheme C |
+|---|---|---|
+| Compressed size            | 17 282 B (73.4 %) | **16 858 B (71.6 %)** |
+| Per-literal cycle cost     | **~25 cyc** | ~36 cyc |
+| Per-set parameter          | none | 1 flag byte per sprite |
+| Decoder code size          | ~25 bytes | ~35 bytes |
+| Per-byte branch in loop    | none | one `CMP #8 / BCS` |
+| Per-sprite random access   | needs scan to find sprite boundary | trivial (each sprite is its own blob) |
+| LUT pre-XOR opportunity    | n/a | yes — bake FLAG into the LUT once per sprite, eliminating the per-byte EOR |
+
+That last row is the kicker. With scheme C we can **pre-XOR
+the per-byte 2bpp→4bpp LUT** with FLAG_BYTE once at decode-
+start (a single 256-byte XOR sweep, or compile the LUT twice
+to a memory page and switch via self-modified base address).
+Then the EOR drops out of the inner loop and scheme C's
+literal cost drops to ~25 cyc — matching scheme B exactly.
+
+With that optimisation in place:
+
+* Scheme C ties scheme B on speed.
+* Scheme C compresses **424 bytes better** than scheme B (1.8 %).
+* Scheme C gives free per-sprite random access (each sprite is
+  a self-contained blob), which is useful if the engine only
+  needs to decompress a subset of sprites per frame.
+
+→ **Lean toward scheme C** unless we discover that per-sprite
+random access isn't needed AND the LUT-prepare cost amortises
+poorly. Scheme B is the close second.
 
 ## When we get to building it
 
-The remake itself starts tomorrow with a fresh BeebAsm project +
-some infrastructure work — this RLE tool isn't the first thing
-to land. When we do come back to it, the sketch is:
+The remake itself starts today with a fresh BeebAsm project +
+infrastructure work — this RLE tool isn't the first thing to
+land. When we come back to it:
 
-1. **`tools/sprite_rle.py`** — library + CLI with both schemes,
-   the same column-bounded encoders that produced the numbers
-   above. API:
+1. **`tools/sprite_rle.py`** — library + CLI with all three
+   schemes, the same column-bounded encoders that produced the
+   numbers above. API:
 
    ```python
+   # Scheme A (per-set 5+3 with c+1 literal-escape)
    def encode_5_3_c1(buf, n_cols, n_lines, sprite_size, flag) -> bytes
    def decode_5_3_c1(enc, flag) -> bytes
    def best_flag_5_3_c1(buf, n_cols, n_lines, sprite_size) -> tuple[int, int]
 
+   # Scheme B (per-set alternating block)
    def encode_alt(buf, n_cols, n_lines, sprite_size, min_run=4) -> bytes
    def decode_alt(enc, target_len) -> bytes
+
+   # Scheme C (per-sprite 5+3 with XOR encoding)
+   def encode_per_sprite(sprite, n_cols, n_lines, flag) -> bytes
+   def decode_per_sprite(enc, flag) -> bytes
+   def best_flag_per_sprite(sprite, n_cols, n_lines) -> tuple[int, int]
    ```
 
    CLI subcommands: `survey`, `encode`, `decode`, `test`.
@@ -272,27 +408,37 @@ to land. When we do come back to it, the sketch is:
 2. **Output blob format**:
    * Scheme A: `[flag<<3][LO][HI][data...]`
    * Scheme B: `[LO][HI][alternating count/data...]`
+   * Scheme C: per-sprite `[flag<<3][stream...]` — length is
+     implicit (always 128 B); for a multi-sprite set we ship
+     either back-to-back blobs preceded by a small directory
+     (sprite count + start offsets) OR back-to-back blobs with
+     a fixed per-sprite stride if we want O(1) addressing.
 
-3. **Tests**: round-trip every set under both schemes
+3. **Tests**: round-trip every sprite under all three schemes
    byte-identical; assert no run in the encoded stream crosses
-   a column or sprite boundary; reproduce the per-set table
-   above to the byte.
+   a column or sprite boundary; reproduce the per-set / per-
+   sprite table above to the byte.
 
 ## Open questions to chew on
 
 These are useful to have an answer to before we commit a binary
 format, even before the encoder lands:
 
-* **Per-sprite vs per-set blobs.** Do we ship each 128-byte
-  sprite as its own RLE-compressed entry (with its own
-  length/flag header), or one blob per 14-/18-sprite set?
-  Per-set is simpler and slightly more compressible (literal
-  blocks can run across sprite boundaries in scheme B).
-  Per-sprite makes random access easier (decompress just the
-  sprites the engine actually needs this frame, skipping unused
-  ones in the catalog). Cost vs benefit depends on how the
-  remake's draw path is organised — TBD once the BeebAsm
-  scaffolding is in place.
+* **Per-sprite vs per-set blobs.** Scheme C inherently picks
+  per-sprite. Schemes A/B can go either way. Per-sprite makes
+  random access easy (decompress just the sprites the engine
+  needs this frame); per-set is slightly simpler if we always
+  unpack the whole set at level load. Per-sprite costs 1 flag
+  byte per sprite for scheme C (+184 B / 1 % total in this
+  corpus). For schemes A/B the difference is in the noise.
+* **End-of-stream signalling.** Schemes A/B use a length
+  header (LO, HI) in the blob. Scheme C uses an implicit
+  fixed length (= 128 B per sprite). A sentinel-byte
+  alternative (e.g. for schemes A/B, a `count=0` followed by
+  something) would let the decoder bail without a counter —
+  saves a few cycles per stream but burns a count value.
+  Probably stick with the length header for A/B and the
+  implicit length for C.
 * **Per-palette LUT vs global LUT.** The 2bpp→4bpp conversion
   uses a 256-entry LUT (or two 256-entry LUTs, one for each
   4bpp output byte). If the palette is fixed at level load, one
