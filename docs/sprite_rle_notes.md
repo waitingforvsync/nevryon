@@ -273,133 +273,313 @@ emitted, same total size).
 
 ## 2bpp → 4bpp expansion (Rich's design)
 
-This is the per-source-byte cost that *both* schemes pay
-inside their unpack loops on frame 1 of the remake's
-three-frame game tick. The expansion converts each MODE 5
-source byte (4 pixels × 2 bpp) into two MODE 2 output bytes
-(2 pixels × 4 bpp each).
+The hot path inside both decoders. One MODE 5 source byte
+(4 pixels × 2 bpp) becomes two MODE 2 output bytes (2 pixels
+× 4 bpp), one written to each of two adjacent destination
+columns.
 
-```
-.init_colour_lut       ; runs ONCE per palette change
-    ; A = MODE 2 byte that turns the right pixel into colour 1
-    ; X = ... colour 2
-    ; Y = ... colour 3
-    STA &02 / STX &20 / STY &22
-    ASL A : STA &04 : EOR &02 : STA &06
-    TXA : ASL A : STA &40 : EOR &20 : STA &60
-    TYA : ASL A : STA &44 : EOR &22 : STA &66
-    ; …six more entries for the cross-colour combos…
+The LUT lives in zero page at 16 sparse addresses derived
+from the source byte's bit layout. The expansion does AND +
+shift to produce the LUT index, then a self-modified `LDA
+$00` reads the entry — cheaper than a `LDA tbl,X` because we
+get to use plain ZP addressing.
+
+### `init_colour_lut` — run once per palette change
+
+```asm
+; The colour bytes are MODE 2 byte values that set the
+; RIGHT pixel of a MODE 2 byte to the desired colour.
+; (For the LEFT pixel slot, we ASL them.)
+;
+; A = colour-1 byte    (e.g. yellow)
+; X = colour-2 byte    (e.g. cyan)
+; Y = colour-3 byte    (e.g. magenta)
+
+.init_colour_lut
+    STA &02                       ; right=1, left=0
+    STX &20                       ; right=2, left=0
+    STY &22                       ; right=3, left=0
+    ASL A : STA &04 : EOR &02 : STA &06   ; right=0/1 ×  left=1
+    TXA : ASL A : STA &40 : EOR &20 : STA &60   ; left=2 ×  right=0/2
+    TYA : ASL A : STA &44 : EOR &22 : STA &66   ; left=3 ×  right=0/3
+    TXA : EOR &04 : STA &24       ; left=1, right=2
+    TXA : EOR &44 : STA &64       ; left=3, right=2
+    TYA : EOR &04 : STA &26       ; left=1, right=3
+    TYA : EOR &40 : STA &62       ; left=2, right=3
+    LDA &02 : EOR &40 : STA &42   ; left=2, right=1
+    LDA &02 : EOR &44 : STA &46   ; left=3, right=1
     RTS
-
-.convert2bpp4bpp
-    ; A = MODE 5 source byte; emits two MODE 2 bytes
-    TAX                   ; 2  save source
-    AND #&CC              ; 2  mask the left 2 pixels' bits
-    LSR A                 ; 2  shift to bits 6,5,2,1
-    STA zp_sm1+1          ; 3  self-mod the LDA operand
-    LDA $00 (self-mod'd)  ; 3  read the 4bpp value from the LUT
-    STA (zp_dst),Y / INC  ; 6+5
-    TXA                   ; 2  restore source
-    AND #&33              ; 2  mask the right 2 pixels' bits
-    ASL A                 ; 2
-    STA zp_sm2+1          ; 3
-    LDA $00 (self-mod'd)  ; 3
-    STA (zp_dst),Y / INC  ; 6+5
 ```
 
-The LUT lives in zero page at 16 specific addresses derived from
-the bit pattern of (left-pixel-colour-bits, right-pixel-colour-
-bits). Sparse — only those 16 addresses out of 256 hold useful
-data, but the self-mod-and-LDA-zp pattern means we never need a
-full 256-byte LUT.
+The 15 non-zero entries cover all (left × right) colour
+combinations of the three non-background colours (colour 0
+stays at `&00` = 0, never written).
 
-**Per-source-byte cost of the bare expansion: 46 cyc.**
+| addr | left px | right px |     | addr | left px | right px |
+|-----:|--------:|---------:|-----|-----:|--------:|---------:|
+| `&00`|       0 |        0 |     | `&40`|       2 |        0 |
+| `&02`|       0 |        1 |     | `&42`|       2 |        1 |
+| `&04`|       1 |        0 |     | `&44`|       3 |        0 |
+| `&06`|       1 |        1 |     | `&46`|       3 |        1 |
+| `&20`|       0 |        2 |     | `&60`|       2 |        2 |
+| `&22`|       0 |        3 |     | `&62`|       2 |        3 |
+| `&24`|       1 |        2 |     | `&64`|       3 |        2 |
+| `&26`|       1 |        3 |     | `&66`|       3 |        3 |
 
-This is the floor — both schemes B and C inherit this. Anything
-the RLE framing adds is on top.
+### `convert2bpp4bpp` — the per-source-byte expansion
 
-## Decode-speed estimate with expansion folded in
+```asm
+.convert2bpp4bpp
+    ; A = MODE 5 source byte to convert
+    ; X = current line index inside the destination columns (0..31)
+    ; .sta_left and .sta_right are self-modified to point at the
+    ; current pair of MODE 2 output columns
+    STA zp_save        ; 3   save source
+    AND #&CC           ; 2   mask left two pixels' bits
+    LSR A              ; 2   shift to bits 6,5,2,1
+    STA zp_sm1+1       ; 3   self-mod the LDA operand
+.zp_sm1
+    LDA $00            ; 3   ← top-byte-of-operand patched to ZP idx
+.sta_left
+    STA &FFFF,X        ; 5   ← self-mod target = left output column
+    LDA zp_save        ; 3   restore source
+    AND #&33           ; 2   mask right two pixels' bits
+    ASL A              ; 2
+    STA zp_sm2+1       ; 3
+.zp_sm2
+    LDA $00            ; 3
+.sta_right
+    STA &FFFF,X        ; 5   ← self-mod target = right output column
+    INX                ; 2   next line
+```
 
-Combined per-source-byte costs (RLE framing + expansion):
+Cost: **38 cyc** for the in-loop body. The `STA zp_save` save/
+restore costs 6 cyc total vs a `TAX/TXA` pair (4 cyc), but `X`
+has to remain the line-into-column index — so the source byte
+must live somewhere other than `X`.
 
-| Path                                  | Scheme B    | Scheme C (EOR per byte) | Scheme C (LUT pre-XORed) |
-|---------------------------------------|------------:|------------------------:|-------------------------:|
-| Literal source byte                   | **64 cyc**  | 66 cyc                  | **64 cyc**               |
-| Run-body source byte (inside loop)    | 33 cyc      | 33 cyc                  | 33 cyc                   |
-| Run setup (one-time per run)          | ~46 cyc     | ~69 cyc                 | ~67 cyc                  |
+Per column transition (= once per MODE 5 sprite column, of
+which there are 4 per sprite), we self-mod the two `STA &FFFF,X`
+operands to point at the next pair of MODE 2 output columns.
+Cost: ~10 cyc per transition, ~40 cyc per sprite. Negligible.
 
-The literal-byte costs converge: scheme C with the LUT
-pre-XOR optimisation (see below) matches scheme B exactly at
-64 cyc. Scheme C with per-byte EOR is +2 cyc/literal — noise
-on this scale of expansion overhead.
+## Wiring the expansion into B and C — two structural options
 
-**LUT pre-XOR optimisation for scheme C**: at decode-start,
-XOR every entry in the colour LUT with `FLAG_BYTE`. The
-per-byte `EOR #FLAG_BYTE` then drops out — the LUT delivers
-the un-XOR'd value directly. Cost: one 16-entry sweep (~ 200
-cyc once per sprite) instead of 2 cyc per source byte
-(amortises at sprite size ≥ 100 source bytes, which is always
-true for the 128-byte sprites here).
+The expansion above is a common subroutine; the schemes differ
+only in how they feed source bytes to it.
 
-### Per-sprite total cost (estimated)
+### Option α — separate literal and run code paths (FAST)
 
-Weighted by the literal/run ratio from the run-length histogram:
+The most direct mapping. Literal source bytes flow straight
+through `convert2bpp4bpp` once each. Run paths cache the
+expansion result in `zp_left / zp_right` and emit it via a
+tight inner loop.
 
-| Sprite category | Scheme B | Scheme C (LUT XOR) | C/B ratio |
-|-----------------|---------:|-------------------:|----------:|
-| Tile sprite     | ~5 870 cyc | ~6 000 cyc       | +2 % |
-| Hazard sprite   | ~6 770 cyc | ~6 990 cyc       | +3 % |
+This needs **four** self-modified `STA &FFFF,X` instructions
+per decoder body — one pair inside the literal path, one pair
+inside the run-emit loop — both pairs pointing at the same
+output columns and self-modded together at column transitions.
 
-Hazards are slightly more expensive because they have shorter
-runs (avg ~6 vs ~14 for tiles), which means more run-setup
-overhead. The C-vs-B difference per sprite is in the noise.
+#### Scheme B decoder (option α)
 
-### Multi-sprite update — the real differentiator
+```asm
+; --- Outer block-header dispatch -----------------------------
+; Y = source index into the sprite's encoded stream (zp_src)
+; X = line index (0..31) into the current MODE 2 column pair
 
-The user's frame-1 budget is one vsync = 32 000 cyc (2 MHz BBC).
-"Expanding multiple hazard sprites in their entirety each
-update" means decoding only the sprites that actually need
-updating that game tick (the animating ones — `hazard_anim_advance`
-runs ~50 % of frames on the original engine, so typically
-2-5 sprites per tick of the 14 in the pool).
+.decode_block
+    LDA (zp_src),Y       ; 5   literal count
+    INY                  ; 2
+    BEQ .read_run_count  ; 3/2   empty literal block → straight to run
+    STA zp_count
+.literal_loop
+    LDA (zp_src),Y       ; 5
+    INY                  ; 2
+    STA zp_save          ; 3   ── inline expansion (left half) ──
+    AND #&CC : LSR A : STA zp_sm1+1   ; 7
+.zp_sm1 LDA $00          ; 3
+.sta_left_lit STA &FFFF,X; 5
+    LDA zp_save          ; 3   ── inline expansion (right half) ──
+    AND #&33 : ASL A : STA zp_sm2+1   ; 7
+.zp_sm2 LDA $00          ; 3
+.sta_right_lit STA &FFFF,X ; 5
+    INX                  ; 2
+    DEC zp_count         ; 5
+    BNE .literal_loop    ; 3
+.read_run_count
+    LDA (zp_src),Y       ; 5   run count
+    INY                  ; 2
+    BEQ .decode_block    ; 3/2   count=0 = separator, loop back
+    STA zp_count
+    LDA (zp_src),Y       ; 5   run value byte
+    INY                  ; 2
+    ; --- Expand the value byte once into zp_left / zp_right ---
+    STA zp_save
+    AND #&CC : LSR A : STA zp_sm1+1
+.zp_sm1_run LDA $00      ; (same ZP target as .zp_sm1, redundant label only)
+    STA zp_left
+    LDA zp_save
+    AND #&33 : ASL A : STA zp_sm2+1
+.zp_sm2_run LDA $00
+    STA zp_right
+.run_loop
+    LDA zp_left          ; 3
+.sta_left_run STA &FFFF,X; 5
+    LDA zp_right         ; 3
+.sta_right_run STA &FFFF,X ; 5
+    INX                  ; 2
+    DEC zp_count         ; 5
+    BNE .run_loop        ; 3
+    JMP .decode_block    ; 3
+```
 
-| | Scheme B (per-set blob) | Scheme C (per-sprite blob) |
-|---|---|---|
-| Decode 1 hazard sprite | must decode whole blob to reach it (~95 k cyc) | **~7 k cyc** |
-| Decode 4 hazards       | same ~95 k cyc | **~28 k cyc** (~0.9 frame) |
-| Decode 7 hazards       | same ~95 k cyc | **~49 k cyc** (~1.5 frames) |
-| Decode all 14          | ~95 k cyc | ~98 k cyc |
+#### Scheme C decoder (option α)
 
-Scheme B as a **per-set blob** is a non-starter for sub-set
-updates — variable-length runs make seeking impossible, so you
-have to decode every preceding sprite to reach any one of them.
-That's ~3 vsync frames per refresh.
+```asm
+; Same Y/X conventions. flag_byte is self-modded into both EORs
+; at decode-start from the sprite header byte. (Or pre-XOR the
+; LUT to drop the EOR entirely — see below.)
 
-Scheme B could be re-encoded as **per-sprite blobs** to get the
-same random access — but then it loses the literal-block-spans-
-sprites benefit, and the compressed size would creep closer to
-scheme C's. We didn't measure this variant; scheme C's
-per-sprite framing comes natively.
+.decode_byte
+    LDA (zp_src),Y          ; 5   encoded byte
+    INY                     ; 2
+    CMP #8                  ; 2
+    BCS .literal            ; 2/3
 
-## Recommendation — scheme C
+    ; A < 8 → run code: count = A + 3
+    CLC : ADC #3             ; 4
+    STA zp_count             ; 3
+    LDA (zp_src),Y           ; 5   value byte
+    INY                      ; 2
+.run_eor EOR #00             ; 2   (self-mod to FLAG_BYTE)
+    ; Expand into pair
+    STA zp_save
+    AND #&CC : LSR A : STA zp_sm1+1
+.zp_sm1_run LDA $00
+    STA zp_left
+    LDA zp_save
+    AND #&33 : ASL A : STA zp_sm2+1
+.zp_sm2_run LDA $00
+    STA zp_right
+.run_loop
+    LDA zp_left              ; 3
+.sta_left_run STA &FFFF,X    ; 5
+    LDA zp_right             ; 3
+.sta_right_run STA &FFFF,X   ; 5
+    INX                      ; 2
+    DEC zp_count             ; 5
+    BNE .run_loop            ; 3
+    JMP .decode_byte         ; 3
 
-For the MODE 2 remake's frame-1 unpack with multi-sprite-per-
-tick updates, **scheme C** is the right choice:
+.literal
+.lit_eor EOR #00             ; 2   (self-mod to FLAG_BYTE)
+    STA zp_save
+    AND #&CC : LSR A : STA zp_sm1+1
+.zp_sm1_lit LDA $00          ; 3
+.sta_left_lit STA &FFFF,X    ; 5
+    LDA zp_save
+    AND #&33 : ASL A : STA zp_sm2+1
+.zp_sm2_lit LDA $00          ; 3
+.sta_right_lit STA &FFFF,X   ; 5
+    INX                      ; 2
+    JMP .decode_byte         ; 3
+```
 
-* Best compression — 16 858 B with per-sprite headers
-  (vs B at 17 282 B).
-* Per-sprite random access for free — decode only the sprites
-  you need this tick.
-* Matches scheme B on raw per-byte unpack speed (with the LUT
-  pre-XOR optimisation).
-* Self-contained blob per sprite simplifies the level-data
-  loader (each sprite is a flag-byte plus its stream; no
-  per-set length tables required).
+### Option β — unified through one emit loop (COMPACT, slower)
 
-Scheme B remains a reasonable fallback if we end up always
-unpacking the entire set at once (e.g. tile catalog, which is
-typically decompressed once at level load and reused). Worth
-keeping the encoder in the toolset for that case.
+Both literal and run paths set up `zp_left / zp_right` and a
+`zp_count`, then fall through into a single emit loop with
+ONE pair of self-modified `STA &FFFF,X`. Literals enter the
+loop with count=1.
+
+Pros: only **two** self-mod `STA &FFFF,X` per decoder, single
+emit loop. Decoder is ~25 % shorter.
+
+Cons: every literal byte pays full pair-expansion + an extra
+LDA #1 / STA zp_count + one loop-body iteration (including the
+DEC zp_count / BNE that immediately falls through). Penalty
+~24 cyc per literal byte.
+
+### Cost comparison (per hazard sprite, 128 source bytes)
+
+|                                | Option α (4 STAs) | Option β (2 STAs unified) |
+|--------------------------------|------------------:|--------------------------:|
+| Per literal source byte        | **55 cyc**        | 79 cyc (+24)              |
+| Per run-body source byte       | 26 cyc (in loop)  | 26 cyc                    |
+| Avg run-amortised (avg run 5.9)| ~36 cyc/byte      | ~36 cyc/byte              |
+| Per-column self-mod overhead   | ~120 cyc/sprite   | ~60 cyc/sprite            |
+| **Per hazard sprite total**    | **~6 000 cyc**    | ~7 540 cyc (+26 %)        |
+| **Per tile sprite total**      | **~5 085 cyc**    | ~6 088 cyc (+20 %)        |
+
+The unification penalty is large enough that option α is the
+recommended structure. The "nice way" to unify isn't quite
+nice enough — the extra count manipulation + redundant loop
+iteration for single-literal-byte emits adds 20-26 % to total
+per-sprite decode time, which is meaningful at the
+sprites-per-frame budget the game needs.
+
+### LUT pre-XOR for scheme C — drop the per-byte EOR
+
+Scheme C's only per-byte cost over scheme B is the `EOR
+#FLAG_BYTE` (2 cyc). It can be eliminated entirely by
+pre-XORing the colour LUT at decode-start, baking FLAG into
+the 16 LUT entries so we look up the correct pre-XOR'd value
+directly from the encoded byte.
+
+Cost: one 16-entry sweep, ~100 cyc per sprite. Per-byte
+savings: 2 cyc × ~80 source bytes (avg) = 160 cyc. Roughly
+breaks even at sprite size 50; pays off at 128 bytes. The
+two `EOR #00` instructions in the scheme C decoder above
+just become `NOP NOP` (or are skipped via self-mod of the
+branch around them).
+
+With the LUT pre-XOR optimisation, scheme C's per-sprite cost
+matches scheme B's: **~6 000 cyc per hazard, ~5 000 per tile**.
+
+## Multi-sprite update — random access
+
+Both schemes produce variable-length per-sprite blobs. To seek
+to sprite N out of M, both need a per-sprite-offset directory
+at the head of the multi-sprite blob, OR a fixed-stride layout
+with padding.
+
+The natural format for either scheme:
+
+```
++0..(2M-1):  directory — M × 2-byte LO/HI of start offset
++(2M)..:     concatenated per-sprite blobs
+              scheme B: [LO][HI][alternating count/data...]
+              scheme C: [flag][stream...] (length implicit at 128)
+```
+
+So scheme B and scheme C support per-sprite random access
+equivalently. The earlier "scheme B has to decode the whole
+blob" framing was wrong — it only applies if we ship without
+a directory, which would be a silly choice given we WANT
+random access.
+
+Per-sprite decode is then ~6 k cyc for hazards, ~5 k for tiles
+under either scheme. The remake's per-tick budget (one vsync =
+32 000 cyc) handles **5 hazard sprite re-unpacks per tick**
+comfortably (~30 k cyc).
+
+## Recommendation — scheme C with option α and LUT pre-XOR
+
+* **Compression**: scheme C wins by 424 B vs scheme B (16 858 B
+  vs 17 282 B with per-sprite headers, both with directory).
+* **Decode speed**: scheme C + LUT pre-XOR matches scheme B
+  exactly (~6 000 cyc per hazard sprite).
+* **Decoder code size**: scheme C's per-byte branch (`CMP #8 /
+  BCS`) is comparable to scheme B's per-block dispatch — both
+  in the ~50-70 byte range with option α inlined.
+* **Random access**: equivalent (both need the directory).
+
+Recommendation lands on **scheme C with option α** (separate
+literal/run paths, 4 self-mod STAs per column transition) and
+the LUT pre-XOR trick. Scheme B is a reasonable fallback for
+bulk-unpack-once cases (tile catalog at level load) where
+decoder simplicity might matter more than the 424 B compression
+gap.
 
 ## When we get to building it
 
