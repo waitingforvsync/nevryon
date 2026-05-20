@@ -433,57 +433,139 @@ output columns and self-modded together at column transitions.
     JMP .decode_block    ; 3
 ```
 
-#### Scheme C decoder (option α)
+#### Scheme C decoder (option α) — final form
+
+Decodes **one MODE 5 source column** = 32 lines, advancing the
+self-modded `sta_*` destination operands per call from the outer
+column-walk routine. X counts the destination line **down** from
+31 to 0, so column exhaustion is detected in-band (DEX → −1, BPL
+fails).
 
 ```asm
-; Same Y/X conventions. flag_byte is self-modded into both EORs
-; at decode-start from the sprite header byte. (Or pre-XOR the
-; LUT to drop the EOR entirely — see below.)
+; Y = source index into zp_src     (preserved across calls)
+; X = line index — caller pre-loads 31 (or 256-height-1)
+;
+; flag_byte is self-modded into the single .lit_eor at
+; decode-start from the sprite header byte. The run path does
+; NOT EOR the value byte — runs are signalled by the count
+; header, the value byte is raw.
 
 .decode_byte
-    LDA (zp_src),Y          ; 5   encoded byte
-    INY                     ; 2
-    CMP #8                  ; 2
-    BCS .literal            ; 2/3
-
-    ; A < 8 → run code: count = A + 3
-    CLC : ADC #3             ; 4
-    STA zp_count             ; 3
-    LDA (zp_src),Y           ; 5   value byte
-    INY                      ; 2
-.run_eor EOR #00             ; 2   (self-mod to FLAG_BYTE)
-    ; Expand into pair
-    STA zp_save
-    AND #&CC : LSR A : STA zp_sm1+1
-.zp_sm1_run LDA $00
-    STA zp_left
-    LDA zp_save
-    AND #&33 : ASL A : STA zp_sm2+1
-.zp_sm2_run LDA $00
-    STA zp_right
-.run_loop
-    LDA zp_left              ; 3
-.sta_left_run STA &FFFF,X    ; 5
-    LDA zp_right             ; 3
-.sta_right_run STA &FFFF,X   ; 5
-    INX                      ; 2
-    DEC zp_count             ; 5
-    BNE .run_loop            ; 3
-    JMP .decode_byte         ; 3
+    LDA (zp_src),Y           ; 5   encoded byte
+    INY                      ; 2   advance source once per encoded byte
+    CMP #8                   ; 2
+    BCC .multiple            ; 2/3 → run path. literal is fall-through
 
 .literal
 .lit_eor EOR #00             ; 2   (self-mod to FLAG_BYTE)
-    STA zp_save
-    AND #&CC : LSR A : STA zp_sm1+1
-.zp_sm1_lit LDA $00          ; 3
-.sta_left_lit STA &FFFF,X    ; 5
-    LDA zp_save
-    AND #&33 : ASL A : STA zp_sm2+1
+    STA temp                 ; 3   save the decoded byte for right-half
+    AND #&CC : LSR A         ; 4   left-half index
+    STA zp_sm1+1             ; 4
+.zp_sm1_lit LDA $00          ; 3   ← top of operand patched to ZP-LUT idx
+.sta_left_lit STA &FFFF,X    ; 5   ← target patched per column pair
+    LDA temp                 ; 3   recover decoded byte
+    AND #&33 : ASL A         ; 4   right-half index
+    STA zp_sm2+1             ; 4
 .zp_sm2_lit LDA $00          ; 3
 .sta_right_lit STA &FFFF,X   ; 5
-    INX                      ; 2
+    DEX                      ; 2
+    BPL .decode_byte         ; 3   column not yet exhausted
+.exit
+    RTS
+
+.multiple
+    ; BCC was taken → C=0, so ADC #3 needs no CLC.
+    ADC #3                   ; 2   count = A + 3 (3..10)
+    STA zp_count             ; 3
+    LDA (zp_src),Y           ; 5   value byte (raw, NOT EORed)
+    AND #&CC : LSR A         ; 4   left-half index
+    STA zp_sm1_run+1         ; 4
+.zp_sm1_run LDA $00          ; 3
+    STA zp_left+1            ; 4   self-mod the LDA #imm in the hot loop
+    LDA (zp_src),Y           ; 5   re-read value byte (still raw)
+    AND #&33 : ASL A         ; 4   right-half index
+    STA zp_sm2_run+1         ; 4
+.zp_sm2_run LDA $00          ; 3
+    STA zp_right+1           ; 4
+    INY                      ; 2   consume value byte
+.run_loop
+.zp_left LDA #0              ; 2   ← imm patched above to left 4bpp
+.sta_left_run STA &FFFF,X    ; 5
+.zp_right LDA #0             ; 2   ← imm patched above to right 4bpp
+.sta_right_run STA &FFFF,X   ; 5
+    DEX                      ; 2
+    BMI .exit                ; 2/3   column exhausted? (mirrors literal's BPL)
+    DEC zp_count             ; 5
+    BNE .run_loop            ; 3
     JMP .decode_byte         ; 3
 ```
+
+Highlights of the final form vs the previous sketch:
+
+* **`INY` lifted to the top of `.decode_byte`** — exactly one
+  source advance per encoded byte regardless of which path runs;
+  the run path needs one further `INY` after consuming the value
+  byte (folded into the run setup so the cost shows up once, not
+  per iteration).
+* **`BCC .multiple` with literal fall-through** — the literal
+  path is the "branch not taken" side, saving 1 cyc on the more
+  common case (52 % of hazard bytes, 35 % of tile bytes).
+* **`STA temp` / `LDA temp`** in the literal path saves the
+  EORed byte for the right-half index. Re-reading
+  `(zp_src),Y` would return the *raw* encoded byte — bits 5/4
+  are FLAG-flipped, so the right-half index would be wrong. The
+  temp save costs +3 cyc and the second `LDA temp` saves 2 cyc
+  vs re-doing the indirect fetch, net +1 cyc, and it's
+  correctness-critical.
+* **Value byte not EORed** in the run path — runs are
+  discriminated by the count header, so the value byte is
+  shipped raw by the encoder and consumed raw by the decoder.
+  Saves 2 cyc per run setup.
+* **Self-modded immediates in `run_loop`** — `LDA #imm` is 2 cyc
+  vs `LDA zp` 3 cyc, hit twice per output line. Saves 2 cyc per
+  loop iteration; setup cost is paid once per run (4 cyc × 2
+  for the two `STA zp_left+1 / zp_right+1`).
+* **In-band column exit via DEX-and-branch** — DEX'ing past 0
+  makes X = −1, and BPL/BMI test the N flag directly. Literal
+  path uses BPL (continue while non-negative); run path uses BMI
+  exit (mirror semantics: exit when negative).
+* **No `CLC` before `ADC #3`** — `BCC .multiple` taken implies
+  C = 0 at entry, so the carry is already known clear.
+
+#### Cycle cost per source byte (final form)
+
+```
+Decoder header (LDA / INY / CMP / BCC):  5 + 2 + 2 + 2 = 11  (BCC not taken: literal)
+                                         5 + 2 + 2 + 3 = 12  (BCC taken: run header)
+
+Literal body (after header):
+  EOR / STA temp / AND/LSR / STA / LDA / STA       =  2+3+4+4+3+5 = 21
+  LDA temp / AND/ASL / STA / LDA / STA              =  3+4+4+3+5  = 19
+  DEX / BPL                                          =  2+3        =  5
+  total literal body                                 = 45
+  --- per literal source byte: 11 + 45              = 56 cyc
+
+Run setup (after the BCC-taken header):
+  ADC / STA count                                    =  2 + 3      =  5
+  LDA / AND/LSR / STA / LDA / STA   (left LUT)       =  5+4+4+3+4  = 20
+  LDA / AND/ASL / STA / LDA / STA   (right LUT)      =  5+4+4+3+4  = 20
+  INY                                                =  2
+  total setup                                        = 47
+
+Run loop body (per emitted output line, 1 source byte → N lines):
+  LDA #imm / STA / LDA #imm / STA / DEX              =  2+5+2+5+2  = 16
+  BMI not taken / DEC zp_count / BNE taken           =  2+5+3      = 10
+  total                                              = 26
+  --- per run-source-byte (avg run 5.9): (12+47+26·N+3)/N = ~30 cyc for N=5, 26 cyc for N→∞
+```
+
+For a 128-byte hazard sprite at 52 % literals:
+~67 × 56 + 61 / 5.9 runs × (62 + 26 × 5.9) ≈ 3 750 + 2 220 ≈
+**~6 000 cyc / hazard sprite**.
+
+For a 128-byte tile sprite at 35 % literals:
+~45 × 56 + 83 / 9.0 runs × (62 + 26 × 9.0) ≈ 2 520 + 2 750 ≈
+**~5 300 cyc / tile sprite**.
 
 ### Option β — unified through one emit loop (COMPACT, slower)
 
@@ -504,12 +586,12 @@ DEC zp_count / BNE that immediately falls through). Penalty
 
 |                                | Option α (4 STAs) | Option β (2 STAs unified) |
 |--------------------------------|------------------:|--------------------------:|
-| Per literal source byte        | **55 cyc**        | 79 cyc (+24)              |
-| Per run-body source byte       | 26 cyc (in loop)  | 26 cyc                    |
-| Avg run-amortised (avg run 5.9)| ~36 cyc/byte      | ~36 cyc/byte              |
+| Per literal source byte        | **56 cyc**        | 80 cyc (+24)              |
+| Per run-loop output line       | 26 cyc            | 26 cyc                    |
+| Avg run-amortised (avg run 5.9)| ~30 cyc/byte      | ~30 cyc/byte              |
 | Per-column self-mod overhead   | ~120 cyc/sprite   | ~60 cyc/sprite            |
 | **Per hazard sprite total**    | **~6 000 cyc**    | ~7 540 cyc (+26 %)        |
-| **Per tile sprite total**      | **~5 085 cyc**    | ~6 088 cyc (+20 %)        |
+| **Per tile sprite total**      | **~5 300 cyc**    | ~6 350 cyc (+20 %)        |
 
 The unification penalty is large enough that option α is the
 recommended structure. The "nice way" to unify isn't quite
@@ -518,23 +600,96 @@ iteration for single-literal-byte emits adds 20-26 % to total
 per-sprite decode time, which is meaningful at the
 sprites-per-frame budget the game needs.
 
-### LUT pre-XOR for scheme C — drop the per-byte EOR
+### Pre-XOR the LUT to drop the EOR? — analysed and dropped
 
-Scheme C's only per-byte cost over scheme B is the `EOR
-#FLAG_BYTE` (2 cyc). It can be eliminated entirely by
-pre-XORing the colour LUT at decode-start, baking FLAG into
-the 16 LUT entries so we look up the correct pre-XOR'd value
-directly from the encoded byte.
+Tempting initial thought: pre-XOR the 16-entry colour LUT at
+decode-start, baking FLAG into the entries so we skip the
+`EOR #FLAG_BYTE` (saves 2 cyc per literal byte).
 
-Cost: one 16-entry sweep, ~100 cyc per sprite. Per-byte
-savings: 2 cyc × ~80 source bytes (avg) = 160 cyc. Roughly
-breaks even at sprite size 50; pays off at 128 bytes. The
-two `EOR #00` instructions in the scheme C decoder above
-just become `NOP NOP` (or are skipped via self-mod of the
-branch around them).
+It doesn't work cleanly with a single LUT, because **FLAG bits
+land in different index-bit positions for the left vs right
+half** of a source byte:
 
-With the LUT pre-XOR optimisation, scheme C's per-sprite cost
-matches scheme B's: **~6 000 cyc per hazard, ~5 000 per tile**.
+```
+Source bit:      7  6  5  4  3  2  1  0
+Carries FLAG?    F4 F3 F2 F1 F0 -  -  -
+
+After AND #&CC, LSR (left index):   bit 7→6, 6→5, 3→2, 2→1
+   → index bits 6,5,2 carry F4,F3,F0 (bit 1 is clean)
+
+After AND #&33, ASL (right index):  bit 5→6, 4→5, 1→2, 0→1
+   → index bits 6,5 carry F2,F1 (bits 2,1 are clean)
+```
+
+So index bit 6 means *F4-flipped* in the left lookup and
+*F2-flipped* in the right lookup. A single 16-entry LUT can't
+bake in both unless FLAG is symmetric (F4 = F2, F3 = F1) — and
+we'd lose 3/4 of the FLAG space, with no guarantee every sprite
+still has a candidate.
+
+Options that DO work:
+
+1. **Two 16-entry LUTs** (32 sparse ZP slots, separate
+   pre-XOR each). Saves 2 cyc per literal byte + 1 cyc from
+   dropping the `STA temp` / `LDA temp` pair (since the second
+   half can re-fetch raw with `LDA (zp_src),Y`). Net ~3 cyc /
+   literal byte. For a 128-byte sprite at 52 % literals,
+   ~67 × 3 = ~200 cyc/sprite. Doubles ZP LUT footprint and
+   setup cost — marginal win.
+2. **`EOR #mask` after the AND** (one LUT, per-half mask).
+   Same ~1 cyc slower than the current `STA temp`/`LDA temp`
+   pattern — not a win.
+
+**Decision: keep the current `STA temp` / `LDA temp` pattern**
+with a single per-byte EOR. The pre-XOR'd-LUT savings aren't
+worth the doubled ZP footprint.
+
+### Vertical mirror via self-mod (free at decode time)
+
+The same column decoder can render a vertically-flipped column
+with a handful of pre-call patches:
+
+| Patch                          | Normal              | Mirror               | Bytes |
+|--------------------------------|---------------------|----------------------|------:|
+| DEX → INX (×2: literal + run)  | `$CA`               | `$E8`                | 1 each |
+| Literal: `BPL .decode_byte`    | `$10` (BPL)         | `$30` (BMI)          | 1     |
+| Run: `BMI .exit`               | `$30` (BMI)         | `$10` (BPL)          | 1     |
+| X initial value                | `#$1F` (31)         | `#$E0` (-32)         | 1     |
+| 4 × `STA &FFFF,X` base addrs   | `dest_top`          | `dest_top + 32`      | 8     |
+
+The two branch swaps go in **opposite directions** — both are
+single-bit toggles ($10 ↔ $30, bit-5 flip). In mirror mode X
+starts at $E0 (= −32 signed) and `INX` walks $E1..$FF; after the
+last write at $FF, the next INX makes X = 0 (no longer
+negative).
+
+* Literal end wants "keep looping while still negative" →
+  `BMI .decode_byte` continues during the negative phase, falls
+  through to RTS at X = 0.
+* Run end wants "exit when no longer negative" → `BPL .exit`
+  triggers at X = 0.
+
+`INY` at the top of `.decode_byte` is direction-independent —
+source pointer advances normally regardless of mirror mode, no
+patch needed.
+
+The four `STA &FFFF,X` destination bases are already self-modded
+per column pair by the outer column-walk routine; mirror mode
+just computes `base + 32` (= one column's worth past the
+column's *physical* top) instead of `base`. Same setup loop,
+one extra add per column.
+
+Total mirror-mode overhead: 5 single-byte opcode/operand patches
++ a constant offset added to 4 destination bases. Paid once per
+sprite-mirror call, not per byte.
+
+(Horizontal mirror is harder: it needs both a swap of the
+left/right column write order — a base-address pair-swap on the
+four STAs — *and* a per-byte pixel-bit reverse, which has to be
+baked into a separate "mirror LUT" with the same 16-entry sparse
+ZP layout. The mirror LUT is a one-shot init (~30 cyc) and then
+horizontal-mirror mode just points the `zp_sm*_lit / zp_sm*_run`
+self-mod fields at the mirror bank instead of the main bank.)
 
 ## Multi-sprite update — random access
 
@@ -563,20 +718,25 @@ under either scheme. The remake's per-tick budget (one vsync =
 32 000 cyc) handles **5 hazard sprite re-unpacks per tick**
 comfortably (~30 k cyc).
 
-## Recommendation — scheme C with option α and LUT pre-XOR
+## Recommendation — scheme C with option α
 
 * **Compression**: scheme C wins by 424 B vs scheme B (16 858 B
   vs 17 282 B with per-sprite headers, both with directory).
-* **Decode speed**: scheme C + LUT pre-XOR matches scheme B
-  exactly (~6 000 cyc per hazard sprite).
-* **Decoder code size**: scheme C's per-byte branch (`CMP #8 /
-  BCS`) is comparable to scheme B's per-block dispatch — both
-  in the ~50-70 byte range with option α inlined.
+* **Decode speed**: scheme C in its final form is **~6 000 cyc
+  per hazard sprite, ~5 300 cyc per tile** (option α, single-EOR
+  literal path with `STA temp` / `LDA temp`, self-modded
+  immediates in the run hot loop, in-band DEX/BPL column exit).
+  That matches scheme B's amortised per-byte cost on this corpus.
+* **Decoder code size**: scheme C's per-byte branch
+  (`CMP #8 / BCC`) is comparable to scheme B's per-block
+  dispatch — both in the ~50-70 byte range with option α
+  inlined.
 * **Random access**: equivalent (both need the directory).
+* **Vertical-mirror support**: trivial — handful of self-mod
+  patches at sprite setup, zero cost in the inner loop.
 
-Recommendation lands on **scheme C with option α** (separate
-literal/run paths, 4 self-mod STAs per column transition) and
-the LUT pre-XOR trick. Scheme B is a reasonable fallback for
+Recommendation lands on **scheme C with option α**, the final
+decoder form above. Scheme B is a reasonable fallback for
 bulk-unpack-once cases (tile catalog at level load) where
 decoder simplicity might matter more than the 424 B compression
 gap.
@@ -623,12 +783,11 @@ land. When we come back to it:
 
 ## Open questions to chew on
 
-* **Per-palette LUT pre-XOR.** The recommendation banks on
-  baking FLAG_BYTE into the 2bpp→4bpp LUT once per sprite at
-  decode-start. Worth confirming the LUT is in writable RAM (it
-  is — it's in zero page per Rich's `init_colour_lut`), and
-  that the ~200-cyc setup is small relative to the typical
-  per-sprite decode (~7 000 cyc). Done — confirmed.
+* **LUT pre-XOR.** Analysed (see "Pre-XOR the LUT to drop the
+  EOR?" above) and **dropped** — left/right halves carry FLAG
+  in different index-bit positions, so a single LUT can't bake
+  it in. Two LUTs would save ~200 cyc/sprite but double the ZP
+  LUT footprint and setup cost — not worth it.
 * **Directory format for multi-sprite scheme C blobs.** Options:
   * Fixed per-sprite stride (waste a few bytes per sprite but
     O(1) addressing — encoder pads short sprites to the maximum

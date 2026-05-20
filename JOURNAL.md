@@ -4,6 +4,111 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-21 — Session 38: sprite-RLE scheme C decoder, final form
+
+Rich iterated the scheme C decoder (per-sprite 5+3 with XOR
+encoding) into a tighter form, and we worked through three
+rounds of refinements + bug catches. End state captured in
+`docs/sprite_rle_notes.md`.
+
+### Decoder shape (`option α`, per-column)
+
+Decodes one MODE 5 source column (32 lines) per call. X is the
+**line index, counted down** from 31 to 0 — column exhaustion
+falls out of the DEX-and-branch in-band (no extra counter or
+external check). Outer column-walk routine patches the four
+`STA &FFFF,X` destination operands and re-enters per column pair.
+
+Key wins over the earlier sketch:
+
+* **`INY` lifted to the top of `.decode_byte`** — one source
+  advance per encoded byte regardless of branch. The run path
+  consumes one further source byte (the value) and does an
+  extra `INY` once during setup.
+* **`BCC .multiple` with literal fall-through** — literal is
+  the more common path (52 % of hazard bytes, 35 % of tiles),
+  so making it branch-not-taken saves 1 cyc on the dominant
+  case.
+* **`STA temp` / `LDA temp` in the literal path** — fixes a
+  real bug. The right-half index extraction needs the EORed
+  byte; re-reading `(zp_src),Y` would return the raw encoded
+  byte with bits 5/4 still FLAG-flipped, producing the wrong
+  LUT index for the right pixel pair.
+* **Value byte in runs is NOT EORed** — runs are discriminated
+  by the count header so the encoder ships the value raw and
+  the decoder consumes it raw. Drops the run-setup EOR.
+* **Self-modded immediates in `run_loop`** — `LDA #imm` (2 cyc)
+  vs `LDA zp` (3 cyc), patched once per run from the LUT
+  lookups. Hot loop drops to 26 cyc per output line.
+* **`BMI .exit` in run loop mirrors literal's `BPL`** — both
+  paths now exit consistently when X goes negative. Earlier
+  draft had a `BEQ exit` that exited one iteration early.
+* **No `CLC` before `ADC #3`** — `BCC` taken means C = 0
+  already.
+* **`ADC #3` not `ADC #2`** — earlier draft was off-by-one
+  (would have produced run lengths 2..9 instead of the spec'd
+  3..10).
+
+Per-sprite cost (with avg run 5.9 on hazards, 9.0 on tiles):
+
+* ~6 000 cyc per hazard sprite
+* ~5 300 cyc per tile sprite
+
+That comfortably fits 5 hazard re-unpacks per game tick (~30k
+cyc) in the remake's frame-1 unpack budget (~32k cyc).
+
+### Pre-XORing the LUT to drop the per-byte EOR — analysed, dropped
+
+Tempting but doesn't actually work with one LUT: FLAG bits land
+in different index-bit positions for the left vs right half of
+a source byte (left index bits 6/5/2 carry F4/F3/F0; right bits
+6/5 carry F2/F1). A single 16-entry LUT can't bake in both
+unless FLAG is symmetric (F4=F2, F3=F1), which cuts FLAG space
+to 1/4 and might not leave a candidate for every sprite.
+
+Two LUTs would save ~3 cyc/literal × 67 literals/sprite ≈
+200 cyc/sprite — marginal vs doubling ZP LUT footprint and
+setup cost. Decision: keep the `STA temp` / `LDA temp` pattern.
+
+### Vertical mirror via self-mod — free at decode time
+
+Same decoder can produce a vertically-flipped column with a
+small patch surface:
+
+* `DEX` → `INX` at two sites (literal + run): opcode $CA → $E8.
+* Literal `BPL .decode_byte` → `BMI` (continue while negative,
+  starting from X = $E0 = -32).
+* Run `BMI .exit` → `BPL` (exit at X = 0 after walking up).
+  Note the **two branches swap in opposite directions** — both
+  are single-bit toggles ($10 ↔ $30, bit-5 flip).
+* X initial: $1F → $E0.
+* 4 × `STA &FFFF,X` base addresses: `base` → `base + 32`.
+
+`INY` at the top of `.decode_byte` is direction-independent —
+source advance is unchanged. Total mirror overhead is paid once
+per sprite-mirror call, zero cost in the inner loop. Horizontal
+mirror is harder (per-byte pixel-bit reverse needs a separate
+LUT bank) but also free at decode time once the bank is built.
+
+### Doc state
+
+`docs/sprite_rle_notes.md` updated to v3:
+
+* Final scheme C decoder code with cycle annotations.
+* Cost comparison table with v3 numbers.
+* "Pre-XOR the LUT to drop the EOR? — analysed and dropped"
+  subsection.
+* "Vertical mirror via self-mod" subsection.
+* Recommendation tightened to drop the LUT-preXOR claim
+  (no longer needed: scheme C matches scheme B's speed on the
+  current corpus without it).
+
+The tool implementation (`tools/sprite_rle.py`) still hasn't
+landed — next step on the RLE thread when we return to it.
+Today's session was design-only refinement.
+
+---
+
 ## 2026-05-19 — Session 36: engine overview document + force-field render fixes
 
 Rich asked for a single-page tour of how the engine actually
