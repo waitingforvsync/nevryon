@@ -4,6 +4,190 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-21 — Session 39: scheme-C survey extended, hazard terminology, per-level README hazard-ptr fix
+
+Wrapping the sprite-RLE thread for now: built the first cut of
+`tools/sprite_rle.py`, ran a game-wide survey under Scheme C,
+worked out per-stage memory footprint, and along the way fixed
+two layers of stale terminology in the docs.
+
+### Scheme C survey — game-wide footprint
+
+Built `tools/sprite_rle.py` (encoder + decoder + survey) for
+scheme C as documented in `sprite_rle_notes.md`: max run 10,
+count = `b + 3`, column-bounded, per-sprite FLAG chosen as the
+first unused 5-bit prefix. Round-trip verified across all 211
+4×32 sprites used by the remake:
+
+* 72 tiles (4 scenarios × 18)
+* 112 LEVD hazards (4 scenarios × 2 stages × 14)
+* 24 explosion frames (4 scenarios × 6 frames)
+* 3 GRAPHIX-resident hazards (slots 15/16/19, shared
+  game-wide)
+
+| Category    | Sprites | Raw    | C-data | Ratio |
+|-------------|--------:|-------:|-------:|------:|
+| Tiles       |      72 |  9 216 |  6 134 | 66.6 %|
+| LEVD hazard |     112 | 14 336 | 11 212 | 78.2 %|
+| GRAPHIX haz |       3 |    384 |    299 | 77.9 %|
+| Explosions  |      24 |  3 072 |  2 226 | 72.5 %|
+| **TOTAL**   | **211** | 27 008 | **19 871** | **73.6 %** |
+
+### Per-stage memory footprint
+
+The remake's runtime working set per stage: 41 sprites loaded
+simultaneously = 18 tiles + 14 LEVD hazards + 6 explosions
++ 3 GRAPHIX. Tiles and explosions are scenario-shared between
+the two stages; GRAPHIX hazards are game-shared. Per-sprite
+metadata = `{flag, base_addr, col_offsets[4]}` = 7 B, agreed
+with Rich.
+
+|  Stage |  data | meta | total |  raw  | % raw  |
+|--------|------:|-----:|------:|------:|-------:|
+|  L1S1  | 3 946 |  287 | 4 233 | 5 248 | 80.7 % |
+|  L1S2  | 4 055 |  287 | 4 342 | 5 248 | 82.7 % |
+|  L2S1  | 3 362 |  287 | 3 649 | 5 248 | 69.5 % |
+|  L2S2  | 3 309 |  287 | 3 596 | 5 248 | 68.5 % |
+|  L3S1  | 3 598 |  287 | 3 885 | 5 248 | 74.0 % |
+|  L3S2  | 3 578 |  287 | 3 865 | 5 248 | 73.6 % |
+|  L4S1  | 4 297 |  287 | 4 584 | 5 248 | 87.3 % |
+|  L4S2  | 4 179 |  287 | 4 466 | 5 248 | 85.1 % |
+
+Worst stage L4S1 = 4 584 B (87.3 % of raw). Average **4 078 B
+per stage** (4.0 KB). Worst-case fits in a 4.5 KB sprite RAM
+arena.
+
+### Tile-row correction in `sprite_rle_notes.md`
+
+Rich noticed the survey table had "Scheme C tile" values of
+~1 442 per scenario but my encoder produced ~1 763. Verified
+by implementing a faithful Scheme A (per-set FLAG with c+1
+escape) — it also produced 1 763 for L1 tiles. So both schemes
+agree under the documented spec; the doc's earlier tile rows
+were from an uncommitted prototype that allowed longer runs or
+different code semantics, never reproducible by a faithful
+spec implementation. Hazard rows matched exactly (1 331 etc.),
+so the encoder is verified correct against the spec — only the
+tile rows were stale. Doc updated with corrected numbers + a
+note about the discrepancy.
+
+### Terminology cleanup: hazards everywhere
+
+The disasm canonicalised `lev_hazard_ptr_*` and
+`gfx_hazard_slot*` ages ago, but `tools/render_level.py`,
+`docs/file_layout.md`, and `CLAUDE.md` were still referring to
+the 32-slot pointer table and the GRAPHIX-resident hazards as
+"enemy_*". Rich flagged it on the per-level READMEs — those are
+generated, so the rename had to happen in the generator:
+
+* `tools/render_level.py` constants: `LEVD2_ENEMY_OFF/COUNT` →
+  `LEVD2_HAZARD_OFF/COUNT`, `ENEMY_PTR_LO/HI_OFF` →
+  `HAZARD_PTR_LO/HI_OFF`, `N_ENEMY_SLOTS` → `N_HAZARD_SLOTS`,
+  `DEATH_ANIM_SLOTS` → `EXPLOSION_ALIAS_SLOTS`.
+  `GRAPHIX_SLOT_LABELS` values flipped to `gfx_hazard_slot*`.
+  README text: "a hazard of type N", "`lev_hazard_ptr_*`"
+  throughout.
+* `tools/sprite_rle.py` imports updated to match.
+* `CLAUDE.md`: two `lev_enemy_ptr_*` mentions → `lev_hazard_ptr_*`.
+* `docs/file_layout.md`: three `gfx_enemy_slot*` rows →
+  `gfx_hazard_slot*`. (Kept legit `enemy_*` PNGs — those are the
+  4×24 small-flying-enemy / enemy-hit sprites driven by the
+  L1BE3 state machine, which ARE enemies.)
+
+### `file_layout.md` LEVD1 / LEVD2 sections were stale
+
+While auditing the rename, Rich spotted that the LEVD1 byte
+map's "Decoration sprite bank" row at `&4A00..&4E7F` was wrong
+in several ways. Rewrote the LEVD1 section to match the
+per-level READMEs:
+
+* `&4A00..&4BFF` (512 B) — player-explosion frames 0..3, aliased
+  as `lev_hazard_ptr_*[21..24]`.
+* `&4C00..&4C1F` (32 B) — zero-pad.
+* `&4C20..&4E6F` (592 B) — small-flying-enemy animation strip
+  (7 × 4×24, adjacent frames share a column).
+* `&4E70..&4E7F` (16 B) — trailing zero-pad.
+* `&4E80..&4F03` (132 B) — player ship sprite (NOT 128 B as
+  previously stated).
+* `&4F00..&57FF` — tile catalog (18 × 128 B, all slots present).
+
+Also fixed in `file_layout.md`:
+
+* `&7C00`/`&7C80` were labelled "shootable item sprite — intact
+  / damaged frame" → corrected to player-explosion frames 4 / 5
+  (aliased `lev_hazard_ptr_*[25/26]`).
+* "Includes the 8 frames of the hazard death-anim used by
+  `hazard_death_step` at types `&14..&1B`" → this was wrong.
+  The death-anim does NOT live in the 14-sprite block; per the
+  disasm comment, `hazard_death_step` walks `hazard_type`
+  `&14..&1B` and the renderer indexes
+  `lev_hazard_ptr_*[20..27]` — that's slot 20 (unused), slots
+  21..26 (the 6 player-explosion frames), slot 27 (erase brush).
+  So a dying hazard plays the **same** 6-frame explosion as the
+  player's death.
+* LEVD3 section rewrote with corrected per-slot description
+  (slots 21..24 = LEVD1 *explosion frames 0..3*, slots 25..26 =
+  LEVD2 *explosion frames 4..5*).
+
+### Per-level README hazard-ptr table — slots 1..14 fixed
+
+The `lev_hazard_ptr_lo / lev_hazard_ptr_hi` table in each
+`levels/<n>/README.md` was broken — slots 1..14 all showed
+`*(no sprite — points at &7380)*` etc., because the slot
+resolver was only fed the LEVD1+explosion blocks, never the
+per-stage hazard SpriteBlock lists. Fixed by passing
+`hazard_blocks_s1` and `hazard_blocks_s2` into `write_readme`
+and adding a dedicated branch that resolves `&7380..&7A7F`
+addresses against both stages — each slot 1..14 now shows
+`hazard_stage1_NN.png / hazard_stage2_NN.png (S1 / S2)`. Slot
+0 and slot 27 also now decode `&7D80` as `lev_erase_brush + &80`
+instead of `*(no sprite)*`.
+
+### Hazard-ptr slots 17/18 — what they actually are
+
+While reviewing the table Rich asked what slots 17/18
+represent. Mechanically: aliases of `lev_tile_catalog` tile 5
+(`&5180`) and tile 4 (`&5100`). Cross-referenced against the
+spawn schedules — these always spawn as **adjacent column pairs**
+(`type 17` at col N + `type 18` at col N+1, matching y-row and
+v-flip), so each pair is a 32 × 32 px composite hazard textured
+with the local map tiles. Confirmed across all 14 type-17/18
+spawn pairs in the survey:
+
+| Stage | Pair locations |
+|---|---|
+| L1S1 | `&74/&75`, `&7B/&7C`, `&92/&93` (ceiling+floor) |
+| L2S1 | `&2C/&2D` (stacked top), `&CB/&CC` (ceiling+floor) |
+| L2S2 | `&7F/&80` (ceiling+floor) |
+| L3S1 | `&A3/&A4` (floor) |
+| L4S2 | `&71/&72` (ceiling), `&D3/&D4` (ceiling+floor) |
+
+Saves 256 B of sprite storage per scenario by reusing map-tile
+bytes; visually the result reads as a tile-textured 2×1 block
+that can be shot away.
+
+### Files
+
+* **new**: `tools/sprite_rle.py` — Scheme C encoder + decoder +
+  game-wide survey CLI (round-trips all 211 sprites).
+* **modified**: `tools/render_level.py` — constant renames,
+  hazard-ptr resolver fix.
+* **modified**: `docs/sprite_rle_notes.md` — corrected tile
+  rows + extended survey + per-stage footprint + metadata
+  agreed at 7 B/sprite.
+* **modified**: `docs/file_layout.md` — LEVD1 byte map
+  rewritten, LEVD2 row fixes, LEVD3 section rewritten with
+  hazard terminology.
+* **modified**: `CLAUDE.md` — two `lev_enemy_ptr_*` → `lev_hazard_ptr_*`.
+* **modified**: `levels/{1,2,3,4}/README.md` — regenerated;
+  hazard-ptr table now shows PNG cross-refs for all 32 slots.
+
+Next on the RLE thread (if/when Rich comes back to it): land
+the encoder format on disk (per-sprite directory layout), then
+build the BeebAsm decoder against the cycle budget.
+
+---
+
 ## 2026-05-21 — Session 38: sprite-RLE scheme C decoder, final form
 
 Rich iterated the scheme C decoder (per-sprite 5+3 with XOR

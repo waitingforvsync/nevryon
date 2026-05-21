@@ -35,7 +35,7 @@ LEVD1_LOAD = 0x4A00
 LEVD2_LOAD = 0x7380
 GRAPHIX_LOAD = 0x3680
 
-LEVD1_EXPLOSION_OFF   = 0x000   # &4A00..&4BFF — frames 0..3 of the 6-frame player explosion (= lev_enemy_ptr_*[21..24])
+LEVD1_EXPLOSION_OFF   = 0x000   # &4A00..&4BFF — frames 0..3 of the 6-frame player explosion (= lev_hazard_ptr_*[21..24])
 LEVD1_EXPLOSION_COUNT = 4
 # &4C00..&4E7F contains the per-scenario small-enemy animation strip
 # read by the L1BE3 state machine in CODE. Each frame is 4 byte-cols
@@ -60,11 +60,11 @@ PLAYER_H_LINES    = 22
 TILE_CATALOG_OFF  = 0x500   # &4F00 — 18 tile slots
 TILE_COUNT        = 18
 
-LEVD2_ENEMY_OFF   = 0x000   # &7380..&7A7F — 14 × 128-byte primary enemy sprites
-LEVD2_ENEMY_COUNT = 14
-ENEMY_PTR_LO_OFF  = 0x700   # &7A80
-ENEMY_PTR_HI_OFF  = 0x740   # &7AC0
-N_ENEMY_SLOTS     = 32
+LEVD2_HAZARD_OFF   = 0x000  # &7380..&7A7F — 14 × 128-byte hazard sprites
+LEVD2_HAZARD_COUNT = 14
+HAZARD_PTR_LO_OFF = 0x700   # &7A80
+HAZARD_PTR_HI_OFF = 0x740   # &7AC0
+N_HAZARD_SLOTS    = 32
 SPAWN_COL_OFF     = 0x780   # &7B00
 SPAWN_ATTR_OFF    = 0x800   # &7B80
 SPAWN_TABLE_LEN   = 128
@@ -83,8 +83,8 @@ SPRITE_W_COLS     = 4
 SPRITE_H_LINES    = 32
 
 
-# Death-anim source pointers are the alias of enemy_ptr_*[21..26]
-DEATH_ANIM_SLOTS = list(range(21, 27))
+# Explosion frames alias slots 21..26 of lev_hazard_ptr_*.
+EXPLOSION_ALIAS_SLOTS = list(range(21, 27))
 
 
 # ---- per-LEVD inventory builder ---------------------------------------
@@ -164,8 +164,8 @@ def build_hazard_blocks(stage: int) -> list[SpriteBlock]:
     stage 1, LEVD3 for stage 2 — same offsets within the file."""
     src_file = 'LEVD2' if stage == 1 else 'LEVD3'
     blocks: list[SpriteBlock] = []
-    for i in range(LEVD2_ENEMY_COUNT):
-        off = LEVD2_ENEMY_OFF + i * SPRITE_SIZE
+    for i in range(LEVD2_HAZARD_COUNT):
+        off = LEVD2_HAZARD_OFF + i * SPRITE_SIZE
         blocks.append(SpriteBlock(src_file, off, LEVD2_LOAD + off,
                                   SPRITE_SIZE, SPRITE_W_COLS, SPRITE_H_LINES,
                                   f'hazard_stage{stage}_{i:02d}'))
@@ -330,8 +330,8 @@ def render_map_with_hazards(levd1: bytes, levd2: bytes, graphix: bytes,
     rgb_bytes, w, h = render_map_strip(levd1, stage_levd, palette)
     img = bytearray(rgb_bytes)
     tile_px_w = SPRITE_W_COLS * 4    # 16
-    enemy_ptr_lo = stage_levd[ENEMY_PTR_LO_OFF:ENEMY_PTR_LO_OFF + N_ENEMY_SLOTS]
-    enemy_ptr_hi = stage_levd[ENEMY_PTR_HI_OFF:ENEMY_PTR_HI_OFF + N_ENEMY_SLOTS]
+    hazard_ptr_lo = stage_levd[HAZARD_PTR_LO_OFF:HAZARD_PTR_LO_OFF + N_HAZARD_SLOTS]
+    hazard_ptr_hi = stage_levd[HAZARD_PTR_HI_OFF:HAZARD_PTR_HI_OFF + N_HAZARD_SLOTS]
     spawn_cols = stage_levd[SPAWN_COL_OFF:SPAWN_COL_OFF + SPAWN_TABLE_LEN]
     spawn_attrs = stage_levd[SPAWN_ATTR_OFF:SPAWN_ATTR_OFF + SPAWN_TABLE_LEN]
     for col, attr in zip(spawn_cols, spawn_attrs):
@@ -347,7 +347,7 @@ def render_map_with_hazards(levd1: bytes, levd2: bytes, graphix: bytes,
         # data (i.e. the LEVD3 overlay on stage 2) so hazard sprites
         # come from the right stage. levd2 is passed through so
         # resolve_sprite's bounds-check on LEVD2_LOAD still works.
-        addr = (enemy_ptr_hi[slot_type] << 8) | enemy_ptr_lo[slot_type]
+        addr = (hazard_ptr_hi[slot_type] << 8) | hazard_ptr_lo[slot_type]
         resolved = resolve_sprite(addr, levd1, stage_levd, graphix)
         if resolved is not None:
             data, off, _ = resolved
@@ -463,14 +463,16 @@ PALETTE_NAMES = {
 # referenced here so the slot map can show the GRAPHIX label for the
 # slots that don't get a per-level PNG.
 GRAPHIX_SLOT_LABELS = {
-    0x3700: 'gfx_enemy_slot15',
-    0x3780: 'gfx_enemy_slot16',
-    0x4360: 'gfx_enemy_slot19',
+    0x3700: 'gfx_hazard_slot15',
+    0x3780: 'gfx_hazard_slot16',
+    0x4360: 'gfx_hazard_slot19',
 }
 
 
 def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
-                 levd3: bytes, blocks: list[SpriteBlock]):
+                 levd3: bytes, blocks: list[SpriteBlock],
+                 hazard_blocks_s1: list[SpriteBlock],
+                 hazard_blocks_s2: list[SpriteBlock]):
     spawns_s1 = sum(1 for c in levd2[SPAWN_COL_OFF:SPAWN_COL_OFF + SPAWN_TABLE_LEN] if c != 0xFF)
     s2 = stage_data(level, 2, levd2, levd3)
     spawns_s2 = sum(1 for c in s2[SPAWN_COL_OFF:SPAWN_COL_OFF + SPAWN_TABLE_LEN] if c != 0xFF)
@@ -480,37 +482,46 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
     explosion_lo = [by_label[f'explosion_{i:02d}'] for i in range(LEVD1_EXPLOSION_COUNT)]
     enemy_anim_sp = [by_label[lab] for _, lab in ENEMY_ANIM_OFFS]
     tile_sprite = [by_label[f'tile_{i:02d}'] for i in range(TILE_COUNT)]
-    # Hazard sprites are per-stage (LEVD2 vs LEVD3); rendered separately.
-    # The README references them as a count rather than by-label lookup
-    # since the SpriteBlock list passed in only contains the shared
-    # LEVD1/LEVD2 inventory.
-    hazard_count = LEVD2_ENEMY_COUNT
+    hazard_count = LEVD2_HAZARD_COUNT
     explosion_04 = by_label['explosion_04']
     explosion_05 = by_label['explosion_05']
     player_sprite = by_label['player_sprite']
     explosion_all = explosion_lo + [explosion_04, explosion_05]
 
-    # The 32 enemy-pointer slots, expressed as where each address resolves.
-    enemy_slot_rows = []
-    for slot in range(N_ENEMY_SLOTS):
-        lo = levd2[ENEMY_PTR_LO_OFF + slot]
-        hi = levd2[ENEMY_PTR_HI_OFF + slot]
+    # The 32 hazard-pointer slots, expressed as where each address resolves.
+    # Slots 1..14 land in the per-stage hazard block (different bytes in
+    # LEVD2 vs LEVD3 → different PNGs per stage), so resolve those against
+    # both stage block lists.
+    hazard_slot_rows = []
+    for slot in range(N_HAZARD_SLOTS):
+        lo = levd2[HAZARD_PTR_LO_OFF + slot]
+        hi = levd2[HAZARD_PTR_HI_OFF + slot]
         addr = (hi << 8) | lo
-        sp = find_sprite_for_addr(blocks, addr)
+
         if addr == 0:
             target = '*(unused — pointer pair is &0000)*'
-        elif sp is None and GRAPHIX_LOAD <= addr < GRAPHIX_LOAD + 0x1380:
+        elif addr == LEVD2_LOAD + ERASE_BRUSH_OFF + 0x80:   # &7D80
+            target = '`lev_erase_brush + &80` *(all-zero erase rectangle)*'
+        elif (LEVD2_LOAD + LEVD2_HAZARD_OFF <= addr <
+              LEVD2_LOAD + LEVD2_HAZARD_OFF + hazard_count * SPRITE_SIZE):
+            # Per-stage hazard sprite — point at both stages' PNGs
+            sp1 = find_sprite_for_addr(hazard_blocks_s1, addr)
+            sp2 = find_sprite_for_addr(hazard_blocks_s2, addr)
+            target = (f'`{sp1.filename}` / `{sp2.filename}` (S1 / S2)'
+                      if sp1 and sp2 else f'*(unresolved at &{addr:04X})*')
+        elif GRAPHIX_LOAD <= addr < GRAPHIX_LOAD + 0x1380:
             target = f'GRAPHIX `{GRAPHIX_SLOT_LABELS.get(addr, f"&{addr:04X}")}` *(not exported here)*'
-        elif sp is None:
-            # Could be erase brush (&7D80) or some other reference
-            target = f'*(no sprite — points at &{addr:04X})*'
         else:
-            off_in_sprite = addr - sp.cpu_addr
-            if off_in_sprite == 0:
-                target = f'`{sp.filename}` ({sp.label})'
+            sp = find_sprite_for_addr(blocks, addr)
+            if sp is None:
+                target = f'*(no sprite — points at &{addr:04X})*'
             else:
-                target = f'`{sp.filename}` ({sp.label}) at +{off_in_sprite:#x}'
-        enemy_slot_rows.append((slot, addr, target))
+                off_in_sprite = addr - sp.cpu_addr
+                if off_in_sprite == 0:
+                    target = f'`{sp.filename}` ({sp.label})'
+                else:
+                    target = f'`{sp.filename}` ({sp.label}) at +{off_in_sprite:#x}'
+        hazard_slot_rows.append((slot, addr, target))
 
     with open(path, 'w') as f:
         f.write(f"# Level {level}\n\n")
@@ -528,7 +539,7 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
         f.write("all of the per-level sprite data:\n\n")
         f.write("| Category | Files | What it is |\n")
         f.write("|----------|-------|------------|\n")
-        f.write("| `explosion_NN` | `explosion_00..05` | The 6 frames of the player death-explosion animation. Frames 00..03 live in LEVD1 (`&4A00..&4BFF`); frames 04..05 live in LEVD2 (`&7C00..&7CFF`). The same 6 byte-pairs also appear in `lev_enemy_ptr_*` slots 21..26 — that's how `death_anim` (CODE `&1E47`) reaches them. |\n")
+        f.write("| `explosion_NN` | `explosion_00..05` | The 6 frames of the player death-explosion animation. Frames 00..03 live in LEVD1 (`&4A00..&4BFF`); frames 04..05 live in LEVD2 (`&7C00..&7CFF`). The same 6 byte-pairs also appear in `lev_hazard_ptr_*` slots 21..26 — that's how `death_anim` (CODE `&1E47`) reaches them. |\n")
         f.write("| `enemy_NN` | `enemy_00..03` | 4 frames of the per-scenario small flying enemy. 4×24 (96 B) each; the state machine in CODE `L1BE3` cycles through these as states 1..4. |\n")
         f.write("| `enemy_hit_NN` | `enemy_hit_01..03` | 3 frames of the same enemy's hit / destruction cycle. 4×24 (96 B) each; state machine states `&0A..&0C`. Numbered 01..03 to keep the index in step with the state-machine state values (the LEVD1 designer left `enemy_hit_00` empty / unused). |\n")
         f.write("| `player_sprite` | `player_sprite` | The 6×22 (132 B) player ship at LEVD1 `&4E80`. |\n")
@@ -581,20 +592,23 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
             note = '**all-zero (blank tile)**' if not any(tile_bytes) else ''
             f.write(f"| {tid:7d} | `&{sp.cpu_addr:04X}` | `{sp.filename}` | {note} |\n")
 
-        f.write(f"\n### `lev_enemy_ptr_lo` / `lev_enemy_ptr_hi` (&7A80 / &7AC0, 32 slots)\n\n")
-        f.write("`lev_enemy_ptr_*[N]` is read whenever an enemy of type N\n")
-        f.write("(bits 0..4 of `lev_spawn_attr`) is plotted.\n\n")
+        f.write(f"\n### `lev_hazard_ptr_lo` / `lev_hazard_ptr_hi` (&7A80 / &7AC0, 32 slots)\n\n")
+        f.write("`lev_hazard_ptr_*[N]` is read whenever a hazard of type N\n")
+        f.write("(bits 0..4 of `lev_spawn_attr`) is plotted. Slots 1..14 are\n")
+        f.write("per-stage — same pointer in LEVD2 and LEVD3, but the bytes\n")
+        f.write("they point at differ, so each slot resolves to a different\n")
+        f.write("PNG per stage (shown as `stage1 / stage2`).\n\n")
         f.write("| Slot | Pointer | Resolves to | Aliases |\n")
         f.write("|-----:|---------|-------------|---------|\n")
-        for slot, addr, target in enemy_slot_rows:
+        for slot, addr, target in hazard_slot_rows:
             aliases = []
-            if slot in DEATH_ANIM_SLOTS:
+            if slot in EXPLOSION_ALIAS_SLOTS:
                 aliases.append(f"`lev_explosion_ptr_*[{slot - 21}]` (= explosion frame {slot - 21})")
             alias_str = ', '.join(aliases) if aliases else ''
             f.write(f"| {slot:4d} | `&{addr:04X}` | {target} | {alias_str} |\n")
 
         f.write(f"\n### `lev_explosion_ptr_lo` / `lev_explosion_ptr_hi` (&7A95 / &7AD5, 6 entries)\n\n")
-        f.write("**Same physical bytes** as `lev_enemy_ptr_*[21..26]`. The\n")
+        f.write("**Same physical bytes** as `lev_hazard_ptr_*[21..26]`. The\n")
         f.write("6-frame player-death explosion (CODE `death_anim` at\n")
         f.write("`&1E47`) reads its source pointers here. Each frame is\n")
         f.write("plotted as 4×32 (so frames 0..3 use the *full* 128-B\n")
@@ -607,8 +621,8 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
         f.write("|------:|---------|-------------|\n")
         for i in range(6):
             slot = 21 + i
-            lo = levd2[ENEMY_PTR_LO_OFF + slot]
-            hi = levd2[ENEMY_PTR_HI_OFF + slot]
+            lo = levd2[HAZARD_PTR_LO_OFF + slot]
+            hi = levd2[HAZARD_PTR_HI_OFF + slot]
             addr = (hi << 8) | lo
             sp = find_sprite_for_addr(blocks, addr)
             tgt = f'`{sp.filename}` ({sp.label})' if sp else f'&{addr:04X} (no sprite resolved)'
@@ -623,7 +637,7 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
         f.write("|----------|----------|-----:|---------|\n")
         for i, sp in enumerate(explosion_lo):
             f.write(f"| `{sp.file_off:#06x}` | `&{sp.cpu_addr:04X}` | {sp.size:4d} | "
-                    f"`{sp.filename}` — explosion frame {i} (also `lev_enemy_ptr_*[{21 + i}]`) |\n")
+                    f"`{sp.filename}` — explosion frame {i} (also `lev_hazard_ptr_*[{21 + i}]`) |\n")
         # 32 B zero pad before the first enemy frame
         f.write(f"| `0x0200` | `&4C00` |   32 | zero-pad |\n")
         # enemy animation frames — describe overlap with previous where applicable
@@ -656,17 +670,17 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
         f.write("| File off | CPU addr | Size | Content |\n")
         f.write("|----------|----------|-----:|---------|\n")
         for i in range(hazard_count):
-            off = LEVD2_ENEMY_OFF + i * SPRITE_SIZE
+            off = LEVD2_HAZARD_OFF + i * SPRITE_SIZE
             f.write(f"| `{off:#06x}` | `&{LEVD2_LOAD + off:04X}` | {SPRITE_SIZE:4d} | "
                     f"`hazard_stage1_{i:02d}.png` (= `lev_hazard_ptr_*[{i + 1}]` for stage 1) |\n")
-        f.write(f"| `{ENEMY_PTR_LO_OFF:#06x}` | `&{LEVD2_LOAD + ENEMY_PTR_LO_OFF:04X}` |   64 | `lev_enemy_ptr_lo` (32 × 1-byte) |\n")
-        f.write(f"| `{ENEMY_PTR_HI_OFF:#06x}` | `&{LEVD2_LOAD + ENEMY_PTR_HI_OFF:04X}` |   64 | `lev_enemy_ptr_hi` (32 × 1-byte) |\n")
+        f.write(f"| `{HAZARD_PTR_LO_OFF:#06x}` | `&{LEVD2_LOAD + HAZARD_PTR_LO_OFF:04X}` |   64 | `lev_hazard_ptr_lo` (32 × 1-byte) |\n")
+        f.write(f"| `{HAZARD_PTR_HI_OFF:#06x}` | `&{LEVD2_LOAD + HAZARD_PTR_HI_OFF:04X}` |   64 | `lev_hazard_ptr_hi` (32 × 1-byte) |\n")
         f.write(f"| `{SPAWN_COL_OFF:#06x}` | `&{LEVD2_LOAD + SPAWN_COL_OFF:04X}` |  128 | `lev_spawn_col` (sorted asc, `&FF` end) |\n")
         f.write(f"| `{SPAWN_ATTR_OFF:#06x}` | `&{LEVD2_LOAD + SPAWN_ATTR_OFF:04X}` |  128 | `lev_spawn_attr` |\n")
         f.write(f"| `{explosion_04.file_off:#06x}` | `&{explosion_04.cpu_addr:04X}` | {explosion_04.size:4d} | "
-                f"`{explosion_04.filename}` — explosion frame 4 (also `lev_enemy_ptr_*[25]`) |\n")
+                f"`{explosion_04.filename}` — explosion frame 4 (also `lev_hazard_ptr_*[25]`) |\n")
         f.write(f"| `{explosion_05.file_off:#06x}` | `&{explosion_05.cpu_addr:04X}` | {explosion_05.size:4d} | "
-                f"`{explosion_05.filename}` — explosion frame 5 (also `lev_enemy_ptr_*[26]`) |\n")
+                f"`{explosion_05.filename}` — explosion frame 5 (also `lev_hazard_ptr_*[26]`) |\n")
         f.write(f"| `{ERASE_BRUSH_OFF:#06x}` | `&{LEVD2_LOAD + ERASE_BRUSH_OFF:04X}` |  272 | `lev_erase_brush` — all zeros |\n")
         f.write(f"| `{MAP_UPPER_OFF:#06x}` | `&{LEVD2_LOAD + MAP_UPPER_OFF:04X}` |  240 | `lev_map_upper` (one tile id per scroll col) |\n")
         f.write(f"| `{MAP_PAD_OFF:#06x}` | `&{LEVD2_LOAD + MAP_PAD_OFF:04X}` |   16 | gap / pad between the two map streams |\n")
@@ -712,10 +726,10 @@ def write_readme(path: str, level: int, levd1: bytes, levd2: bytes,
         f.write("- **Red** — `v-flip = 1`.\n")
         f.write("- **Yellow** — `type = 7` (force-field; renderer generates pixels via `lfsr_random`, no fixed sprite).\n\n")
         f.write("### Hazard-overlay notes (in `map_with_hazards_*.png`)\n\n")
-        f.write("- Sprites are plotted at their resolved `lev_enemy_ptr_*` address with the level palette.\n")
+        f.write("- Sprites are plotted at their resolved `lev_hazard_ptr_*` address with the level palette.\n")
         f.write("- Bit-7 v-flip is honoured — paired spawns at the same column produce ceiling-hanging + floor-rising decoration.\n")
         f.write("- `type = 7` (force-field) spawns appear as a 16×32 yellow box — the real one is a procedural noise strip (`forcefield_render`) and has no fixed sprite.\n")
-        f.write("- Sprites whose `lev_enemy_ptr_*` slot resolves into GRAPHIX (slots 15 / 16 / 19) are drawn from `$.GRAPHIX` with the level palette so they pick up the per-scenario colours.\n")
+        f.write("- Sprites whose `lev_hazard_ptr_*` slot resolves into GRAPHIX (slots 15 / 16 / 19) are drawn from `$.GRAPHIX` with the level palette so they pick up the per-scenario colours.\n")
 
         # ---- Raw data dumps
         f.write("\n## Raw data dumps (`data/`)\n\n")
@@ -776,7 +790,8 @@ def build_level(level: int):
             f.write(st[MAP_LOWER_OFF:MAP_LOWER_OFF + MAP_TABLE_LEN])
         write_spawn_table(f'{out_dir}/spawn_table_stage{stage}.md', st, stage)
 
-    write_readme(f'{out_dir}/README.md', level, levd1, levd2, levd3, blocks)
+    write_readme(f'{out_dir}/README.md', level, levd1, levd2, levd3, blocks,
+                 hazard_blocks_s1, hazard_blocks_s2)
     print(f'  level {level}: wrote {len(blocks)} sprite PNGs to {out_dir}/')
 
 

@@ -15,7 +15,7 @@ all of the per-level sprite data:
 
 | Category | Files | What it is |
 |----------|-------|------------|
-| `explosion_NN` | `explosion_00..05` | The 6 frames of the player death-explosion animation. Frames 00..03 live in LEVD1 (`&4A00..&4BFF`); frames 04..05 live in LEVD2 (`&7C00..&7CFF`). The same 6 byte-pairs also appear in `lev_enemy_ptr_*` slots 21..26 — that's how `death_anim` (CODE `&1E47`) reaches them. |
+| `explosion_NN` | `explosion_00..05` | The 6 frames of the player death-explosion animation. Frames 00..03 live in LEVD1 (`&4A00..&4BFF`); frames 04..05 live in LEVD2 (`&7C00..&7CFF`). The same 6 byte-pairs also appear in `lev_hazard_ptr_*` slots 21..26 — that's how `death_anim` (CODE `&1E47`) reaches them. |
 | `enemy_NN` | `enemy_00..03` | 4 frames of the per-scenario small flying enemy. 4×24 (96 B) each; the state machine in CODE `L1BE3` cycles through these as states 1..4. |
 | `enemy_hit_NN` | `enemy_hit_01..03` | 3 frames of the same enemy's hit / destruction cycle. 4×24 (96 B) each; state machine states `&0A..&0C`. Numbered 01..03 to keep the index in step with the state-machine state values (the LEVD1 designer left `enemy_hit_00` empty / unused). |
 | `player_sprite` | `player_sprite` | The 6×22 (132 B) player ship at LEVD1 `&4E80`. |
@@ -110,33 +110,36 @@ Always `player_sprite.png` — the only entry in this table.
 |      16 | `&5700` | `tile_16.png` |  |
 |      17 | `&5780` | `tile_17.png` |  |
 
-### `lev_enemy_ptr_lo` / `lev_enemy_ptr_hi` (&7A80 / &7AC0, 32 slots)
+### `lev_hazard_ptr_lo` / `lev_hazard_ptr_hi` (&7A80 / &7AC0, 32 slots)
 
-`lev_enemy_ptr_*[N]` is read whenever an enemy of type N
-(bits 0..4 of `lev_spawn_attr`) is plotted.
+`lev_hazard_ptr_*[N]` is read whenever a hazard of type N
+(bits 0..4 of `lev_spawn_attr`) is plotted. Slots 1..14 are
+per-stage — same pointer in LEVD2 and LEVD3, but the bytes
+they point at differ, so each slot resolves to a different
+PNG per stage (shown as `stage1 / stage2`).
 
 | Slot | Pointer | Resolves to | Aliases |
 |-----:|---------|-------------|---------|
-|    0 | `&7D80` | *(no sprite — points at &7D80)* |  |
-|    1 | `&7380` | *(no sprite — points at &7380)* |  |
-|    2 | `&7400` | *(no sprite — points at &7400)* |  |
-|    3 | `&7480` | *(no sprite — points at &7480)* |  |
-|    4 | `&7500` | *(no sprite — points at &7500)* |  |
-|    5 | `&7580` | *(no sprite — points at &7580)* |  |
-|    6 | `&7600` | *(no sprite — points at &7600)* |  |
-|    7 | `&7680` | *(no sprite — points at &7680)* |  |
-|    8 | `&7700` | *(no sprite — points at &7700)* |  |
-|    9 | `&7780` | *(no sprite — points at &7780)* |  |
-|   10 | `&7800` | *(no sprite — points at &7800)* |  |
-|   11 | `&7880` | *(no sprite — points at &7880)* |  |
-|   12 | `&7900` | *(no sprite — points at &7900)* |  |
-|   13 | `&7980` | *(no sprite — points at &7980)* |  |
-|   14 | `&7A00` | *(no sprite — points at &7A00)* |  |
-|   15 | `&3700` | GRAPHIX `gfx_enemy_slot15` *(not exported here)* |  |
-|   16 | `&3780` | GRAPHIX `gfx_enemy_slot16` *(not exported here)* |  |
+|    0 | `&7D80` | `lev_erase_brush + &80` *(all-zero erase rectangle)* |  |
+|    1 | `&7380` | `hazard_stage1_00.png` / `hazard_stage2_00.png` (S1 / S2) |  |
+|    2 | `&7400` | `hazard_stage1_01.png` / `hazard_stage2_01.png` (S1 / S2) |  |
+|    3 | `&7480` | `hazard_stage1_02.png` / `hazard_stage2_02.png` (S1 / S2) |  |
+|    4 | `&7500` | `hazard_stage1_03.png` / `hazard_stage2_03.png` (S1 / S2) |  |
+|    5 | `&7580` | `hazard_stage1_04.png` / `hazard_stage2_04.png` (S1 / S2) |  |
+|    6 | `&7600` | `hazard_stage1_05.png` / `hazard_stage2_05.png` (S1 / S2) |  |
+|    7 | `&7680` | `hazard_stage1_06.png` / `hazard_stage2_06.png` (S1 / S2) |  |
+|    8 | `&7700` | `hazard_stage1_07.png` / `hazard_stage2_07.png` (S1 / S2) |  |
+|    9 | `&7780` | `hazard_stage1_08.png` / `hazard_stage2_08.png` (S1 / S2) |  |
+|   10 | `&7800` | `hazard_stage1_09.png` / `hazard_stage2_09.png` (S1 / S2) |  |
+|   11 | `&7880` | `hazard_stage1_10.png` / `hazard_stage2_10.png` (S1 / S2) |  |
+|   12 | `&7900` | `hazard_stage1_11.png` / `hazard_stage2_11.png` (S1 / S2) |  |
+|   13 | `&7980` | `hazard_stage1_12.png` / `hazard_stage2_12.png` (S1 / S2) |  |
+|   14 | `&7A00` | `hazard_stage1_13.png` / `hazard_stage2_13.png` (S1 / S2) |  |
+|   15 | `&3700` | GRAPHIX `gfx_hazard_slot15` *(not exported here)* |  |
+|   16 | `&3780` | GRAPHIX `gfx_hazard_slot16` *(not exported here)* |  |
 |   17 | `&5180` | `tile_05.png` (tile_05) |  |
 |   18 | `&5100` | `tile_04.png` (tile_04) |  |
-|   19 | `&4360` | GRAPHIX `gfx_enemy_slot19` *(not exported here)* |  |
+|   19 | `&4360` | GRAPHIX `gfx_hazard_slot19` *(not exported here)* |  |
 |   20 | `&0000` | *(unused — pointer pair is &0000)* |  |
 |   21 | `&4A00` | `explosion_00.png` (explosion_00) | `lev_explosion_ptr_*[0]` (= explosion frame 0) |
 |   22 | `&4A80` | `explosion_01.png` (explosion_01) | `lev_explosion_ptr_*[1]` (= explosion frame 1) |
@@ -144,7 +147,7 @@ Always `player_sprite.png` — the only entry in this table.
 |   24 | `&4B80` | `explosion_03.png` (explosion_03) | `lev_explosion_ptr_*[3]` (= explosion frame 3) |
 |   25 | `&7C00` | `explosion_04.png` (explosion_04) | `lev_explosion_ptr_*[4]` (= explosion frame 4) |
 |   26 | `&7C80` | `explosion_05.png` (explosion_05) | `lev_explosion_ptr_*[5]` (= explosion frame 5) |
-|   27 | `&7D80` | *(no sprite — points at &7D80)* |  |
+|   27 | `&7D80` | `lev_erase_brush + &80` *(all-zero erase rectangle)* |  |
 |   28 | `&0000` | *(unused — pointer pair is &0000)* |  |
 |   29 | `&0000` | *(unused — pointer pair is &0000)* |  |
 |   30 | `&0000` | *(unused — pointer pair is &0000)* |  |
@@ -152,7 +155,7 @@ Always `player_sprite.png` — the only entry in this table.
 
 ### `lev_explosion_ptr_lo` / `lev_explosion_ptr_hi` (&7A95 / &7AD5, 6 entries)
 
-**Same physical bytes** as `lev_enemy_ptr_*[21..26]`. The
+**Same physical bytes** as `lev_hazard_ptr_*[21..26]`. The
 6-frame player-death explosion (CODE `death_anim` at
 `&1E47`) reads its source pointers here. Each frame is
 plotted as 4×32 (so frames 0..3 use the *full* 128-B
@@ -179,10 +182,10 @@ frames:
 
 | File off | CPU addr | Size | Content |
 |----------|----------|-----:|---------|
-| `0x0000` | `&4A00` |  128 | `explosion_00.png` — explosion frame 0 (also `lev_enemy_ptr_*[21]`) |
-| `0x0080` | `&4A80` |  128 | `explosion_01.png` — explosion frame 1 (also `lev_enemy_ptr_*[22]`) |
-| `0x0100` | `&4B00` |  128 | `explosion_02.png` — explosion frame 2 (also `lev_enemy_ptr_*[23]`) |
-| `0x0180` | `&4B80` |  128 | `explosion_03.png` — explosion frame 3 (also `lev_enemy_ptr_*[24]`) |
+| `0x0000` | `&4A00` |  128 | `explosion_00.png` — explosion frame 0 (also `lev_hazard_ptr_*[21]`) |
+| `0x0080` | `&4A80` |  128 | `explosion_01.png` — explosion frame 1 (also `lev_hazard_ptr_*[22]`) |
+| `0x0100` | `&4B00` |  128 | `explosion_02.png` — explosion frame 2 (also `lev_hazard_ptr_*[23]`) |
+| `0x0180` | `&4B80` |  128 | `explosion_03.png` — explosion frame 3 (also `lev_hazard_ptr_*[24]`) |
 | `0x0200` | `&4C00` |   32 | zero-pad |
 | `0x0220` | `&4C20` |   96 | `enemy_hit_01.png` |
 | `0x0268` | `&4C68` |   96 | `enemy_hit_02.png` — first 24 B (col 0) shared with previous frame's last col |
@@ -235,12 +238,12 @@ Total 3200 B. Every byte accounted for:
 | `0x0580` | `&7900` |  128 | `hazard_stage1_11.png` (= `lev_hazard_ptr_*[12]` for stage 1) |
 | `0x0600` | `&7980` |  128 | `hazard_stage1_12.png` (= `lev_hazard_ptr_*[13]` for stage 1) |
 | `0x0680` | `&7A00` |  128 | `hazard_stage1_13.png` (= `lev_hazard_ptr_*[14]` for stage 1) |
-| `0x0700` | `&7A80` |   64 | `lev_enemy_ptr_lo` (32 × 1-byte) |
-| `0x0740` | `&7AC0` |   64 | `lev_enemy_ptr_hi` (32 × 1-byte) |
+| `0x0700` | `&7A80` |   64 | `lev_hazard_ptr_lo` (32 × 1-byte) |
+| `0x0740` | `&7AC0` |   64 | `lev_hazard_ptr_hi` (32 × 1-byte) |
 | `0x0780` | `&7B00` |  128 | `lev_spawn_col` (sorted asc, `&FF` end) |
 | `0x0800` | `&7B80` |  128 | `lev_spawn_attr` |
-| `0x0880` | `&7C00` |  128 | `explosion_04.png` — explosion frame 4 (also `lev_enemy_ptr_*[25]`) |
-| `0x0900` | `&7C80` |  128 | `explosion_05.png` — explosion frame 5 (also `lev_enemy_ptr_*[26]`) |
+| `0x0880` | `&7C00` |  128 | `explosion_04.png` — explosion frame 4 (also `lev_hazard_ptr_*[25]`) |
+| `0x0900` | `&7C80` |  128 | `explosion_05.png` — explosion frame 5 (also `lev_hazard_ptr_*[26]`) |
 | `0x0980` | `&7D00` |  272 | `lev_erase_brush` — all zeros |
 | `0x0a90` | `&7E10` |  240 | `lev_map_upper` (one tile id per scroll col) |
 | `0x0b80` | `&7F00` |   16 | gap / pad between the two map streams |
@@ -279,10 +282,10 @@ Stage 1: **8 spawn events** | Stage 2: **79 spawn events**
 
 ### Hazard-overlay notes (in `map_with_hazards_*.png`)
 
-- Sprites are plotted at their resolved `lev_enemy_ptr_*` address with the level palette.
+- Sprites are plotted at their resolved `lev_hazard_ptr_*` address with the level palette.
 - Bit-7 v-flip is honoured — paired spawns at the same column produce ceiling-hanging + floor-rising decoration.
 - `type = 7` (force-field) spawns appear as a 16×32 yellow box — the real one is a procedural noise strip (`forcefield_render`) and has no fixed sprite.
-- Sprites whose `lev_enemy_ptr_*` slot resolves into GRAPHIX (slots 15 / 16 / 19) are drawn from `$.GRAPHIX` with the level palette so they pick up the per-scenario colours.
+- Sprites whose `lev_hazard_ptr_*` slot resolves into GRAPHIX (slots 15 / 16 / 19) are drawn from `$.GRAPHIX` with the level palette so they pick up the per-scenario colours.
 
 ## Raw data dumps (`data/`)
 

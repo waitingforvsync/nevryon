@@ -226,9 +226,9 @@ they hid the per-frame structure).
 | Tile catalog     | `lev_tile_catalog + N*&80`  | `tile_00..17`         | 4×32   | 128 each, 18 slots in LEVD1 |
 | Hazards          | `lev_hazard_0..13`          | `hazard_stage{1,2}_00..13` | 4×32   | 128 each, 14 in LEVD2 (stage 1) + 14 in LEVD3 (stage 2) — stages share offsets in the file, the sprite bytes differ. The 14 ptr LUT entries at `&7A80..&7A8D / &7AC0..&7ACD` are byte-identical between LEVD2 and LEVD3 in every scenario. |
 
-The 32-entry `lev_enemy_ptr_lo/hi` table also has fixed aliasing:
+The 32-entry `lev_hazard_ptr_lo/hi` table also has fixed aliasing:
 slots 21..26 are the explosion-frame source pointers
-(`lev_explosion_ptr_lo/hi` = `lev_enemy_ptr_*[21..26]`); slots
+(`lev_explosion_ptr_lo/hi` = `lev_hazard_ptr_*[21..26]`); slots
 17/18 reuse `lev_tile_catalog` tile 5/4 bytes; slots 15/16/19 point
 into `$.GRAPHIX`. See `docs/memory_map.md` and
 `levels/<n>/README.md` for the full index-to-sprite tables.

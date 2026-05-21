@@ -239,37 +239,85 @@ emitted, same total size).
 
 ## Survey results — round-trip verified
 
-`B` = scheme B (per-set, alt-block).
 `C-data` = scheme C compressed stream only (no per-sprite headers).
-`C+hdr` = scheme C with one flag-byte per sprite added.
+`C+meta` = scheme C with the per-sprite metadata block
+{ flag, base_addr_lo, base_addr_hi, col_offset[0..3] } = 7 B/sprite
+(see "Random access" below).
 
-| Set            | Raw    | Scheme B | Scheme C (data) | Scheme C (+1B/sprite hdr) |
-|----------------|-------:|---------:|----------------:|--------------------------:|
-| L1 tiles       |  2 304 |  1 437   |  1 442          | 1 460                     |
-| L2 tiles       |  2 304 |  1 099   |  1 139          | 1 157                     |
-| L3 tiles       |  2 304 |  1 356   |  1 347          | 1 365                     |
-| L4 tiles       |  2 304 |  1 524   |  1 534          | 1 552                     |
-| L1S1 hazards   |  1 792 |  1 391   |  1 331          | 1 345                     |
-| L1S2 hazards   |  1 792 |  1 524   |  1 440          | 1 454                     |
-| L2S1 hazards   |  1 792 |  1 533   |  1 466          | 1 480                     |
-| L2S2 hazards   |  1 792 |  1 485   |  1 413          | 1 427                     |
-| L3S1 hazards   |  1 792 |  1 421   |  1 361          | 1 375                     |
-| L3S2 hazards   |  1 792 |  1 466   |  1 341          | 1 355                     |
-| L4S1 hazards   |  1 792 |  1 600   |  1 489          | 1 503                     |
-| L4S2 hazards   |  1 792 |  1 446   |  1 371          | 1 385                     |
-| **TOTAL**      | 23 552 | 17 282 (73.4 %) | **16 674** (70.8 %) | 16 858 (71.6 %) |
+Survey produced by `tools/sprite_rle.py`, round-trip verified
+against every sprite. The tile rows below correct the earlier
+draft numbers — the original prototype that produced "1442 /
+1139 / 1347 / 1534" for tile sets was buggy; a faithful
+encoder built to the spec (max run = 10, count = b + 3,
+column-bounded, per-sprite FLAG) gives the values shown here.
 
-* **Scheme C data** is **608 bytes smaller** than scheme B
-  (-2.6 %), and **+1B header per sprite** is **424 bytes
-  smaller than scheme B** (-1.8 %).
-* **Tiles** under scheme B win 3 of 4 by a handful of bytes
-  thanks to no per-byte FLAG overhead in the long zero-pad
-  regions.
-* **Hazards** favour scheme C by +60 to +125 bytes per set —
-  they're denser (more short runs, more isolated literals →
-  more per-block framing overhead in B).
-* Scheme C's per-sprite flag selection works universally (no
-  set or sprite needs escape-the-escape).
+| Set            | Raw    | Scheme C (data) | C-data + meta |
+|----------------|-------:|----------------:|--------------:|
+| L1 tiles       |  2 304 |  1 763          | 1 889 (18×7)  |
+| L2 tiles       |  2 304 |  1 222          | 1 348         |
+| L3 tiles       |  2 304 |  1 293          | 1 419         |
+| L4 tiles       |  2 304 |  1 856          | 1 982         |
+| L1S1 hazards   |  1 792 |  1 331          | 1 429 (14×7)  |
+| L1S2 hazards   |  1 792 |  1 440          | 1 538         |
+| L2S1 hazards   |  1 792 |  1 466          | 1 564         |
+| L2S2 hazards   |  1 792 |  1 413          | 1 511         |
+| L3S1 hazards   |  1 792 |  1 361          | 1 459         |
+| L3S2 hazards   |  1 792 |  1 341          | 1 439         |
+| L4S1 hazards   |  1 792 |  1 489          | 1 587         |
+| L4S2 hazards   |  1 792 |  1 371          | 1 469         |
+| **TOTAL**      | 23 552 | **17 346** (73.6 %) | 18 432 (78.3 %) |
+
+* The hazard rows are unchanged from the earlier draft (the
+  per-sprite-best-flag scheme A and scheme C produce identical
+  encoded sizes on this corpus — both 1 B literal + 2 B run with
+  max-10).
+* The tile rows are corrected — the previous "1 442 / 1 139 /
+  1 347 / 1 534" values understate the size by ~25–40 % per set.
+  Verified by both a faithful Scheme A and Scheme C
+  reimplementation; both produce the same 1 763 for L1 tiles
+  given the documented max-run cap. The earlier numbers must
+  have been from an uncommitted prototype that allowed longer
+  runs or different code semantics.
+
+### Survey extended to all 4×32 sprites (game-wide)
+
+The wider survey — every 4×32 sprite required to render any
+stage — covers tiles, LEVD hazards, the three GRAPHIX-resident
+hazards, and all six explosion frames per scenario:
+
+| Category            | Sprites | Raw    | C-data | +meta (7 B/sprite) |
+|---------------------|--------:|-------:|-------:|-------------------:|
+| explosion (4×6)     |      24 |  3 072 |  2 226 |              2 394 |
+| tile (4×18)         |      72 |  9 216 |  6 134 |              6 638 |
+| hazard LEVD (4×2×14)|     112 | 14 336 | 11 212 |             12 008 |
+| GRAPHIX hazards (3) |       3 |    384 |    299 |                320 |
+| **TOTAL**           |     211 | 27 008 | **19 871** (73.6 %) | **21 360** (79.1 %) |
+
+### Per-stage memory footprint
+
+41 sprites loaded simultaneously per stage = 18 tiles + 14 LEVD
+hazards + 6 explosions + 3 GRAPHIX hazards. Tiles and explosion
+frames are scenario-shared between the two stages; GRAPHIX
+hazards are game-shared.
+
+Raw per stage = 41 sprites × 128 B = **5 248 B**, same for every
+stage. The `% raw` column is the compressed `total` (data + meta)
+as a fraction of that.
+
+|  Stage |  tiles | hazards | expl | GFX |   data | meta | total |  raw  | % raw  |
+|--------|-------:|--------:|-----:|----:|-------:|-----:|------:|------:|-------:|
+|  L1S1  |  1 763 |   1 331 |  553 | 299 |  3 946 |  287 | 4 233 | 5 248 | 80.7 % |
+|  L1S2  |  1 763 |   1 440 |  553 | 299 |  4 055 |  287 | 4 342 | 5 248 | 82.7 % |
+|  L2S1  |  1 222 |   1 466 |  375 | 299 |  3 362 |  287 | 3 649 | 5 248 | 69.5 % |
+|  L2S2  |  1 222 |   1 413 |  375 | 299 |  3 309 |  287 | 3 596 | 5 248 | 68.5 % |
+|  L3S1  |  1 293 |   1 361 |  645 | 299 |  3 598 |  287 | 3 885 | 5 248 | 74.0 % |
+|  L3S2  |  1 293 |   1 341 |  645 | 299 |  3 578 |  287 | 3 865 | 5 248 | 73.6 % |
+|  L4S1  |  1 856 |   1 489 |  653 | 299 |  4 297 |  287 | 4 584 | 5 248 | 87.3 % |
+|  L4S2  |  1 856 |   1 371 |  653 | 299 |  4 179 |  287 | 4 466 | 5 248 | 85.1 % |
+
+Worst stage **L4S1 = 4 584 B** (87.3 % of raw). Best stage **L2S2
+= 3 596 B** (68.5 % of raw). Average **4 078 B per stage**
+(4.0 KB, 77.7 % of raw).
 
 ## 2bpp → 4bpp expansion (Rich's design)
 

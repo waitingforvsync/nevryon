@@ -64,9 +64,9 @@ $.!BOOT       → $.!LOAD            (boot stub)
 | `$.CODE`          | &1100  |  5863  | 6502                | Main game logic                          |
 | `$.CODE2`         | &2800  |  2537  | 6502                | SFX queue + extras                       |
 | `$.CODE3`         | &3300  |   912  | 6502                | Inter-stage transitions / messages       |
-| `N.LEVD1`         | &4A00  |  3584  | sprite atlas + tiles | Per-scenario tile catalog + decorations |
-| `N.LEVD2`         | &7380  |  3200  | level data          | Stage-1 enemies + spawn + map tables     |
-| `N.LEVD3`         | &7380  |  2176/3200 | level data       | Stage-2 enemy overlay (and map for lev4) |
+| `N.LEVD1`         | &4A00  |  3584  | sprite atlas + tiles | Player-explosion 0..3 + small-enemy anim + player ship + 18-tile catalog |
+| `N.LEVD2`         | &7380  |  3200  | level data          | Stage-1 hazards + ptr/spawn tables + explosion 4..5 + map tables         |
+| `N.LEVD3`         | &7380  |  2176/3200 | level data       | Stage-2 hazard overlay (and map for lev4)                                |
 
 Notes:
 
@@ -208,8 +208,8 @@ in parentheses. Renders of every sprite are in `graphix/`.
 |----------|----------------|---------------------------------------------------------------------|
 | `&3680`  | 16×16 (64)     | `gfx_muzzle_flash_frame0` — player gun flash, frame 0                   |
 | `&36C0`  | 16×16 (64)     | `gfx_muzzle_flash_frame1` — player gun flash, frame 1                   |
-| `&3700`  | 16×32 (128)    | `gfx_enemy_slot15` — LEVD2/3 ptr-table slot 15 (shared cross-scenario)  |
-| `&3780`  | 16×32 (128)    | `gfx_enemy_slot16` — LEVD2/3 ptr-table slot 16                          |
+| `&3700`  | 16×32 (128)    | `gfx_hazard_slot15` — LEVD2/3 ptr-table slot 15 (shared cross-scenario) |
+| `&3780`  | 16×32 (128)    | `gfx_hazard_slot16` — LEVD2/3 ptr-table slot 16                         |
 | `&3800`  | 24×16 (96)     | `gfx_text_wow` — "WOW!" inter-stage banner                              |
 | `&3860`  |  8×12 (24)     | `gfx_ball_frame0` — chomping-orb animation, frame 0                     |
 | `&3878`  |  8×12 (24)     | `gfx_ball_frame1`                                                       |
@@ -218,7 +218,7 @@ in parentheses. Renders of every sprite are in `graphix/`.
 | `&38C0`  |  8×12 (24)     | `gfx_ball_frame4`                                                       |
 | `&38D8`  |  8×12 (24)     | `gfx_ball_frame5`                                                       |
 | `&38F0`  | — (16)         | Alignment pad — pushes the next sprite onto a page boundary         |
-| `&3900`  | 12×24 (72)     | `gfx_pod_frame0` — player force-pod (rotating saucer) frame 0. Plotted as 4×24 by `draw_player_pod`; the 4th byte-col is the blank pad below. (Originally mis-labelled `gfx_enemy_saucer_*` — no enemy ptr-table slot references these, only `draw_player_pod` does.) |
+| `&3900`  | 12×24 (72)     | `gfx_pod_frame0` — player force-pod (rotating saucer) frame 0. Plotted as 4×24 by `draw_player_pod`; the 4th byte-col is the blank pad below. (Originally mis-labelled `gfx_enemy_saucer_*` — no hazard-ptr table slot references these, only `draw_player_pod` does.) |
 | `&3948`  | — (24)         | Blank separator column (1×24), absorbed into the 4-col pod blit     |
 | `&3960`  | 12×24 (72)     | `gfx_pod_frame1`                                                    |
 | `&39A8`  | — (24)         | Blank separator                                                     |
@@ -247,7 +247,7 @@ in parentheses. Renders of every sprite are in `graphix/`.
 | `&4200`  | 32×16 (128)    | `gfx_text_game` — "GAME"                                                |
 | `&4280`  | 32×16 (128)    | `gfx_text_over` — "OVER"                                                |
 | `&4300`  | 24×16 (96)     | `gfx_text_on` — "ON!"                                                   |
-| `&4360`  | 16×32 (128)    | `gfx_enemy_slot19` — LEVD2/3 ptr-table slot 19                          |
+| `&4360`  | 16×32 (128)    | `gfx_hazard_slot19` — LEVD2/3 ptr-table slot 19                         |
 | `&43E0`  | — (48)         | Pre-missile pad                                                     |
 | `&4410`  | 20×8 (40)      | `gfx_missile_0` — projectile sprite, frame 0                            |
 | `&4438`  | 20×8 (40)      | `gfx_missile_1`                                                         |
@@ -367,7 +367,7 @@ Currently unannotated. Known facts:
   yellow-red rocket that homes horizontally on the player.
 - Contains some of the trampoline routines that JMP back into
   `sprite_plot_xy` after configuring `sprite_src` for specific
-  decoration sprites.
+  hazard / projectile sprites.
 
 ---
 
@@ -382,17 +382,21 @@ COMPLETED", "BONUS", etc.).
 
 ## `N.LEVD1` (3584 bytes, loaded at `&4A00` for all scenarios)
 
-Per-scenario tile graphics. Same internal layout for all four
+Per-scenario sprite data. Same internal layout for all four
 scenarios; only the bytes differ:
 
 | File off       | CPU            | Size  | Contents                                                                                                                                                       |
 |----------------|----------------|-------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `0x0000-0x047F`| `&4A00-&4E7F`  | 1152  | **Decoration sprite bank.** Referenced by enemy-ptr-table slots 17 (`&5180`), 18 (`&5100`), 21 (`&4A00`), 22 (`&4A80`), 23 (`&4B00`), 24 (`&4B80`). Standard 4×32 column-major sprites. |
-| `0x0480-0x04FF`| `&4E80-&4EFF`  |   128 | **Player ship sprite.** Hardcoded into the engine at `&4E80` (see `JMP L1478` paths in CODE that plot it with `LDX #&06, LDY #&16`).                            |
-| `0x0500-0x0DFF`| `&4F00-&57FF`  | 2304  | **Tile catalog.** Each tile is 128 bytes = 4 byte-columns × 32 scanlines column-major (16 px wide × 32 px tall). Up to 18 tiles per scenario; the actual catalog usually only fills the first ~12-15. Tile *id N* lives at file offset `0x500 + N*0x80`. |
+| `0x0000-0x01FF`| `&4A00-&4BFF`  |  512  | **Player-explosion frames 0..3** (4 × 4×32, 128 B each). Aliased as `lev_hazard_ptr_*[21..24]` (= `lev_explosion_ptr_*[0..3]`); reached by `death_anim` at CODE `&1E47`. Frames 4..5 of the same animation live in LEVD2 at `&7C00`/`&7C80`. |
+| `0x0200-0x021F`| `&4C00-&4C1F`  |   32  | Zero-pad between explosion frames and the enemy-anim strip.                                                                                                    |
+| `0x0220-0x046F`| `&4C20-&4E6F`  |  592  | **Small-flying-enemy animation strip** — 7 × 4×24 (96 B) frames driven by the L1BE3 state machine: `enemy_hit_01..03` (states `&0A..&0C`) then `enemy_00..03` (states 1..4). Adjacent frames *share a column* of 24 bytes (overlap), so the on-disk footprint is < 7×96. Not reached via the hazard-ptr table. |
+| `0x0470-0x047F`| `&4E70-&4E7F`  |   16  | Trailing zero-pad.                                                                                                                                             |
+| `0x0480-0x0503`| `&4E80-&4F03`  |  132  | **Player ship sprite** — 6×22 col-major (`lev_player_sprite`). Plotted by `draw_player` at `&1478` with `LDX #6, LDY #&16`. The last 4 bytes overlap `tile_00`'s first 4 bytes (both are zero in that region — overlap is benign). |
+| `0x0500-0x0DFF`| `&4F00-&57FF`  | 2304  | **Tile catalog** — 18 × 4×32 tiles (128 B each, col-major). Tile *id N* lives at `0x500 + N*0x80`. All 18 slots are present; some are blank-tile (all-zero). The hazard-ptr table aliases slot 17 = tile 5's bytes (`&5180`) and slot 18 = tile 4's bytes (`&5100`) — those are pointers BACK into this catalog, not new sprite data. |
 
-The decoration sprites visible in the gameplay screenshots (gun
-turrets at the floor, pillars, etc.) come from this bank.
+The 14 large stationary hazards (gun towers, tanks, structures)
+visible in the gameplay screenshots come from LEVD2 / LEVD3 at
+`&7380..&7A7F`, not from this file.
 
 ---
 
@@ -403,13 +407,13 @@ dense file on the disk.
 
 | File off       | CPU            | Size | Contents                                                                                                                          |
 |----------------|----------------|------|-----------------------------------------------------------------------------------------------------------------------------------|
-| `0x0000-0x06FF`| `&7380-&7A7F`  | 1792 | **In-scenario hazard sprite graphics** (14 sprites × 128 B each, 4×32 col-major; slots 0-13 in `lev_hazard_*`). Includes the 8 frames of the hazard death-anim used by `hazard_death_step` at types `&14..&1B`. |
+| `0x0000-0x06FF`| `&7380-&7A7F`  | 1792 | **Per-stage hazard sprite block** — 14 × 4×32 (128 B each), `lev_hazard_0..13`. Reached via `lev_hazard_ptr_*[1..14]` (= attribute `hazard_type` 1..14). Stage 1 from LEVD2, stage 2 from LEVD3; same offsets, different bytes. The death-anim for a dying hazard does NOT live in this block — `hazard_death_step` walks `hazard_type` from `&14..&1B`, indexing `lev_hazard_ptr_*[20..27]`, which is slot 20 (unused), slots 21..26 (= the 6 player-explosion frames), slot 27 (erase brush). So a dying hazard plays the same 6-frame explosion as the player's death. |
 | `0x0700-0x073F`| `&7A80-&7ABF`  |   64 | `lev_hazard_ptr_lo` — sprite-pointer LO byte, 32 slots. Slots 21..26 are aliased as `lev_explosion_ptr_lo` (the player-explosion frame pointers). |
 | `0x0740-0x077F`| `&7AC0-&7AFF`  |   64 | `lev_hazard_ptr_hi` — paired HI byte. Slot N's sprite address = `(hi[N]<<8) \| lo[N]`. Resolves into one of GRAPHIX (slots 15/16/19), LEVD1 (per-scenario sprite slots), or LEVD2 itself. |
 | `0x0780-0x07FF`| `&7B00-&7B7F`  |  128 | `lev_spawn_col` — sorted ascending list of scroll-column indices at which a hazard spawns. `&FF` terminator. |
 | `0x0800-0x087F`| `&7B80-&7BFF`  |  128 | `lev_spawn_attr` — paired attribute byte per schedule entry. Bits 0..4 = `hazard_type` (→ `hazard_type_dispatch`); bits 5..6 = Y-row (0=&DF / 1=&BF / 2=&9F / 3=&7F); bit 7 = `hazard_flip` (vertical-mirror, INVERTED: 0 in attr = upright). |
-| `0x0880-0x08FF`| `&7C00-&7C7F`  |  128 | **Shootable item sprite — intact frame** (slot 25 in the ptr table). Per-scenario: arch / egg / figure-8 / organic blob.          |
-| `0x0900-0x097F`| `&7C80-&7CFF`  |  128 | **Shootable item sprite — damaged frame** (slot 26).                                                                              |
+| `0x0880-0x08FF`| `&7C00-&7C7F`  |  128 | **Player-explosion frame 4** (4×32, 128 B). Aliased as `lev_hazard_ptr_*[25]` (= `lev_explosion_ptr_*[4]`). Frames 0..3 of the same animation live in LEVD1 at `&4A00..&4BFF`. |
+| `0x0900-0x097F`| `&7C80-&7CFF`  |  128 | **Player-explosion frame 5** (4×32, 128 B). Aliased as `lev_hazard_ptr_*[26]` (= `lev_explosion_ptr_*[5]`). Last frame of the 6-frame `death_anim` cycle. |
 | `0x0980-0x0A8F`| `&7D00-&7E0F`  |  272 | **All-zero region.** Doubles as the universal "erase brush" — `&7D80` (referenced by the default `zp_sprite_src` init in `L1F8E` and many small-effect erase calls) and `&7E02` (small 3×2 / 2×2 effect erases). |
 | `0x0A90-0x0B7F`| `&7E10-&7EFF`  |  240 | **Map LOWER tile-id table.** One byte per column, indexes a tile in the LEVD1 catalog. Rendered at char rows 16-19.                |
 | `0x0B80-0x0B8F`| `&7F00-&7F0F`  |   16 | 16 bytes of padding between the lower and upper tile tables. Same value per scenario (`0D`/`00`/`03`/varying) — likely a wrap-around-column safety byte. |
@@ -425,22 +429,24 @@ scenario:
 
 | File        | Size  | Covered range (file offset) | What it overwrites                                                                                  |
 |-------------|-------|-----------------------------|------------------------------------------------------------------------------------------------------|
-| `1.LEVD3`   | 2176  | `0x000-0x87F`               | Enemy sprites + ptr tables + spawn schedule + attributes. **Leaves the LEVD2 map tables intact.**    |
+| `1.LEVD3`   | 2176  | `0x000-0x87F`               | Hazard sprites + ptr tables + spawn schedule + attributes. **Leaves the LEVD2 map tables and explosion frames 4..5 intact.** |
 | `2.LEVD3`   | 2176  | `0x000-0x87F`               | Same as above.                                                                                       |
 | `3.LEVD3`   | 2176  | `0x000-0x87F`               | Same as above.                                                                                       |
 | `4.LEVD3`   | 3200  | `0x000-0xC7F`               | Full overlay including the map tables — but the tile-id tables happen to be **byte-identical** to `4.LEVD2`'s, so the map geometry is still unchanged. |
 
 **Net effect:** stage 2 of every scenario uses the same ceiling /
-floor tile geometry as stage 1; only the enemy cast (sprite graphics,
-pointer table, spawn schedule, attributes) changes. The shootable-
-item sprites at `&7C00`/`&7C80` are not touched by `LEVD3` in
-scenarios 1-3, so the same "arch / egg / etc." is reused for both
-halves.
+floor tile geometry as stage 1; only the hazard cast (sprite
+graphics, pointer table, spawn schedule, attributes) changes. The
+player-explosion frames 4 / 5 at `&7C00`/`&7C80` are not touched by
+`LEVD3` in scenarios 1-3 (out of range), so the LEVD2 bytes stay
+resident; scenario 4's `LEVD3` overlaps that range but happens to
+ship byte-identical explosion frames.
 
-In every `LEVD3` the enemy pointer table layout is **identical
-across all four scenarios**: slot 0 = `&7D80` (blank), slots 1-14 =
-the per-scenario sprite slots at `&7380..&7A00`, slots 15-16 = shared
-GRAPHIX, slots 17-18 = LEVD1, slot 19 = GRAPHIX, slots 21-24 = LEVD1
-decorations, slots 25-26 = the shootable items in LEVD2's upper area.
-What differs between scenarios' `LEVD3` files is just the *sprite
-data* the slots 1-14 point at and the *spawn schedule*.
+In every `LEVD3` the hazard-ptr table layout is **identical across
+all four scenarios**: slot 0 = `&7D80` (blank / erase brush),
+slots 1-14 = the per-scenario hazard slots at `&7380..&7A00`,
+slots 15-16 = shared GRAPHIX, slots 17-18 = LEVD1 (alias tile 5 /
+tile 4 bytes), slot 19 = GRAPHIX, slots 21-24 = LEVD1 explosion
+frames 0..3, slots 25-26 = LEVD2 explosion frames 4..5. What
+differs between scenarios' `LEVD3` files is just the *sprite data*
+slots 1-14 point at and the *spawn schedule*.
