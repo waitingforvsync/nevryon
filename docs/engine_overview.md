@@ -422,6 +422,48 @@ script:
 * **Pattern 6 (straight)**: `dx_dir = neg`, `dy_dir = none` —
   flies straight at the player's altitude on each spawn.
 
+#### Motion delta sites — for a MODE 2 / double-rate remake
+
+The pattern-script values are direction codes (`pattern_dir_*`),
+not pixel deltas. The actual pixel deltas are hard-coded in the
+motion-applying routine `L1B2D` and the player-input routines.
+Map of every per-tick motion site:
+
+| Entity      | dy   | Where                            |
+|-------------|------|----------------------------------|
+| enemy       | `±4` | `L1B2D` (`ADC/SBC #&04` at `&1B36/&1B3F`) |
+| player      | `±4` | `move_player_up` / `move_player_down` (CODE `&16B7` / `&16D3`) |
+| projectiles | `±4` mostly | player-missile / hazard-missile y-step routines (CODE / CODE2) |
+
+| Entity        | dx           | Where                          |
+|---------------|--------------|--------------------------------|
+| enemy         | `INC/DEC enemy_x` (= ±1 byte-col) | `L1B2D` `&1B58 / &1B5E` |
+| player        | `INC/DEC zp_player_x` (= ±1 byte-col) | `move_player_left` / `move_player_right` (CODE `&156C` / ~`&15E0`) |
+| force-pod     | `INC/DEC force_pod_x` (= ±1 byte-col) | CODE2 `&290F / &2912` |
+| NPC bullet    | `−2 byte-cols` (LEFT 2 cols/frame) | `update_npc_bullets` |
+| player bullet | `+2 byte-cols` (RIGHT 2 cols/frame) | `update_bullets` |
+| hazard missile| `−2` or `+1` (homing toggle) | CODE2 `&2986..&29A2` |
+
+For a remake in **MODE 2 with hardware scrolling at double the
+game-tick rate**:
+
+* **Horizontal motion: no source change needed.** X is measured
+  in byte-columns; MODE 5 byte-col = 4 px, MODE 2 byte-col = 2 px,
+  so the same `INC/DEC X` moves entities half the pixel distance
+  per tick. Doubling the tick rate cancels that — on-screen
+  horizontal speed is unchanged. The `±2` bullet steps and `±1`
+  hazard-missile homing step inherit the same property.
+* **Vertical motion: halve every Y delta.** Every `ADC/SBC #&04`
+  becomes `#&02`. ~14 sites across `CODE` + `CODE2` (grep
+  `ADC #&04 / SBC #&04`). `±2` lands on legal MODE 2 byte-row
+  boundaries (8 lines per char cell, 2-line steps stay
+  byte-aligned in screen RAM), no subpixel accumulator needed.
+
+The `#&02` sites that already exist in the original are mostly
+sprite-center bookkeeping (e.g. `(player_x + 2, player_y − 8)`
+inside `update_enemies`'s bullet spawn) — not motion deltas, so
+they don't change.
+
 ### `enemy_state` state machine
 
 `enemy_state[X]` doubles as the slot's hit-counter and animation

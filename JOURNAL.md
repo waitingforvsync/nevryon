@@ -4,6 +4,58 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-22 — Session 41: motion-delta audit for the MODE 2 / double-rate remake
+
+Rich asked which routine moves enemies along the pattern table
+(`enemy_select_motion` at CODE `&1B87`, reads `(dy_dir, dx_dir)`
+pairs from the script pointed at by `zp_88/89`; `L1B2D` at `&1B2D`
+applies the deltas + redraws). That sparked a quick audit of every
+hard-coded motion delta in the codebase to see what needs scaling
+for a MODE 2 remake at double the game-tick rate.
+
+### Motion delta map
+
+| Axis | Entity | Delta/tick | Site |
+|------|--------|------------|------|
+| Y | enemy | `±4` | `L1B2D` ADC/SBC `#&04` (`&1B36 / &1B3F`) |
+| Y | player | `±4` | `move_player_up/down` (`&16B7 / &16D3`) |
+| Y | projectiles | mostly `±4` | player-missile / hazard-missile y-steps |
+| X | enemy | `INC/DEC enemy_x` | `L1B2D` `&1B58 / &1B5E` |
+| X | player | `INC/DEC zp_player_x` | `move_player_left/right` |
+| X | force-pod | `INC/DEC force_pod_x` | CODE2 `&290F / &2912` |
+| X | NPC bullet | `−2 byte-cols / frame` | `update_npc_bullets` |
+| X | player bullet | `+2 byte-cols / frame` | `update_bullets` |
+| X | hazard missile | `−2 or +1` (homing) | CODE2 `&2986..&29A2` |
+
+About 14 `ADC #&04` / `SBC #&04` sites total across CODE + CODE2,
+all genuine Y motion.
+
+### Frame-rate scaling for the remake
+
+Originally I suggested the horizontal motion would need a
+sub-pixel accumulator at 2× tick rate. That was wrong — X is
+measured in **byte columns**, not pixels:
+
+* MODE 5 byte col = 4 px, MODE 2 byte col = 2 px → same `INC X`
+  moves entities **half the pixel distance** in the remake.
+* Double the tick rate → on-screen horizontal speed is unchanged.
+* No code change needed on the X axis (the `±2` bullet step and
+  `±1` hazard missile step inherit the same scaling).
+
+For Y, halve every `#&04` → `#&02`. That keeps MODE-5-equivalent
+visual speed at 2× tick rate. Lands on legal MODE 2 byte-row
+boundaries (8 lines per char cell, 2-line steps stay byte-aligned
+in screen RAM). No subpixel handling required.
+
+### Doc update
+
+* **modified**: `docs/engine_overview.md` — added a "Motion delta
+  sites" subsection inside the enemy patterns section, listing
+  every per-tick motion site and explaining the MODE-5→MODE-2 +
+  double-rate scaling rules.
+
+---
+
 ## 2026-05-22 — Session 40: animating-sprite trim survey, palette-aware metadata model
 
 Extended the RLE survey to the variable-shape categories (player,
