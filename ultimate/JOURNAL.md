@@ -6,6 +6,100 @@ left off, focused on the remake.
 
 ---
 
+## 2026-05-23 — Session 5: per-(level, stage) hazards + GRAPHIX dup'd in
+
+Added the third asset category: hazards. Each (level, stage) gets
+its own 17-sprite bundle:
+
+* **14 stage-specific hazards** (`hazard_00..hazard_13.png`) --
+  copied from `../levels/<N>/hazard_stage<S>_NN.png` and renamed
+  to drop the `stage<S>_` infix. These are the per-stage threats
+  (gun-towers, tanks, structures) the original engine loads from
+  LEVD2 (stage 1) / LEVD3 (stage 2).
+* **3 game-shared GRAPHIX hazards** (`hazard_15.png`,
+  `hazard_16.png`, `hazard_19.png`) -- copied from
+  `../graphix/graphix_<addr>_hazard_slot<15|16|19>.png` (CPU
+  &3700 / &3780 / &4360 in $.GRAPHIX). The original engine renders
+  these through the current level palette so their bytes are
+  scenario-agnostic shape data, but the rendered PNGs in the
+  parent repo are baked in the L1 palette
+  (black / red / yellow / white).
+
+  We duplicate them into every (level, stage) hazard folder so
+  future redesigns can repaint per-scenario without restructuring;
+  the encoder's new `--fallback-palette` flag handles them in L2 /
+  L3 / L4 sets by matching the L1 colours after the scenario
+  palette fails. Per-sprite stdout annotates `pal=1` for these in
+  the non-L1 sets.
+
+Index numbering (per the user's spec): the per-stage hazards keep
+their 0-indexed file numbers (`00..13`) so they cleanly map to the
+14 per-stage LEVD slots; the GRAPHIX hazards keep their engine
+slot numbers (`15`, `16`, `19`) with a gap. The naming intentionally
+mirrors the engine's `lev_hazard_ptr_*` table layout.
+
+### Assets and outputs
+
+```
+assets/level<1..4>/stage<1,2>/hazards/
+    hazard_00.png .. hazard_13.png    \\ stage-specific (LEVD2/3)
+    hazard_15.png hazard_16.png hazard_19.png   \\ GRAPHIX, shared
+
+data/level<1..4>/stage<1,2>/hazards.6502
+```
+
+`build.sh` Phase 1 grew eight `--src ... stage<S>/hazards/`
+invocations, each with `--fallback-palette black,red,yellow,white`
+and `--name-prefix level<N>_stage<S>`.
+
+### Result
+
+Per (level, stage) bundle, 17 sprites × 128 B raw = 2 176 B:
+
+|       | Stage 1 | Stage 2 |
+|------:|--------:|--------:|
+|    L1 |  1 634  |  1 658  |
+|    L2 |  1 672  |  1 622  |
+|    L3 |  1 666  |  1 542  |
+|    L4 |  1 694  |  1 660  |
+| Total |  6 666  |  6 482  |
+
+The 3 GRAPHIX hazards encode at the same 299 B (= 102 + 99 + 98 B)
+in every (level, stage) bundle since the bytes are identical and
+the L1-palette fallback gives them the same RGB → 0..3 mapping
+across all four levels. Subtract that from each row and you get
+the per-stage LEVD-only totals (e.g. L1S1 LEVD = 1 335 B vs the
+spec-exact survey number 1 331 B; difference is the all-RLE-tail
+rule).
+
+### Verification
+
+All 136 hazard PNGs (= 17 × 4 levels × 2 stages) are byte-identical
+to their canonical extracted-from-disk source:
+
+* 14 stage hazards per (level, stage) against
+  `../extracted/<N>.LEVD2` for stage 1 and
+  `../extracted/<N>.LEVD3` for stage 2 (both at file offset
+  `0x000..0x6FF`, CPU `&7380..&7A00`).
+* 3 GRAPHIX hazards against `../extracted/$.GRAPHIX` at file offsets
+  `0x080`, `0x100`, `0xCE0` (CPU `&3700`, `&3780`, `&4360`;
+  `GRAPHIX_LOAD = &3680`).
+
+(One false alarm during verification: I tried offsets `0x700`,
+`0x780`, `0xCE0` using GRAPHIX_LOAD = &3000, which is wrong --
+the real GRAPHIX_LOAD per `../tools/render_level.py` is &3680.
+All 24 GRAPHIX hazards match once the offset is fixed.)
+
+### Next
+
+* Enemies (4 + 3 hit frames per level, 4x24 each).
+* Player ship + flames + pickups -- these are the animating
+  categories that should switch to the trim + raw-blit path per
+  ../docs/sprite_rle_notes.md "When to skip the RLE step". Encoder
+  doesn't have a trim mode yet; that's the next tool change.
+
+---
+
 ## 2026-05-23 — Session 4: per-level explosions + drop --expected-bytes
 
 Added the player-death explosion frames as the second asset

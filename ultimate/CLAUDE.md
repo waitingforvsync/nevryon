@@ -62,13 +62,19 @@ assets/                      \\ source artwork -- editable in any pixel editor
   level<1..4>/
     tiles/                   \\ 18 x 16x32-px tile PNGs, per-scenario palette
     explosions/              \\ 6 x 16x32-px player-death frames, per-scenario
-    (future: hazards_stage<1,2>/, enemies/)
-  (future: shared/{player,flames,pickups,graphix_hazards}/)
+    stage<1,2>/
+      hazards/               \\ 14 per-stage hazard PNGs (hazard_00..13) +
+                             \\ 3 game-shared GRAPHIX hazard PNGs
+                             \\ (hazard_15/16/19) duplicated per (level, stage)
+    (future: enemies/)
+  (future: shared/{player,flames,pickups}/)
 
 data/                        \\ generated BeebAsm sources, ready to INCLUDE
   level<1..4>/
     tiles.6502               \\ scheme C RLE'd 18-tile catalog (one per level)
     explosions.6502          \\ scheme C RLE'd 6-frame death explosion
+    stage<1,2>/
+      hazards.6502           \\ scheme C RLE'd 17-sprite hazard set per stage
 ```
 
 Run `./build.sh` from `ultimate/` to regenerate everything in
@@ -132,20 +138,39 @@ Both transforms keep the output spec-conformant: the local
 
 ### Per-level encoded sizes
 
-| Level | Palette                  | Tiles 18×128 → enc | Explosions 6×128 → enc |
-|------:|--------------------------|-------------------:|-----------------------:|
-|     1 | black/red/yellow/white   |   1 547 / 2 304    |        553 /   768     |
-|     2 | black/blue/cyan/white    |   1 231 / 2 304    |        371 /   768     |
-|     3 | black/red/green/white    |   1 267 / 2 304    |        645 /   768     |
-|     4 | black/red/magenta/white  |   1 835 / 2 304    |        653 /   768     |
-|       |                          | **5 880** / 9 216  |   **2 222** / 3 072    |
+Tiles (18 sprites × 128 B raw / level) and explosions (6 sprites ×
+128 B / level):
 
-Tiles totals at 64 % of raw, explosions at 72 %. Three of the four
-levels match the spec-exact survey figures in
-`../docs/sprite_rle_notes.md` to the byte; L1 tiles save 216 B via
-within-sprite column coalescing, L2 explosions save 4 B for the
-same reason, and L2 tiles is +9 B (the all-RLE-tail rule's +1 B-
-per-run cost on a sprite set with no coalescing opportunities).
+| Level | Palette                  | Tiles enc / raw    | Explosions enc / raw |
+|------:|--------------------------|-------------------:|---------------------:|
+|     1 | black/red/yellow/white   |   1 547 / 2 304    |        553 /   768   |
+|     2 | black/blue/cyan/white    |   1 231 / 2 304    |        371 /   768   |
+|     3 | black/red/green/white    |   1 267 / 2 304    |        645 /   768   |
+|     4 | black/red/magenta/white  |   1 835 / 2 304    |        653 /   768   |
+|       |                          | **5 880** / 9 216  |  **2 222** / 3 072   |
+
+Hazards: each (level, stage) bundle is the 14 stage-specific
+hazards (LEVD2 / LEVD3 slots 0..13) plus the 3 shared GRAPHIX
+hazards (slots 15 / 16 / 19) duplicated in, encoded under a
+black/red/yellow/white fallback palette. 17 sprites × 128 B raw =
+2 176 B per stage:
+
+| Level | Stage 1 enc / raw | Stage 2 enc / raw |
+|------:|------------------:|------------------:|
+|     1 |    1 634 / 2 176  |    1 658 / 2 176  |
+|     2 |    1 672 / 2 176  |    1 622 / 2 176  |
+|     3 |    1 666 / 2 176  |    1 542 / 2 176  |
+|     4 |    1 694 / 2 176  |    1 660 / 2 176  |
+|       | **6 666** / 8 704 | **6 482** / 8 704 |
+
+Three of the four levels match the spec-exact tile survey figures
+in `../docs/sprite_rle_notes.md` to the byte; L1 tiles save 216 B
+via within-sprite column coalescing, L2 explosions save 4 B for
+the same reason, and L2 tiles is +9 B (the all-RLE-tail rule's
++1 B-per-run cost on a sprite set with no coalescing opportunities).
+Hazard sets all run a bit larger than the bare LEVD-only survey
+numbers because the 3 GRAPHIX hazards (~ 299 B encoded) are folded
+into every stage's bundle now.
 
 ## Regenerating the data
 

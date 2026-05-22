@@ -42,10 +42,43 @@ $ENCODE_SPRITES --src assets/level3/explosions --out data/level3/explosions.6502
 $ENCODE_SPRITES --src assets/level4/explosions --out data/level4/explosions.6502 \
     --palette black,red,magenta,white  --label "Level 4 explosions" --name-prefix level4
 
+# Per-(level, stage) hazard sets. 14 stage-specific hazards
+# (hazard_00..hazard_13) in the scenario palette, plus 3 shared
+# GRAPHIX hazards (hazard_15, hazard_16, hazard_19) which were
+# originally drawn from $.GRAPHIX in the L1 palette. We duplicate
+# the GRAPHIX hazards into every (level, stage) asset bundle so a
+# future redesign can repaint them per-scenario; for now they pick
+# up the L1-palette --fallback-palette so the encoder maps their
+# pixels via {black, red, yellow, white}. (For level 1 the primary
+# palette IS the fallback, so it never triggers there.)
+$ENCODE_SPRITES --src assets/level1/stage1/hazards --out data/level1/stage1/hazards.6502 \
+    --palette black,red,yellow,white   --fallback-palette black,red,yellow,white \
+    --label "Level 1 stage 1 hazards" --name-prefix level1_stage1
+$ENCODE_SPRITES --src assets/level1/stage2/hazards --out data/level1/stage2/hazards.6502 \
+    --palette black,red,yellow,white   --fallback-palette black,red,yellow,white \
+    --label "Level 1 stage 2 hazards" --name-prefix level1_stage2
+$ENCODE_SPRITES --src assets/level2/stage1/hazards --out data/level2/stage1/hazards.6502 \
+    --palette black,blue,cyan,white    --fallback-palette black,red,yellow,white \
+    --label "Level 2 stage 1 hazards" --name-prefix level2_stage1
+$ENCODE_SPRITES --src assets/level2/stage2/hazards --out data/level2/stage2/hazards.6502 \
+    --palette black,blue,cyan,white    --fallback-palette black,red,yellow,white \
+    --label "Level 2 stage 2 hazards" --name-prefix level2_stage2
+$ENCODE_SPRITES --src assets/level3/stage1/hazards --out data/level3/stage1/hazards.6502 \
+    --palette black,red,green,white    --fallback-palette black,red,yellow,white \
+    --label "Level 3 stage 1 hazards" --name-prefix level3_stage1
+$ENCODE_SPRITES --src assets/level3/stage2/hazards --out data/level3/stage2/hazards.6502 \
+    --palette black,red,green,white    --fallback-palette black,red,yellow,white \
+    --label "Level 3 stage 2 hazards" --name-prefix level3_stage2
+$ENCODE_SPRITES --src assets/level4/stage1/hazards --out data/level4/stage1/hazards.6502 \
+    --palette black,red,magenta,white  --fallback-palette black,red,yellow,white \
+    --label "Level 4 stage 1 hazards" --name-prefix level4_stage1
+$ENCODE_SPRITES --src assets/level4/stage2/hazards --out data/level4/stage2/hazards.6502 \
+    --palette black,red,magenta,white  --fallback-palette black,red,yellow,white \
+    --label "Level 4 stage 2 hazards" --name-prefix level4_stage2
+
 # Future encode invocations land here as the asset categories arrive:
-#   * assets/level<N>/hazards_stage<S>/  -> data/level<N>/hazards_stage<S>.6502
 #   * assets/level<N>/enemies/           -> data/level<N>/enemies.6502
-#   * assets/shared/{player,flames,pickups,graphix_hazards}/ -> data/shared/*.6502
+#   * assets/shared/{player,flames,pickups}/ -> data/shared/*.6502
 # The animating-sprite categories (player, enemies, flames, pickups)
 # will use a different encoder mode (trim + raw blit, not RLE -- see
 # ../docs/sprite_rle_notes.md "When to skip the RLE step").
