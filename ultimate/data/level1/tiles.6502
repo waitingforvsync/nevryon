@@ -18,280 +18,280 @@
 \\   * Columns that encode to identical bytes share their stream: their
 \\     .<name>_col_M labels are stacked at the same address.
 
-\\ tile_00: 4x32 (16x32 px), 60 bytes (46% of raw 128 B)
-tile_00_width    = 4
-tile_00_height   = 32
-tile_00_rle_flag = &20
-.tile_00_col_0
+\\ level1_tile_00: 4x32 (16x32 px), 60 bytes (46% of raw 128 B)
+level1_tile_00_width    = 4
+level1_tile_00_height   = 32
+level1_tile_00_rle_flag = &20
+.level1_tile_00_col_0
     EQUB &07, &00, &07, &00, &05, &00, &31, &12, &55, &DA
-.tile_00_col_1
+.level1_tile_00_col_1
     EQUB &07, &00, &07, &00, &01, &00, &31, &12, &55, &DA, &D4, &C9, &F2, &85
-.tile_00_col_2
+.level1_tile_00_col_2
     EQUB &07, &00, &07, &00, &31, &12, &55, &DA, &D4, &C9, &F2, &85, &6B, &A6, &2D, &2A
-.tile_00_col_3
+.level1_tile_00_col_3
     EQUB &07, &00, &03, &00, &31, &12, &55, &DA, &D4, &C9, &F2, &85, &6B, &A6, &2D, &2A
     EQUB &24, &38, &10, &50
 
-\\ tile_01: 4x32 (16x32 px), 112 bytes (87% of raw 128 B)
-tile_01_width    = 4
-tile_01_height   = 32
-tile_01_rle_flag = &18
-.tile_01_col_0
+\\ level1_tile_01: 4x32 (16x32 px), 112 bytes (87% of raw 128 B)
+level1_tile_01_width    = 4
+level1_tile_01_height   = 32
+level1_tile_01_rle_flag = &18
+.level1_tile_01_col_0
     EQUB &06, &00, &00, &00, &09, &2A, &6D, &E2, &EC, &F1, &CA, &BD, &53, &9E, &15, &12
     EQUB &0C, &30, &48, &A8, &68, &E8, &E9, &EA
-.tile_01_col_1
+.level1_tile_01_col_1
     EQUB &05, &00, &09, &2A, &6D, &E2, &EC, &F1, &CA, &BD, &53, &9E, &15, &12, &0C, &30
     EQUB &48, &A8, &68, &E8, &E9, &EA, &EC, &E1, &EA, &ED
-.tile_01_col_2
+.level1_tile_01_col_2
     EQUB &01, &00, &09, &2A, &6D, &E2, &EC, &F1, &CA, &BD, &53, &9E, &15, &12, &0C, &30
     EQUB &48, &A8, &68, &E8, &E9, &EA, &EC, &E1, &EA, &ED, &E2, &ED, &E2, &EC
-.tile_01_col_3
+.level1_tile_01_col_3
     EQUB &09, &2A, &6C, &E2, &EC, &F1, &CA, &BD, &53, &9E, &15, &12, &0C, &30, &48, &A8
     EQUB &68, &E8, &E9, &EA, &EC, &E1, &EA, &ED, &E2, &ED, &E2, &EC, &E1, &EA, &EC, &E0
 
-\\ tile_02: 4x32 (16x32 px), 20 bytes (15% of raw 128 B, 1 unique col)
-tile_02_width    = 4
-tile_02_height   = 32
-tile_02_rle_flag = &10
-.tile_02_col_0
-.tile_02_col_1
-.tile_02_col_2
-.tile_02_col_3
+\\ level1_tile_02: 4x32 (16x32 px), 20 bytes (15% of raw 128 B; 1 unique col)
+level1_tile_02_width    = 4
+level1_tile_02_height   = 32
+level1_tile_02_rle_flag = &10
+.level1_tile_02_col_0
+.level1_tile_02_col_1
+.level1_tile_02_col_2
+.level1_tile_02_col_3
     EQUB &07, &00, &03, &00, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10
     EQUB &10, &EF, &E0, &1F
 
-\\ tile_03: 4x32 (16x32 px), 27 bytes (21% of raw 128 B, 1 unique col)
-tile_03_width    = 4
-tile_03_height   = 32
-tile_03_rle_flag = &10
-.tile_03_col_0
-.tile_03_col_1
-.tile_03_col_2
-.tile_03_col_3
+\\ level1_tile_03: 4x32 (16x32 px), 27 bytes (21% of raw 128 B; 1 unique col)
+level1_tile_03_width    = 4
+level1_tile_03_height   = 32
+level1_tile_03_rle_flag = &10
+.level1_tile_03_col_0
+.level1_tile_03_col_1
+.level1_tile_03_col_2
+.level1_tile_03_col_3
     EQUB &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &40, &B0, &01, &F0
     EQUB &EA, &E0, &E5, &EA, &EF, &EA, &E5, &E0, &EA, &02, &F0
 
-\\ tile_04: 4x32 (16x32 px), 60 bytes (46% of raw 128 B)
-tile_04_width    = 4
-tile_04_height   = 32
-tile_04_rle_flag = &18
-.tile_04_col_0
+\\ level1_tile_04: 4x32 (16x32 px), 60 bytes (46% of raw 128 B)
+level1_tile_04_width    = 4
+level1_tile_04_height   = 32
+level1_tile_04_rle_flag = &18
+.level1_tile_04_col_0
     EQUB &07, &00, &03, &00, &90, &DC, &F2, &ED, &EA, &61, &AC, &42, &35, &0E, &13, &1D
     EQUB &1A, &99, &D8, &F8
-.tile_04_col_1
+.level1_tile_04_col_1
     EQUB &07, &00, &07, &00, &90, &DC, &F2, &ED, &EA, &61, &AC, &42, &35, &0E, &13, &1D
-.tile_04_col_2
+.level1_tile_04_col_2
     EQUB &07, &00, &07, &00, &01, &00, &90, &DC, &F2, &ED, &EA, &61, &AC, &42
-.tile_04_col_3
+.level1_tile_04_col_3
     EQUB &07, &00, &07, &00, &05, &00, &90, &DC, &F2, &ED
 
-\\ tile_05: 4x32 (16x32 px), 112 bytes (87% of raw 128 B)
-tile_05_width    = 4
-tile_05_height   = 32
-tile_05_rle_flag = &18
-.tile_05_col_0
+\\ level1_tile_05: 4x32 (16x32 px), 112 bytes (87% of raw 128 B)
+level1_tile_05_width    = 4
+level1_tile_05_height   = 32
+level1_tile_05_rle_flag = &18
+.level1_tile_05_col_0
     EQUB &90, &DC, &FA, &ED, &EA, &61, &AC, &42, &35, &0E, &13, &1D, &9A, &59, &B8, &C8
     EQUB &F8, &E8, &E0, &EC, &EA, &E1, &EC, &E2, &ED, &E2, &ED, &EA, &E1, &EC, &EA, &E9
-.tile_05_col_1
+.level1_tile_05_col_1
     EQUB &01, &00, &90, &DC, &F2, &ED, &EA, &61, &AC, &42, &35, &0E, &13, &1D, &9A, &59
     EQUB &B8, &C8, &F8, &E8, &E0, &EC, &EA, &E1, &EC, &E2, &ED, &E2, &ED, &EA
-.tile_05_col_2
+.level1_tile_05_col_2
     EQUB &05, &00, &90, &DC, &F2, &ED, &EA, &61, &AC, &42, &35, &0E, &13, &1D, &9A, &59
     EQUB &B8, &C8, &F8, &E8, &E0, &EC, &EA, &E1, &EC, &E2
-.tile_05_col_3
+.level1_tile_05_col_3
     EQUB &06, &00, &00, &00, &90, &DC, &F2, &ED, &EA, &61, &AC, &42, &35, &0E, &13, &1D
     EQUB &9A, &59, &B8, &C8, &F8, &E8, &E0, &EC
 
-\\ tile_06: 4x32 (16x32 px), 8 bytes (6% of raw 128 B, 1 unique col)
-tile_06_width    = 4
-tile_06_height   = 32
-tile_06_rle_flag = &08
-.tile_06_col_0
-.tile_06_col_1
-.tile_06_col_2
-.tile_06_col_3
+\\ level1_tile_06: 4x32 (16x32 px), 8 bytes (6% of raw 128 B; 1 unique col)
+level1_tile_06_width    = 4
+level1_tile_06_height   = 32
+level1_tile_06_rle_flag = &08
+.level1_tile_06_col_0
+.level1_tile_06_col_1
+.level1_tile_06_col_2
+.level1_tile_06_col_3
     EQUB &07, &00, &07, &00, &06, &00, &00, &00
 
-\\ tile_07: 4x32 (16x32 px), 115 bytes (89% of raw 128 B)
-tile_07_width    = 4
-tile_07_height   = 32
-tile_07_rle_flag = &18
-.tile_07_col_0
+\\ level1_tile_07: 4x32 (16x32 px), 115 bytes (89% of raw 128 B)
+level1_tile_07_width    = 4
+level1_tile_07_height   = 32
+level1_tile_07_rle_flag = &18
+.level1_tile_07_col_0
     EQUB &03, &00, &08, &08, &28, &28, &29, &00, &71, &68, &18, &E7, &E2, &ED, &E8, &E8
     EQUB &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
-.tile_07_col_1
+.level1_tile_07_col_1
     EQUB &00, &00, &08, &69, &EB, &EE, &E6, &00, &FC, &E0, &E0, &F1, &53, &18, &E7, &E2
     EQUB &ED, &E8, &E8, &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
-.tile_07_col_2
+.level1_tile_07_col_2
     EQUB &00, &00, &10, &DA, &00, &E1, &E8, &F9, &E8, &F9, &CA, &BD, &17, &18, &E7, &E2
     EQUB &ED, &E8, &E8, &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
-.tile_07_col_3
+.level1_tile_07_col_3
     EQUB &03, &00, &10, &10, &14, &9C, &14, &9E, &52, &9E, &16, &18, &E7, &E2, &ED, &E8
     EQUB &E8, &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
 
-\\ tile_08: 4x32 (16x32 px), 74 bytes (57% of raw 128 B, 3 unique cols)
-tile_08_width    = 4
-tile_08_height   = 32
-tile_08_rle_flag = &10
-.tile_08_col_0
-.tile_08_col_3
+\\ level1_tile_08: 4x32 (16x32 px), 74 bytes (57% of raw 128 B; 3 unique cols)
+level1_tile_08_width    = 4
+level1_tile_08_height   = 32
+level1_tile_08_rle_flag = &10
+.level1_tile_08_col_0
+.level1_tile_08_col_3
     EQUB &05, &00, &EF, &E0, &E0, &1F, &01, &00, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F
     EQUB &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_08_col_1
+.level1_tile_08_col_1
     EQUB &05, &00, &EF, &E0, &E0, &2C, &00, &74, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5
     EQUB &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_08_col_2
+.level1_tile_08_col_2
     EQUB &05, &00, &EF, &E0, &E0, &D3, &00, &C2, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5
     EQUB &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
 
-\\ tile_09: 4x32 (16x32 px), 104 bytes (81% of raw 128 B)
-tile_09_width    = 4
-tile_09_height   = 32
-tile_09_rle_flag = &20
-.tile_09_col_0
+\\ level1_tile_09: 4x32 (16x32 px), 104 bytes (81% of raw 128 B)
+level1_tile_09_width    = 4
+level1_tile_09_height   = 32
+level1_tile_09_rle_flag = &20
+.level1_tile_09_col_0
     EQUB &DF, &03, &F8, &01, &F0, &1C, &00, &74, &20, &DF, &DA, &D5, &D0, &D0, &7A, &85
     EQUB &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
-.tile_09_col_1
+.level1_tile_09_col_1
     EQUB &DF, &D0, &D0, &2F, &28, &00, &4C, &00, &4E, &01, &5F, &20, &DF, &DA, &D5, &D0
     EQUB &D0, &7A, &85, &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
-.tile_09_col_2
+.level1_tile_09_col_2
     EQUB &DF, &D0, &D0, &2F, &05, &11, &39, &7D, &7F, &20, &DF, &DA, &D5, &D0, &D0, &7A
     EQUB &85, &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
-.tile_09_col_3
+.level1_tile_09_col_3
     EQUB &DF, &03, &E1, &01, &F0, &E3, &00, &C2, &20, &DF, &DA, &D5, &D0, &D0, &7A, &85
     EQUB &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
 
-\\ tile_10: 4x32 (16x32 px), 93 bytes (72% of raw 128 B)
-tile_10_width    = 4
-tile_10_height   = 32
-tile_10_rle_flag = &10
-.tile_10_col_0
+\\ level1_tile_10: 4x32 (16x32 px), 93 bytes (72% of raw 128 B)
+level1_tile_10_width    = 4
+level1_tile_10_height   = 32
+level1_tile_10_rle_flag = &10
+.level1_tile_10_col_0
     EQUB &05, &00, &EF, &E0, &E0, &1F, &01, &00, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F
     EQUB &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_10_col_1
+.level1_tile_10_col_1
     EQUB &05, &00, &EF, &E0, &E0, &2C, &00, &74, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5
     EQUB &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_10_col_2
+.level1_tile_10_col_2
     EQUB &05, &00, &EF, &03, &F0, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15
     EQUB &1A, &10, &10, &EF, &E0, &1F
-.tile_10_col_3
+.level1_tile_10_col_3
     EQUB &05, &00, &FF, &03, &E1, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15
     EQUB &1A, &10, &10, &EF, &E0, &1F
 
-\\ tile_11: 4x32 (16x32 px), 93 bytes (72% of raw 128 B)
-tile_11_width    = 4
-tile_11_height   = 32
-tile_11_rle_flag = &10
-.tile_11_col_0
+\\ level1_tile_11: 4x32 (16x32 px), 93 bytes (72% of raw 128 B)
+level1_tile_11_width    = 4
+level1_tile_11_height   = 32
+level1_tile_11_rle_flag = &10
+.level1_tile_11_col_0
     EQUB &05, &00, &23, &03, &32, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15
     EQUB &1A, &10, &10, &EF, &E0, &1F
-.tile_11_col_1
+.level1_tile_11_col_1
     EQUB &05, &00, &EF, &03, &F0, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15
     EQUB &1A, &10, &10, &EF, &E0, &1F
-.tile_11_col_2
+.level1_tile_11_col_2
     EQUB &05, &00, &EF, &E0, &E0, &D3, &00, &C2, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5
     EQUB &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_11_col_3
+.level1_tile_11_col_3
     EQUB &05, &00, &EF, &E0, &E0, &1F, &01, &00, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F
     EQUB &1F, &15, &1A, &10, &10, &EF, &E0, &1F
 
-\\ tile_12: 4x32 (16x32 px), 120 bytes (93% of raw 128 B)
-tile_12_width    = 4
-tile_12_height   = 32
-tile_12_rle_flag = &18
-.tile_12_col_0
+\\ level1_tile_12: 4x32 (16x32 px), 120 bytes (93% of raw 128 B)
+level1_tile_12_width    = 4
+level1_tile_12_height   = 32
+level1_tile_12_rle_flag = &18
+.level1_tile_12_col_0
     EQUB &04, &00, &09, &2A, &7D, &D2, &84, &30, &48, &A8, &18, &E7, &E2, &ED, &E8, &E8
     EQUB &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
-.tile_12_col_1
+.level1_tile_12_col_1
     EQUB &00, &00, &09, &2A, &7D, &D2, &8C, &30, &48, &A8, &68, &00, &F0, &18, &E7, &E2
     EQUB &ED, &E8, &E8, &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
-.tile_12_col_2
+.level1_tile_12_col_2
     EQUB &2B, &6C, &D3, &9C, &30, &48, &A8, &68, &D8, &AB, &AA, &B9, &9B, &D8, &E8, &18
     EQUB &E7, &E2, &ED, &E8, &E8, &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
-.tile_12_col_3
+.level1_tile_12_col_3
     EQUB &F6, &DA, &16, &18, &00, &C2, &E8, &E8, &68, &68, &5B, &5A, &DA, &DA, &18, &E7
     EQUB &E2, &ED, &E8, &E8, &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
 
-\\ tile_13: 4x32 (16x32 px), 118 bytes (92% of raw 128 B)
-tile_13_width    = 4
-tile_13_height   = 32
-tile_13_rle_flag = &10
-.tile_13_col_0
+\\ level1_tile_13: 4x32 (16x32 px), 118 bytes (92% of raw 128 B)
+level1_tile_13_width    = 4
+level1_tile_13_height   = 32
+level1_tile_13_rle_flag = &10
+.level1_tile_13_col_0
     EQUB &EF, &E8, &9F, &10, &67, &64, &EC, &01, &F0, &2C, &00, &74, &10, &EF, &EA, &E5
     EQUB &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_13_col_1
+.level1_tile_13_col_1
     EQUB &EF, &E0, &1F, &10, &EF, &E0, &E0, &1F, &68, &68, &6F, &01, &F0, &10, &EF, &EA
     EQUB &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_13_col_2
+.level1_tile_13_col_2
     EQUB &EF, &E0, &1F, &10, &EF, &E0, &E0, &0F, &E1, &E1, &EF, &01, &F0, &10, &EF, &EA
     EQUB &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_13_col_3
+.level1_tile_13_col_3
     EQUB &EF, &F1, &1F, &10, &FE, &D2, &C3, &01, &F0, &D3, &00, &C2, &10, &EF, &EA, &E5
     EQUB &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
 
-\\ tile_14: 4x32 (16x32 px), 120 bytes (93% of raw 128 B)
-tile_14_width    = 4
-tile_14_height   = 32
-tile_14_rle_flag = &48
-.tile_14_col_0
+\\ level1_tile_14: 4x32 (16x32 px), 120 bytes (93% of raw 128 B)
+level1_tile_14_width    = 4
+level1_tile_14_height   = 32
+level1_tile_14_rle_flag = &48
+.level1_tile_14_col_0
     EQUB &3F, &3C, &4F, &48, &00, &34, &B8, &B8, &A8, &A8, &64, &6C, &7C, &7C, &48, &B7
     EQUB &B2, &BD, &B8, &B8, &12, &ED, &47, &47, &4D, &42, &48, &48, &B7, &B8, &47
-.tile_14_col_1
+.level1_tile_14_col_1
     EQUB &84, &AA, &75, &5A, &09, &E8, &98, &A8, &78, &94, &90, &DC, &54, &78, &B8, &48
     EQUB &B7, &B2, &BD, &B8, &B8, &12, &ED, &47, &47, &4D, &42, &48, &48, &B7, &B8, &47
-.tile_14_col_2
+.level1_tile_14_col_2
     EQUB &00, &00, &C0, &8C, &22, &7D, &DA, &09, &E8, &98, &A8, &00, &F0, &48, &B7, &B2
     EQUB &BD, &B8, &B8, &12, &ED, &47, &47, &4D, &42, &48, &48, &B7, &B8, &47
-.tile_14_col_3
+.level1_tile_14_col_3
     EQUB &04, &00, &C0, &8C, &22, &7D, &CB, &09, &E8, &98, &48, &B7, &B2, &BD, &B8, &B8
     EQUB &12, &ED, &47, &47, &4D, &42, &48, &48, &B7, &B8, &47
 
-\\ tile_15: 4x32 (16x32 px), 112 bytes (87% of raw 128 B)
-tile_15_width    = 4
-tile_15_height   = 32
-tile_15_rle_flag = &10
-.tile_15_col_0
+\\ level1_tile_15: 4x32 (16x32 px), 112 bytes (87% of raw 128 B)
+level1_tile_15_width    = 4
+level1_tile_15_height   = 32
+level1_tile_15_rle_flag = &10
+.level1_tile_15_col_0
     EQUB &EF, &E8, &9F, &10, &EF, &E8, &E8, &01, &F0, &2C, &00, &74, &10, &EF, &EA, &E5
     EQUB &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_15_col_1
+.level1_tile_15_col_1
     EQUB &DC, &94, &1C, &10, &DC, &03, &84, &A7, &00, &F0, &10, &EF, &EA, &E5, &E0, &E0
     EQUB &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_15_col_2
+.level1_tile_15_col_2
     EQUB &23, &22, &13, &10, &23, &03, &32, &EE, &00, &F0, &10, &EF, &EA, &E5, &E0, &E0
     EQUB &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
-.tile_15_col_3
+.level1_tile_15_col_3
     EQUB &EF, &F1, &1F, &10, &EF, &F1, &F1, &01, &F0, &D3, &00, &C2, &10, &EF, &EA, &E5
     EQUB &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
 
-\\ tile_16: 4x32 (16x32 px), 118 bytes (92% of raw 128 B)
-tile_16_width    = 4
-tile_16_height   = 32
-tile_16_rle_flag = &20
-.tile_16_col_0
+\\ level1_tile_16: 4x32 (16x32 px), 118 bytes (92% of raw 128 B)
+level1_tile_16_width    = 4
+level1_tile_16_height   = 32
+level1_tile_16_rle_flag = &20
+.level1_tile_16_col_0
     EQUB &20, &20, &30, &30, &11, &11, &99, &A4, &97, &D0, &D0, &1C, &00, &74, &20, &DF
     EQUB &DA, &D5, &D0, &D0, &7A, &85, &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
-.tile_16_col_1
+.level1_tile_16_col_1
     EQUB &10, &D3, &D6, &DC, &D8, &D8, &C9, &20, &DF, &03, &F0, &20, &DF, &DA, &D5, &D0
     EQUB &D0, &7A, &85, &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
-.tile_16_col_2
+.level1_tile_16_col_2
     EQUB &A4, &E3, &E3, &C1, &F2, &85, &A7, &20, &DF, &03, &F0, &20, &DF, &DA, &D5, &D0
     EQUB &D0, &7A, &85, &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
-.tile_16_col_3
+.level1_tile_16_col_3
     EQUB &20, &20, &28, &28, &2C, &A4, &3D, &12, &DE, &D0, &D0, &E3, &00, &C2, &20, &DF
     EQUB &DA, &D5, &D0, &D0, &7A, &85, &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
 
-\\ tile_17: 4x32 (16x32 px), 81 bytes (63% of raw 128 B, 3 unique cols)
-tile_17_width    = 4
-tile_17_height   = 32
-tile_17_rle_flag = &10
-.tile_17_col_0
-.tile_17_col_3
+\\ level1_tile_17: 4x32 (16x32 px), 81 bytes (63% of raw 128 B; 3 unique cols)
+level1_tile_17_width    = 4
+level1_tile_17_height   = 32
+level1_tile_17_rle_flag = &10
+.level1_tile_17_col_0
+.level1_tile_17_col_3
     EQUB &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &40, &B0, &01, &F0
     EQUB &EA, &E0, &E5, &EA, &EF, &EA, &E5, &E0, &EA, &02, &F0
-.tile_17_col_1
+.level1_tile_17_col_1
     EQUB &67, &64, &75, &64, &57, &10, &67, &64, &75, &64, &57, &10, &40, &B0, &01, &F0
     EQUB &EA, &E0, &E5, &EA, &EF, &EA, &E5, &E0, &EA, &02, &F0
-.tile_17_col_2
+.level1_tile_17_col_2
     EQUB &FE, &D2, &DA, &D2, &1E, &10, &DE, &D2, &DA, &D2, &1E, &10, &40, &B0, &01, &F0
     EQUB &EA, &E0, &E5, &EA, &EF, &EA, &E5, &E0, &EA, &02, &F0
 

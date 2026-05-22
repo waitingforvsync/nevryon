@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Encode a directory of column-major MODE 5 sprites into a BeebAsm
 source file, compressed with sprite RLE scheme C (see
-../../docs/sprite_rle_notes.md).
+../../docs/sprite_rle_notes.md). One call per sprite set; the build
+script (../build.sh) drives the per-category invocations.
 
 Source: a directory containing one or more .png files. Each PNG is
 W pixels wide x H pixels tall, where W must be a multiple of 4 (one
@@ -9,7 +10,7 @@ MODE 5 byte = 4 pixels). Dimensions are auto-detected per PNG; H can
 be anything (32 for tile/hazard/explosion sprites, 22 for the
 player, 24 for enemies, 8 for flames, etc.).
 
-For each PNG `<name>.png`, the output file contains:
+For each PNG `<stem>.png`, the output file contains:
 
     \\\\ <name>: <W_cols>x<H_px> (<W_px>x<H_px> px), <enc> bytes ...
     <name>_width    = <W_cols>           \\ in MODE 5 byte-columns
@@ -23,13 +24,23 @@ For each PNG `<name>.png`, the output file contains:
     .<name>_col_<W_cols-1>
         EQUB ...
 
-`<name>` is the PNG's filename stem (`.png` stripped). The stem must
-match `[A-Za-z_][A-Za-z0-9_]*` so it is a legal BeebAsm identifier.
+`<name>` is `<stem>` by default, or `<name-prefix>_<stem>` if a
+`--name-prefix` was given (so e.g. `--name-prefix level1` turns
+`tile_06` into `level1_tile_06`). The full name must match
+`[A-Za-z_][A-Za-z0-9_]*` so it is a legal BeebAsm identifier;
+likewise for the prefix on its own.
 
-Pixels are validated against `--palette`. Off-palette pixels error
-with their coordinates. Identical columns within a sprite share
-their stream (their `.<name>_col_M` labels are stacked). Long runs
-(> 10 bytes) split into all-RLE pieces (no literal tails).
+Pixels are validated against `--palette`; if a sprite's pixels
+don't all lie inside the primary palette, the encoder tries any
+`--fallback-palette` in order (useful when "general" sprites --
+e.g. GRAPHIX-hosted hazards rendered in L1 colours -- are dropped
+into a different level's asset set without repainting). Each
+sprite picks ONE palette for its whole encoding; off-all-palette
+pixels still error with their coordinates.
+
+Identical columns within a sprite share their stream (their
+`.<name>_col_M` labels are stacked). Long runs (> 10 bytes) split
+into all-RLE pieces (no literal tails).
 
 Designed for build-script invocation: one call per sprite set. No
 hardcoded names or sizes -- the script discovers everything from
@@ -109,17 +120,22 @@ def parse_palette(spec: str) -> list[tuple[int, int, int]]:
 
 def load_png_to_sprite_bytes(
         path: Path,
-        palette: list[tuple[int, int, int]]
-        ) -> tuple[bytes, int, int]:
-    """Load a PNG and return (sprite_bytes, w_cols, h_px).
+        palettes: list[list[tuple[int, int, int]]]
+        ) -> tuple[bytes, int, int, int]:
+    """Load a PNG and return (sprite_bytes, w_cols, h_px, palette_idx).
 
     sprite_bytes is column-major MODE 5 2bpp: w_cols * h_px bytes,
     column 0 first (top-to-bottom), then column 1, etc.
 
+    `palettes` is a list of candidate palettes (primary first, then
+    any fallbacks). The first palette that covers every pixel in the
+    image is the one used to map RGB -> 2bpp; its index is returned
+    as `palette_idx` so callers can report which palette matched.
+
     Width must be a multiple of 4 (each MODE 5 byte covers 4 pixels);
-    height is unconstrained. Pixels must match `palette` exactly.
+    height is unconstrained.
     """
-    rgb_to_pixel = {rgb: idx for idx, rgb in enumerate(palette)}
+    assert palettes, 'need at least one palette'
 
     im = Image.open(path).convert('RGB')
     w_px, h_px = im.size
@@ -133,16 +149,46 @@ def load_png_to_sprite_bytes(
 
     px = im.load()
 
+    # Collect the image's unique RGB set, with one example coordinate
+    # per RGB so a no-palette-matches error can point at the offender.
+    first_seen: dict[tuple[int, int, int], tuple[int, int]] = {}
+    for y in range(h_px):
+        for x in range(w_px):
+            rgb = px[x, y]
+            if rgb not in first_seen:
+                first_seen[rgb] = (x, y)
+    unique_rgbs = set(first_seen)
+
+    # Pick the first palette that covers every pixel.
+    palette_idx = -1
+    palette: list[tuple[int, int, int]] = []
+    for i, p in enumerate(palettes):
+        if unique_rgbs.issubset(set(p)):
+            palette_idx = i
+            palette = p
+            break
+
+    if palette_idx < 0:
+        # No palette covers the sprite. Report the first off-palette
+        # pixel against the primary palette -- the most useful diagnostic.
+        primary = set(palettes[0])
+        for rgb, (x, y) in first_seen.items():
+            if rgb not in primary:
+                fallback_blurb = (
+                    f' (also tried {len(palettes) - 1} fallback palette(s))'
+                    if len(palettes) > 1 else '')
+                raise SystemExit(
+                    f'{path.name}: off-palette pixel at ({x},{y}) = {rgb}'
+                    f'{fallback_blurb}. Primary palette: {palettes[0]}.')
+        raise AssertionError('unreachable')   # palette_idx < 0 but every rgb in primary?
+
+    rgb_to_pixel = {rgb: idx for idx, rgb in enumerate(palette)}
+
     # Per-pixel 0..3, row-major, then re-pack column-major into bytes.
     pix2bpp = [[0] * w_px for _ in range(h_px)]
     for y in range(h_px):
         for x in range(w_px):
-            rgb = px[x, y]
-            if rgb not in rgb_to_pixel:
-                raise SystemExit(
-                    f'{path.name}: off-palette pixel at ({x},{y}) = {rgb}. '
-                    f'Allowed: {palette}.')
-            pix2bpp[y][x] = rgb_to_pixel[rgb]
+            pix2bpp[y][x] = rgb_to_pixel[px[x, y]]
 
     # MODE 5 byte layout: pixel n (n=0..3 left-to-right within a byte)
     # uses bit (7-n) for the high bit of its 2bpp value and bit (3-n)
@@ -159,7 +205,7 @@ def load_png_to_sprite_bytes(
                 b |= hi << (7 - p)
                 b |= lo << (3 - p)
             out[c * h_px + y] = b
-    return bytes(out), w_cols, h_px
+    return bytes(out), w_cols, h_px, palette_idx
 
 
 def format_equb(data: bytes, width: int = EQUB_PER_LINE,
@@ -228,10 +274,12 @@ def encode_sprite_columns(sprite: bytes, w_cols: int, h_px: int
     return flag, streams
 
 
-def emit_sprite(name: str, sprite: bytes, w_cols: int, h_px: int
+def emit_sprite(name: str, sprite: bytes, w_cols: int, h_px: int,
+                palette_idx: int
                 ) -> tuple[list[str], int, int, int, int]:
     """Encode one sprite and return (emit_lines, flag_byte, enc_bytes,
-    raw_bytes, coalesced_columns)."""
+    raw_bytes, coalesced_columns). `palette_idx` is annotated in the
+    output header comment if it isn't the primary palette."""
     flag, col_streams = encode_sprite_columns(sprite, w_cols, h_px)
 
     # Round-trip via the spec decoder. The smart encoder still produces
@@ -261,13 +309,18 @@ def emit_sprite(name: str, sprite: bytes, w_cols: int, h_px: int
     flag_byte = flag << 3
 
     pct = enc_bytes * 100 // raw_bytes
-    coalesce_note = (f', {n_unique} unique col' + ('s' if n_unique != 1 else '')
-                     if n_unique != w_cols else '')
+    notes: list[str] = []
+    if n_unique != w_cols:
+        notes.append(
+            f'{n_unique} unique col' + ('s' if n_unique != 1 else ''))
+    if palette_idx != 0:
+        notes.append(f'fallback palette {palette_idx}')
+    note_str = ('; ' + ', '.join(notes)) if notes else ''
 
     lines: list[str] = []
     lines.append(
         f'\\\\ {name}: {w_cols}x{h_px} ({w_cols * 4}x{h_px} px), '
-        f'{enc_bytes} bytes ({pct}% of raw {raw_bytes} B{coalesce_note})')
+        f'{enc_bytes} bytes ({pct}% of raw {raw_bytes} B{note_str})')
     lines.append(f'{name}_width    = {w_cols}')
     lines.append(f'{name}_height   = {h_px}')
     lines.append(f'{name}_rle_flag = &{flag_byte:02X}')
@@ -280,27 +333,44 @@ def emit_sprite(name: str, sprite: bytes, w_cols: int, h_px: int
     return lines, flag_byte, enc_bytes, raw_bytes, coalesced
 
 
+def prefixed(name_prefix: str, stem: str) -> str:
+    """Apply the optional --name-prefix to a PNG stem, separating with
+    a single underscore. Empty prefix is a passthrough."""
+    return f'{name_prefix}_{stem}' if name_prefix else stem
+
+
 def encode_sprite_set(src_dir: Path, out_path: Path,
-                      palette: list[tuple[int, int, int]],
-                      label: str
+                      palettes: list[list[tuple[int, int, int]]],
+                      label: str, name_prefix: str = ''
                       ) -> tuple[int, int, int,
-                                 list[tuple[str, int, int, int, int, int]]]:
+                                 list[tuple[str, int, int, int, int, int, int]]]:
     """Encode every .png in src_dir into out_path.
+
+    `palettes[0]` is the primary palette; subsequent entries are
+    fallbacks tried in order when a sprite's pixels don't all match
+    the primary.
+
+    `name_prefix`, if non-empty, is prepended (with an underscore
+    separator) to every generated symbol name -- so files for level N
+    can carry a "levelN_" prefix to avoid colliding across levels'
+    .6502 includes.
 
     Returns (enc_total, raw_total, coalesced_columns_total,
     per_sprite_stats) where each per_sprite_stats entry is
-    (name, w_cols, h_px, flag_byte, enc_bytes, raw_bytes).
+    (full_name, w_cols, h_px, flag_byte, enc_bytes, raw_bytes,
+    palette_idx).
     """
     png_files = sorted(src_dir.glob('*.png'))
     if not png_files:
         raise SystemExit(f'no .png files found in {src_dir}.')
 
-    # Validate names up front so we don't write a partial output before
-    # erroring on a bad filename.
+    # Validate the full (prefixed) names up front so we don't write a
+    # partial output before erroring on a bad filename.
     for p in png_files:
-        if not NAME_RE.match(p.stem):
+        full = prefixed(name_prefix, p.stem)
+        if not NAME_RE.match(full):
             raise SystemExit(
-                f'{p.name}: stem {p.stem!r} is not a valid BeebAsm '
+                f'{p.name}: symbol {full!r} is not a valid BeebAsm '
                 f'identifier (need [A-Za-z_][A-Za-z0-9_]*).')
 
     lines: list[str] = []
@@ -328,17 +398,19 @@ def encode_sprite_set(src_dir: Path, out_path: Path,
     raw_total = 0
     enc_total = 0
     coalesced_total = 0
-    stats: list[tuple[str, int, int, int, int, int]] = []
+    stats: list[tuple[str, int, int, int, int, int, int]] = []
 
     for p in png_files:
-        sprite, w_cols, h_px = load_png_to_sprite_bytes(p, palette)
+        full_name = prefixed(name_prefix, p.stem)
+        sprite, w_cols, h_px, palette_idx = load_png_to_sprite_bytes(p, palettes)
         sprite_lines, flag_byte, enc_bytes, raw_bytes, coalesced = \
-            emit_sprite(p.stem, sprite, w_cols, h_px)
+            emit_sprite(full_name, sprite, w_cols, h_px, palette_idx)
         lines.extend(sprite_lines)
         raw_total += raw_bytes
         enc_total += enc_bytes
         coalesced_total += coalesced
-        stats.append((p.stem, w_cols, h_px, flag_byte, enc_bytes, raw_bytes))
+        stats.append((full_name, w_cols, h_px, flag_byte, enc_bytes, raw_bytes,
+                      palette_idx))
 
     pct = enc_total * 100 // raw_total if raw_total else 0
     lines.append(
@@ -358,22 +430,42 @@ def build_argparser() -> argparse.ArgumentParser:
     ap.add_argument('--out', type=Path, required=True,
                     help='output .6502 file path')
     ap.add_argument('--palette', required=True,
-                    help='four colours, comma-separated. Each is either a '
-                         '6-digit hex code (e.g. "ff0000") or a BBC physical '
-                         'name: black/red/green/yellow/blue/magenta/cyan/white. '
-                         'The first entry is pixel value 0.')
+                    help='primary palette: four colours, comma-separated. '
+                         'Each is either a 6-digit hex code (e.g. "ff0000") or '
+                         'a BBC physical name: black/red/green/yellow/blue/'
+                         'magenta/cyan/white. The first entry is pixel value 0.')
+    ap.add_argument('--fallback-palette', action='append', default=[],
+                    metavar='C0,C1,C2,C3',
+                    help='additional 4-colour palette to try if the primary '
+                         'palette does not cover a sprite. May be repeated; '
+                         'palettes are tried in argument order. Use case: '
+                         '"general" sprites (e.g. GRAPHIX hazards rendered in '
+                         'L1 colours) dropped into a different scenario asset '
+                         'set without repainting.')
     ap.add_argument('--label', default=None,
                     help='label used in the output file header. Defaults to '
                          'the last two components of --src (e.g. "level1/tiles").')
-    ap.add_argument('--expected-bytes', type=int, default=None,
-                    help='if set, error out unless the encoded total equals N. '
-                         'For build-script regression checks.')
+    ap.add_argument('--name-prefix', default='', metavar='PREFIX',
+                    help='string prepended (with an underscore separator) to '
+                         'every generated symbol. Used to avoid collisions when '
+                         'multiple sets of identically-named sprites end up in '
+                         'the same BeebAsm context. E.g. --name-prefix level1 '
+                         'turns "tile_06_rle_flag" into "level1_tile_06_rle_flag". '
+                         'Must be a valid BeebAsm identifier ('
+                         '[A-Za-z_][A-Za-z0-9_]*) or empty.')
     return ap
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_argparser().parse_args(argv)
-    palette = parse_palette(args.palette)
+    palettes = [parse_palette(args.palette)]
+    for fp in args.fallback_palette:
+        palettes.append(parse_palette(fp))
+
+    if args.name_prefix and not NAME_RE.match(args.name_prefix):
+        raise SystemExit(
+            f'--name-prefix {args.name_prefix!r} is not a valid BeebAsm '
+            f'identifier (need [A-Za-z_][A-Za-z0-9_]*).')
 
     if args.label is not None:
         label = args.label
@@ -383,26 +475,21 @@ def main(argv: list[str] | None = None) -> int:
         label = '/'.join(parts)
 
     enc_total, raw_total, coalesced, stats = encode_sprite_set(
-        args.src, args.out, palette, label)
+        args.src, args.out, palettes, label, name_prefix=args.name_prefix)
 
     pct = enc_total * 100 // raw_total if raw_total else 0
     print(f'wrote {args.out}')
     print(f'  {len(stats)} sprite(s), {enc_total} B encoded / {raw_total} B raw '
           f'({pct}%); {coalesced} duplicate columns coalesced')
 
-    # Per-sprite table: <name>  <WxH>  flag=&XX  enc/raw (pct%)
+    # Per-sprite table: <name>  <WxH>  flag=&XX  enc/raw (pct%)  [pal=N]
     name_w = max((len(s[0]) for s in stats), default=4)
-    for name, w_cols, h_px, flag_byte, enc_bytes, raw_bytes in stats:
+    for name, w_cols, h_px, flag_byte, enc_bytes, raw_bytes, palette_idx in stats:
         spct = enc_bytes * 100 // raw_bytes if raw_bytes else 0
+        pal_note = f'  pal={palette_idx}' if palette_idx != 0 else ''
         print(f'  {name:<{name_w}}  {w_cols}x{h_px:<2}  '
               f'flag=&{flag_byte:02X}  '
-              f'{enc_bytes:>4}/{raw_bytes:<4}B ({spct:>3}%)')
-
-    if args.expected_bytes is not None and enc_total != args.expected_bytes:
-        raise SystemExit(
-            f'encoded size {enc_total} != expected {args.expected_bytes}. '
-            f'If you intentionally changed the artwork or the encoder, '
-            f'update the --expected-bytes value in the caller.')
+              f'{enc_bytes:>4}/{raw_bytes:<4}B ({spct:>3}%){pal_note}')
     return 0
 
 

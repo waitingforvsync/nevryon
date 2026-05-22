@@ -61,12 +61,14 @@ tools/                       \\ build-time Python utilities (self-contained)
 assets/                      \\ source artwork -- editable in any pixel editor
   level<1..4>/
     tiles/                   \\ 18 x 16x32-px tile PNGs, per-scenario palette
-    (future: hazards_stage<1,2>/, explosions/, enemies/)
+    explosions/              \\ 6 x 16x32-px player-death frames, per-scenario
+    (future: hazards_stage<1,2>/, enemies/)
   (future: shared/{player,flames,pickups,graphix_hazards}/)
 
 data/                        \\ generated BeebAsm sources, ready to INCLUDE
   level<1..4>/
     tiles.6502               \\ scheme C RLE'd 18-tile catalog (one per level)
+    explosions.6502          \\ scheme C RLE'd 6-frame death explosion
 ```
 
 Run `./build.sh` from `ultimate/` to regenerate everything in
@@ -128,22 +130,22 @@ encoder in `tools/sprite_rle.py`:
 Both transforms keep the output spec-conformant: the local
 `tools/sprite_rle.decode_sprite` round-trips every sprite.
 
-### Per-level encoded sizes (tiles)
+### Per-level encoded sizes
 
-| Level | Palette                | Encoded | Raw   | %    | Coalesced cols | Survey |
-|------:|------------------------|--------:|------:|-----:|---------------:|-------:|
-|     1 | black/red/yellow/white |  1 547  | 2 304 | 67 % | 11             |  1 763 |
-|     2 | black/blue/cyan/white  |  1 231  | 2 304 | 53 % |  0             |  1 222 |
-|     3 | black/red/green/white  |  1 267  | 2 304 | 54 % |  3             |  1 293 |
-|     4 | black/red/magenta/white|  1 835  | 2 304 | 79 % |  3             |  1 856 |
-|       |                        |**5 880**|9 216  |64 %  |**17**          |  6 234 |
+| Level | Palette                  | Tiles 18×128 → enc | Explosions 6×128 → enc |
+|------:|--------------------------|-------------------:|-----------------------:|
+|     1 | black/red/yellow/white   |   1 547 / 2 304    |        553 /   768     |
+|     2 | black/blue/cyan/white    |   1 231 / 2 304    |        371 /   768     |
+|     3 | black/red/green/white    |   1 267 / 2 304    |        645 /   768     |
+|     4 | black/red/magenta/white  |   1 835 / 2 304    |        653 /   768     |
+|       |                          | **5 880** / 9 216  |   **2 222** / 3 072    |
 
-Survey column is the spec-exact Scheme-C-data figure from
-`../docs/sprite_rle_notes.md`. We come in 354 B below the survey
-across the four levels; the L2 row is the lone case where our
-encoder is slightly worse (+9 B) — L2's tile artwork happens to
-have no coalescing opportunities AND a handful of runs of length
-`10q + 1` that pay the +1 B all-RLE-tail cost.
+Tiles totals at 64 % of raw, explosions at 72 %. Three of the four
+levels match the spec-exact survey figures in
+`../docs/sprite_rle_notes.md` to the byte; L1 tiles save 216 B via
+within-sprite column coalescing, L2 explosions save 4 B for the
+same reason, and L2 tiles is +9 B (the all-RLE-tail rule's +1 B-
+per-run cost on a sprite set with no coalescing opportunities).
 
 ## Regenerating the data
 
@@ -154,15 +156,8 @@ have no coalescing opportunities AND a handful of runs of length
 regenerates every `data/*.6502` from the PNGs in `assets/`. The
 script lives at `ultimate/build.sh` and codifies the
 per-asset-category invocations of `tools/encode_sprites.py`. It is
-re-runnable; each invocation has a `--expected-bytes N` clause that
-asserts the encoded size hasn't drifted from the committed
-baseline.
-
-If you intentionally re-paint artwork and the encoded size changes,
-bump the matching `--expected-bytes` value in `build.sh` to the new
-figure shown in the script's output. (The build script is the
-single source of truth for "what size should each blob be" — the
-encoder itself has no level table baked in.)
+re-runnable; the resulting `.6502` files are checked-in so a fresh
+clone can assemble without running the encoders.
 
 ### tools/encode_sprites.py — what it does
 
@@ -171,12 +166,26 @@ encoder itself has no level table baked in.)
   a multiple of 4 (MODE 5 = 4 px per byte).
 * The PNG's filename stem becomes the BeebAsm symbol prefix —
   `tile_06.png` → `tile_06_width`, `tile_06_height`,
-  `tile_06_rle_flag`, `.tile_06_col_0..3`. The stem must match
+  `tile_06_rle_flag`, `.tile_06_col_0..3`. The stem (and the
+  optional `--name-prefix` joined to it) must match
   `[A-Za-z_][A-Za-z0-9_]*`.
+* `--name-prefix PREFIX` (optional) prepends `PREFIX_` to every
+  generated symbol, so the four per-level data files in this repo
+  carry `level1_` / `level2_` / etc. prefixes and can be INCLUDE'd
+  side-by-side without colliding (`level1_tile_06_rle_flag` vs
+  `level2_tile_06_rle_flag`).
 * Validates every pixel against `--palette` (4 colours, comma-
   separated, BBC physical names or 6-digit hex). Off-palette pixels
   error with their `(x, y)` coordinates so they're easy to find in
   an editor.
+* Accepts one or more `--fallback-palette` arguments. If a sprite's
+  pixels don't all match the primary palette, the encoder tries
+  each fallback in order; the first palette covering every pixel of
+  that sprite is the one used. The chosen palette index is noted in
+  the per-sprite header comment (`fallback palette N`). Use case:
+  copying "general" sprites (e.g. GRAPHIX-hosted hazards rendered
+  in L1 colours) into another scenario's asset set without
+  repainting.
 * Round-trips every sprite through `tools/sprite_rle.decode_sprite`
   before writing the output file.
 

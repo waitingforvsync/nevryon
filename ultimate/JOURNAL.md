@@ -6,6 +6,127 @@ left off, focused on the remake.
 
 ---
 
+## 2026-05-23 — Session 4: per-level explosions + drop --expected-bytes
+
+Added the player-death explosion frames as the second asset
+category. Each scenario has 6 frames at 4x32 (128 B raw); frames
+0..3 originate from the per-scenario LEVD1 at &4A00..&4BFF and
+frames 4..5 from each LEVD2 at &7C00..&7CFF. The 6 frames are
+shared between stages 1 and 2 of the same scenario, so we treat
+them as one sprite set per scenario.
+
+### Assets and outputs
+
+* `assets/level<1..4>/explosions/explosion_00..05.png` — copied
+  from `../levels/<N>/explosion_*.png`. All 24 PNGs are 16x32 px
+  native, scenario palette.
+* `data/level<1..4>/explosions.6502` — generated.
+* `build.sh` Phase 1 grew four `--src ... explosions/` invocations.
+
+### Result
+
+| Level | Encoded | Raw | %    | Coalesced cols | Survey |
+|------:|--------:|----:|-----:|---------------:|-------:|
+|     1 |    553  | 768 | 72 % |             0  |    553 |
+|     2 |    371  | 768 | 48 % |             1  |    375 |
+|     3 |    645  | 768 | 83 % |             0  |    645 |
+|     4 |    653  | 768 | 85 % |             0  |    653 |
+| Total |  2 222  |3 072| 72 % |             1  |  2 226 |
+
+Three of the four scenarios hit the spec-survey number to the byte;
+L2 saves 4 B from coalescing one duplicate column.
+
+### Verification
+
+All 24 PNG-derived 128-byte sprites are byte-identical to the
+canonical bytes -- frames 0..3 against `../extracted/<N>.LEVD1`
+file offset `0x000..0x1FF`, frames 4..5 against
+`../extracted/<N>.LEVD2` offset `0x880..0x9FF`. Every sprite
+round-trips through the local spec decoder before being written.
+
+### Drop --expected-bytes
+
+Rich asked to drop the build-script regression check now we trust
+the encoder. Removed:
+
+* `--expected-bytes N` flag from `tools/encode_sprites.py` (the
+  argparse argument + the late-stage assertion in `main()`).
+* All eight `--expected-bytes N` clauses from `build.sh`.
+* "Regenerating the data" copy in CLAUDE.md that called the check
+  out as the load-bearing safety net.
+
+Re-running build.sh produces byte-identical `data/*.6502` to the
+pre-removal state; the only correctness check now is the in-tool
+round-trip of every sprite through `tools/sprite_rle.decode_sprite`
+before the output file is written. Stalest-state catches still hit
+(off-palette pixels, non-multiple-of-4 width, bad filename stem).
+
+### Fallback palettes
+
+Rich also asked for a `--fallback-palette` option. Use case: some
+sprites are "general" (the GRAPHIX hazards 15 / 16 / 19 in the
+original are scenario-agnostic shape data that the engine renders
+through the current level palette). When we replicate those into
+each scenario's hazard asset set for build simplicity, the PNG
+pixels won't match the L2 / L3 / L4 scenario palette -- they'll
+still be in the L1 / GRAPHIX rendering.
+
+Implementation: `--fallback-palette C0,C1,C2,C3` is repeatable.
+Per sprite, the encoder picks the FIRST palette (primary first,
+then fallbacks in argument order) that covers every pixel in that
+sprite. The chosen palette is used for the RGB -> 0..3 mapping. The
+per-sprite output comment annotates `fallback palette N` when not
+the primary; stdout shows `pal=N` after the per-sprite stats. When
+every sprite hits the primary palette the output is unchanged.
+
+Tested: encoding `assets/level2/tiles` with `--palette L1` +
+`--fallback-palette L2` produces 1 231 B (identical to encoding it
+with primary L2), with every sprite annotated `pal=1`. Without the
+fallback, the encoder errors at `(14,15) = (0,0,255)` in
+tile_00.png as expected.
+
+(One ripple in committed data: the per-sprite header comment's
+"N unique cols" note now uses `;` rather than `,` as its joiner so
+the optional `fallback palette N` annotation can be added with the
+same separator. Cosmetic.)
+
+### Name prefix
+
+Same session, Rich asked for `--name-prefix PREFIX` so the
+identically-named sprites across levels (every level has its own
+`tile_06`) can coexist in one BeebAsm context without colliding.
+The prefix is joined with a single underscore and the resulting
+full name is validated against the BeebAsm identifier regex.
+
+`build.sh` passes `--name-prefix level<N>` to every per-level
+invocation, so the output now looks like:
+
+```
+\\ level1_tile_06: 4x32 (16x32 px), 8 bytes (6% of raw 128 B; 1 unique col)
+level1_tile_06_width    = 4
+level1_tile_06_height   = 32
+level1_tile_06_rle_flag = &08
+.level1_tile_06_col_0
+.level1_tile_06_col_1
+.level1_tile_06_col_2
+.level1_tile_06_col_3
+    EQUB &07, &00, &07, &00, &06, &00, &00, &00
+```
+
+When `--name-prefix` is empty (the default) the script's output is
+unchanged from the previous behaviour.
+
+### Next
+
+* Hazards (stage 1 and stage 2) for each level -- 14 frames per
+  stage, 4x32 each. Same pipeline; will land 8 more `--src ...
+  hazards_stage<S>/` invocations in build.sh.
+* Then animating sprites (player / enemies / flames / pickups),
+  which need a different encoder mode (trim + raw blit, see
+  ../docs/sprite_rle_notes.md "When to skip the RLE step").
+
+---
+
 ## 2026-05-22 — Session 3: generic sprite encoder + asset subfolders + build.sh
 
 Rich asked for the encoder to stop being tile-specific: it should
