@@ -1,38 +1,34 @@
 #!/usr/bin/env python3
-"""Emit BeebAsm source for level 1's tile catalog, encoded with
-sprite RLE scheme C (see ../../docs/sprite_rle_notes.md).
+"""Emit BeebAsm source for one tile catalog, encoded with sprite RLE
+scheme C (see ../../docs/sprite_rle_notes.md).
 
-Reads source artwork from `assets/level1/tile_NN.png` (18 files,
-each 16x32 pixels = 4x32 MODE 5 byte-columns, scenario-1 palette
-{black, red, yellow, white}). Pixel values are mapped back to 2bpp
-0..3, packed column-major into a 128-byte sprite, then compressed
-with scheme C. Round-trip is verified for every sprite.
+Reads 18 tile PNGs from --src (tile_00.png .. tile_17.png), each
+16x32 pixels using exactly four colours given by --palette. Each
+pixel is mapped back to a 2bpp value 0..3 against the palette,
+packed column-major into a 128-byte sprite, then compressed with
+scheme C. Round-trip is verified for every sprite via the local
+sprite_rle.decode_sprite (the spec decoder -- our smart encoder
+still produces a spec-valid stream).
 
-Output (`tiles_level1.6502`):
+Usage:
+  encode_tiles.py --src DIR --out FILE --palette C0,C1,C2,C3
+                  [--label TEXT] [--expected-bytes N]
 
-    tile_NN_rle_flag = &XX            \\ FLAG_BYTE = FLAG << 3
-    .tile_NN_col_0
-        EQUB ..., ...
-    .tile_NN_col_1
-        EQUB ...
-    .tile_NN_col_2
-        EQUB ...
-    .tile_NN_col_3
-        EQUB ...
+Palette colours are comma-separated; each is either a 6-digit hex
+code (e.g. "ff0000" or "#ff0000") or a BBC physical colour name:
+black, red, green, yellow, blue, magenta, cyan, white. The first
+entry is pixel-value 0 (always black for Nevryon's MODE 5 sprites).
 
-Runs do NOT cross sprite-column boundaries, so each `.tile_NN_col_M`
-label points at the first encoded byte of one MODE 5 column (32
-source bytes). The user builds the per-column / per-sprite offset
-tables on top of these labels.
+If a PNG contains an off-palette pixel the script errors out with
+its coordinates so it's easy to spot in an editor.
 
-If a tile PNG contains an off-palette colour the script errors out
-with the pixel coordinates so it's easy to spot in an editor.
-
-Run from anywhere -- paths resolve from the script's location.
+Designed for build-script invocation: one call per level, with all
+paths + palette passed explicitly. No hardcoded level table.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -62,15 +58,9 @@ from PIL import Image
 # is decoded identically by the spec decoder. We still round-trip
 # every sprite through `sprite_rle.decode_sprite` before emitting.
 HERE = Path(__file__).resolve().parent
-ULTIMATE_DIR = HERE.parent
-REPO_ROOT = ULTIMATE_DIR.parent
-
 sys.path.insert(0, str(HERE))
 from sprite_rle import decode_sprite, pick_flag  # noqa: E402
 
-
-ASSETS_DIR  = ULTIMATE_DIR / 'assets' / 'level1'
-OUTPUT_PATH = ULTIMATE_DIR / 'data' / 'level1' / 'tiles.6502'
 
 TILE_COUNT    = 18
 SPRITE_W_COLS = 4         # 4 byte-columns -> 16 pixels wide
@@ -78,43 +68,57 @@ SPRITE_H      = 32        # 32 scanlines
 SPRITE_W_PX   = SPRITE_W_COLS * 4
 SPRITE_BYTES  = SPRITE_W_COLS * SPRITE_H
 
-# Regression baseline for the emitted encoded data, level -> bytes.
-# This is the byte count AFTER both the all-RLE long-run split and
-# the within-sprite column coalescing (see comment above the imports).
-# It will differ from the "Scheme C (data)" survey numbers in
-# ../docs/sprite_rle_notes.md (which doesn't apply either
-# transformation) -- the survey gave 1763 B for level 1; we land
-# lower thanks to coalescing. If a re-paint of the artwork changes
-# the byte count, update this constant alongside the change.
-EXPECTED_ENCODED_BYTES = {
-    1: 1547,    # vs survey's 1763 B: saves 216 B via column coalescing
-                # (-220 B) minus a handful of bytes added by the
-                # all-RLE long-run split.
+
+# BBC Micro physical-colour set (MODE 1/2/5 8-colour set). Used by the
+# palette parser to accept human-friendly names alongside hex codes.
+BBC_PHYSICAL_NAMES: dict[str, tuple[int, int, int]] = {
+    'black':   (0,   0,   0),
+    'red':     (255, 0,   0),
+    'green':   (0,   255, 0),
+    'yellow':  (255, 255, 0),
+    'blue':    (0,   0,   255),
+    'magenta': (255, 0,   255),
+    'cyan':    (0,   255, 255),
+    'white':   (255, 255, 255),
 }
 
-# Level-1 (scenario 1, Battle Cruiser) MODE 5 palette. Pixel value
-# 0..3 -> RGB. Mirrors NEVRYON_LEVEL_PALETTES[1] in ../tools/render_screen.py.
-LEVEL1_PALETTE_RGB: list[tuple[int, int, int]] = [
-    (0,   0,   0),    # 0 black
-    (255, 0,   0),    # 1 red
-    (255, 255, 0),    # 2 yellow
-    (255, 255, 255),  # 3 white
-]
-RGB_TO_PIXEL = {rgb: idx for idx, rgb in enumerate(LEVEL1_PALETTE_RGB)}
 
 EQUB_PER_LINE = 16
 
 
-def load_tile_png(path: Path) -> bytes:
+def parse_colour(spec: str) -> tuple[int, int, int]:
+    """Parse one colour: either a BBC physical name or a 6-digit hex
+    (with or without leading '#')."""
+    s = spec.strip().lower().lstrip('#')
+    if s in BBC_PHYSICAL_NAMES:
+        return BBC_PHYSICAL_NAMES[s]
+    if len(s) == 6 and all(c in '0123456789abcdef' for c in s):
+        return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+    raise SystemExit(
+        f'invalid colour {spec!r}: expected 6-digit hex or one of '
+        f'{sorted(BBC_PHYSICAL_NAMES)}.')
+
+
+def parse_palette(spec: str) -> list[tuple[int, int, int]]:
+    """Parse a 4-colour comma-separated palette spec."""
+    parts = [p.strip() for p in spec.split(',') if p.strip()]
+    if len(parts) != 4:
+        raise SystemExit(
+            f'palette must have exactly 4 colours, got {len(parts)} '
+            f'in {spec!r}.')
+    return [parse_colour(p) for p in parts]
+
+
+def load_tile_png(path: Path,
+                  palette: list[tuple[int, int, int]]) -> bytes:
     """Load tile_NN.png and return the 128 column-major 2bpp source bytes.
 
     The image must be exactly SPRITE_W_PX x SPRITE_H pixels and use
-    only colours from LEVEL1_PALETTE_RGB. The PNG is sampled at its
-    native pixel grid -- any upscaling done by render_sprite.py
-    earlier in the pipeline (its --scale flag) was disabled when the
-    assets/ copies were produced, so the assets here ARE at native
-    resolution. (If you re-export, keep --scale 1.)
+    only colours from `palette`. Off-palette pixels error with their
+    coordinates so they're easy to find in an editor.
     """
+    rgb_to_pixel = {rgb: idx for idx, rgb in enumerate(palette)}
+
     im = Image.open(path).convert('RGB')
     if im.size != (SPRITE_W_PX, SPRITE_H):
         raise SystemExit(
@@ -128,11 +132,11 @@ def load_tile_png(path: Path) -> bytes:
     for y in range(SPRITE_H):
         for x in range(SPRITE_W_PX):
             rgb = px[x, y]
-            if rgb not in RGB_TO_PIXEL:
+            if rgb not in rgb_to_pixel:
                 raise SystemExit(
                     f'{path.name}: off-palette pixel at ({x},{y}) = {rgb}. '
-                    f'Allowed: {LEVEL1_PALETTE_RGB}.')
-            pix2bpp[y][x] = RGB_TO_PIXEL[rgb]
+                    f'Allowed: {palette}.')
+            pix2bpp[y][x] = rgb_to_pixel[rgb]
 
     # MODE 5 byte layout: pixel n (n=0..3 left-to-right) uses
     # bit (7-n) for the high bit of its 2bpp value and bit (3-n) for
@@ -221,10 +225,19 @@ def encode_sprite_columns(sprite: bytes) -> tuple[int, list[bytes]]:
     return flag, streams
 
 
-def main() -> int:
+def encode_tile_catalog(src_dir: Path, out_path: Path,
+                        palette: list[tuple[int, int, int]],
+                        label: str
+                        ) -> tuple[int, int, int,
+                                   list[tuple[int, int, int, int]]]:
+    """Encode 18 tiles from src_dir into out_path.
+
+    Returns (enc_total, raw_total, coalesced_columns_saved,
+    per_tile_stats) where each per_tile_stats entry is (tid, flag_byte,
+    enc_bytes, n_unique_cols)."""
     lines: list[str] = []
-    lines.append(r'\\ Nevryon Ultimate -- Level 1 tile catalog')
-    lines.append(r'\\ Auto-generated by tools/encode_tiles.py from assets/level1/*.png.')
+    lines.append(rf'\\ Nevryon Ultimate -- {label} tile catalog')
+    lines.append(rf'\\ Auto-generated by tools/encode_tiles.py from {src_dir}/*.png.')
     lines.append(r'\\ Do not edit by hand -- edit the PNGs and re-run the encoder.')
     lines.append(r'\\')
     lines.append(r'\\ 18 tile sprites, raw shape 4 cols x 32 lines, column-major,')
@@ -251,17 +264,16 @@ def main() -> int:
     per_tile_stats: list[tuple[int, int, int, int]] = []   # (tid, flag, bytes, n_unique_cols)
 
     for tid in range(TILE_COUNT):
-        png_path = ASSETS_DIR / f'tile_{tid:02d}.png'
-        sprite = load_tile_png(png_path)
+        png_path = src_dir / f'tile_{tid:02d}.png'
+        sprite = load_tile_png(png_path, palette)
 
         flag, col_streams = encode_sprite_columns(sprite)
 
         # Round-trip: concatenate per-column streams and decode via the
-        # parent's spec decoder. Catches any encoder bug; the smart
-        # encoder still produces a spec-valid stream (just biased toward
-        # more runs).
+        # spec decoder. The smart encoder still produces a spec-valid
+        # stream (just biased toward more runs).
         if decode_sprite(flag, b''.join(col_streams)) != sprite:
-            raise SystemExit(f'round-trip FAILED for tile {tid:02d}')
+            raise SystemExit(f'{label} tile {tid:02d}: round-trip FAILED')
 
         # Within-sprite column coalescing. Walk columns 0..3 in order;
         # the first column to use a given stream owns it (gets emitted
@@ -306,27 +318,60 @@ def main() -> int:
         f'\\\\ ---- totals: {enc_total} encoded / {raw_total} raw '
         f'({pct_total}%); {coalesced_columns_saved} duplicate columns coalesced ----')
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text('\n'.join(lines) + '\n')
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text('\n'.join(lines) + '\n')
 
-    expected = EXPECTED_ENCODED_BYTES.get(1)
-    if expected is None:
-        print('NOTE: EXPECTED_ENCODED_BYTES[1] is None -- update the constant '
-              f'to {enc_total} to lock this in as the regression baseline.')
-    elif enc_total != expected:
+    return enc_total, raw_total, coalesced_columns_saved, per_tile_stats
+
+
+def build_argparser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(
+        description='Encode one tile catalog into a BeebAsm source file.')
+    ap.add_argument('--src', type=Path, required=True,
+                    help='directory containing tile_00.png .. tile_17.png')
+    ap.add_argument('--out', type=Path, required=True,
+                    help='output .6502 file path')
+    ap.add_argument('--palette', required=True,
+                    help='four colours, comma-separated. Each is either a '
+                         '6-digit hex code (e.g. "ff0000") or a BBC physical '
+                         'name: black/red/green/yellow/blue/magenta/cyan/white. '
+                         'The first entry is pixel value 0.')
+    ap.add_argument('--label', default=None,
+                    help='label used in the output file header comment. '
+                         'Defaults to the --src directory name.')
+    ap.add_argument('--expected-bytes', type=int, default=None,
+                    help='if set, error out unless the encoded total equals N. '
+                         'For build-script regression checks.')
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_argparser().parse_args(argv)
+    palette = parse_palette(args.palette)
+    label = args.label if args.label is not None else args.src.name
+
+    enc_total, raw_total, coalesced, stats = encode_tile_catalog(
+        args.src, args.out, palette, label)
+
+    pct = enc_total * 100 // raw_total
+    print(f'wrote {args.out}')
+    print(f'  {TILE_COUNT} tiles, {enc_total} B encoded / {raw_total} B raw '
+          f'({pct}%); {coalesced} duplicate columns coalesced')
+
+    # Compact per-tile table: t<id>=&<flag>:<bytes>[ x<unique-cols>]
+    rows = []
+    for tid, flag_byte, enc_len, n_unique in stats:
+        tag = '' if n_unique == SPRITE_W_COLS else f' x{n_unique}'
+        rows.append(f't{tid:02d}=&{flag_byte:02X}:{enc_len}{tag}')
+    for i in range(0, len(rows), 6):
+        print('  ' + '   '.join(rows[i:i + 6]))
+
+    if args.expected_bytes is not None and enc_total != args.expected_bytes:
         raise SystemExit(
-            f'encoded size {enc_total} != expected {expected}. If you '
-            f'intentionally changed the artwork or the encoder, update '
-            f'EXPECTED_ENCODED_BYTES[1] in tools/encode_tiles.py.')
+            f'encoded size {enc_total} != expected {args.expected_bytes}. '
+            f'If you intentionally changed the artwork or the encoder, '
+            f'update the --expected-bytes value in the caller.')
 
-    print(f'Wrote {OUTPUT_PATH.relative_to(REPO_ROOT)}')
-    print(f'  {TILE_COUNT} tiles, {enc_total} bytes encoded / {raw_total} raw'
-          f' ({pct_total}%); {coalesced_columns_saved} duplicate columns coalesced')
-    print()
-    print(f'  {"tile":>4}  {"flag":>4}  {"enc":>4}  {"%raw":>5}  {"#cols":>5}')
-    for tid, flag_byte, enc_len, n_unique in per_tile_stats:
-        print(f'  {tid:>4}  &{flag_byte:02X}   {enc_len:>4}  '
-              f'{enc_len * 100 // SPRITE_BYTES:>4}%  {n_unique:>5}')
     return 0
 
 

@@ -58,15 +58,16 @@ tools/                       \\ build-time Python utilities (self-contained)
   encode_tiles.py            \\ assets/level<N>/tile_NN.png -> data/level<N>/tiles.6502
 
 assets/                      \\ source artwork -- editable in any pixel editor
-  level1/                    \\ tile_00..17.png (16x32 native, scenario-1 palette)
+  level<1..4>/               \\ tile_00..17.png (16x32 native, per-scenario palette)
 
 data/                        \\ generated BeebAsm sources, ready to INCLUDE
-  level1/
-    tiles.6502               \\ scheme C RLE'd 18-tile catalog (1547 B encoded)
+  level<1..4>/
+    tiles.6502               \\ scheme C RLE'd 18-tile catalog (one per level)
 ```
 
 `build.sh` / Makefile lands when there's something for BeebAsm to
-chew on beyond `boot.6502`.
+chew on beyond `boot.6502`. Until then, the encoders are invoked
+directly per level (see "Regenerating the data" below).
 
 ## Sprite RLE — scheme C
 
@@ -116,9 +117,46 @@ encoder in `../tools/sprite_rle.py`:
   runtime change.
 
 Both transforms keep the output spec-conformant: the local
-`tools/sprite_rle.decode_sprite` round-trips every sprite. Survey
-numbers in `../docs/sprite_rle_notes.md` reflect the spec-exact
-encoder; ours come out smaller (1 547 B vs 1 763 B for L1 tiles).
+`tools/sprite_rle.decode_sprite` round-trips every sprite.
+
+### Per-level encoded sizes (tiles)
+
+| Level | Palette                | Encoded | Raw   | %    | Coalesced cols | Survey |
+|------:|------------------------|--------:|------:|-----:|---------------:|-------:|
+|     1 | black/red/yellow/white |  1 547  | 2 304 | 67 % | 11             |  1 763 |
+|     2 | black/blue/cyan/white  |  1 231  | 2 304 | 53 % |  0             |  1 222 |
+|     3 | black/red/green/white  |  1 267  | 2 304 | 54 % |  3             |  1 293 |
+|     4 | black/red/magenta/white|  1 835  | 2 304 | 79 % |  3             |  1 856 |
+|       |                        |**5 880**|9 216  |64 %  |**17**          |  6 234 |
+
+Survey column is the spec-exact Scheme-C-data figure from
+`../docs/sprite_rle_notes.md`. We come in 354 B below the survey
+across the four levels; the L2 row is the lone case where our
+encoder is slightly worse (+9 B) — L2's tile artwork happens to
+have no coalescing opportunities AND a handful of runs of length
+`10q + 1` that pay the +1 B all-RLE-tail cost.
+
+## Regenerating the data
+
+`tools/encode_tiles.py` encodes one level per invocation:
+
+```bash
+python3 tools/encode_tiles.py --src assets/level1 --out data/level1/tiles.6502 \
+        --palette black,red,yellow,white     --label "Level 1" --expected-bytes 1547
+python3 tools/encode_tiles.py --src assets/level2 --out data/level2/tiles.6502 \
+        --palette black,blue,cyan,white      --label "Level 2" --expected-bytes 1231
+python3 tools/encode_tiles.py --src assets/level3 --out data/level3/tiles.6502 \
+        --palette black,red,green,white      --label "Level 3" --expected-bytes 1267
+python3 tools/encode_tiles.py --src assets/level4 --out data/level4/tiles.6502 \
+        --palette black,red,magenta,white    --label "Level 4" --expected-bytes 1835
+```
+
+Palette colours may be BBC physical names (`black`, `red`, `green`,
+`yellow`, `blue`, `magenta`, `cyan`, `white`) or 6-digit hex (with
+or without leading `#`). The first colour is pixel value 0 (always
+black for Nevryon's MODE 5 sprites). `--expected-bytes` is
+optional; when given, the encoder asserts the output size equals
+that value — useful as a regression check in a build script.
 
 ## 2bpp → 4bpp expansion
 

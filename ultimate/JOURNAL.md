@@ -6,6 +6,68 @@ left off, focused on the remake.
 
 ---
 
+## 2026-05-22 — Session 2: tile catalogs for levels 2-4 + CLI refactor
+
+Extended the tile pipeline to all four levels. Rich asked the
+encoder to take its source path, destination path and palette as
+input parameters so it can be plugged into a build script later.
+The all-4-levels mode that briefly existed in `encode_tiles.py`
+is gone; the script now encodes ONE level per invocation:
+
+```
+encode_tiles.py --src DIR --out FILE --palette C0,C1,C2,C3
+                [--label TEXT] [--expected-bytes N]
+```
+
+Palette colours are either BBC physical names (`black` / `red` /
+`green` / `yellow` / `blue` / `magenta` / `cyan` / `white`) or
+6-digit hex (with or without `#`). The four invocations live in
+CLAUDE.md ("Regenerating the data").
+
+### Assets and outputs
+
+* `assets/level2/tile_00..17.png` — copied from `../levels/2/`.
+  Scenario-2 palette: black / blue / cyan / white.
+* `assets/level3/tile_00..17.png` — scenario-3 palette: black /
+  red / green / white.
+* `assets/level4/tile_00..17.png` — scenario-4 palette: black /
+  red / magenta / white.
+* `data/level<N>/tiles.6502` for N in 1..4 — generated.
+
+### Result
+
+| Level | Encoded | Survey | Δ vs survey | Coalesced cols |
+|------:|--------:|-------:|------------:|---------------:|
+|     1 |   1 547 |  1 763 | −216 (−12 %)|             11 |
+|     2 |   1 231 |  1 222 | **+9 (+1 %)** |              0 |
+|     3 |   1 267 |  1 293 |  −26 (−2 %) |              3 |
+|     4 |   1 835 |  1 856 |  −21 (−1 %) |              3 |
+| Total |   5 880 |  6 234 | −354 (−6 %) |             17 |
+
+L2 is the only level where the new encoder is bigger than the spec
+survey — its tile artwork happens to have no duplicate columns AND
+has nine runs whose length is `10q + 1` (the all-RLE-tail rule
+pays +1 byte per such run). The other three levels recover the
+deficit and then some via coalescing.
+
+### Verification
+
+* Every sprite round-trips through `tools/sprite_rle.decode_sprite`
+  (the local spec decoder) before the output file is written.
+* All 72 PNG-derived 128-byte sprites (4 levels × 18 tiles) are
+  byte-identical to the corresponding `../extracted/N.LEVD1` tile
+  catalogs at offset `&500..&DFF`. So the PNG-to-2bpp inversion is
+  exact for every level's palette, and there's no drift between
+  the editable assets in `assets/` and the original on-disk data.
+
+### Next
+
+Same as session 1 (CRTC vertical-rupture, hardware-scroll setup,
+metadata tables + runtime decoder). The data-side now has all four
+tile catalogs ready for whichever scenario we light up first.
+
+---
+
 ## 2026-05-22 — Session 1: project kickoff, level-1 tile RLE pipeline
 
 Rich kicked off the remake. We're now in `ultimate/` as a
