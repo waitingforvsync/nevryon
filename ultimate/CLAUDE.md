@@ -47,6 +47,7 @@ remake live HERE under `ultimate/`.
 ```
 CLAUDE.md                    \\ this file
 JOURNAL.md                   \\ working log; newest at top
+build.sh                     \\ regen data/ from assets/; also future asm + .ssd
 
 boot.6502                    \\ !BOOT shim (chains to /NEVRYON ULTIMATE)
 nevryon.6502                 \\ master source -- INCLUDE order goes here
@@ -55,19 +56,22 @@ entry.6502                   \\ load-time setup + irq install (TBD)
 
 tools/                       \\ build-time Python utilities (self-contained)
   sprite_rle.py              \\ scheme C: encode_*, decode_*, pick_flag
-  encode_tiles.py            \\ assets/level<N>/tile_NN.png -> data/level<N>/tiles.6502
+  encode_sprites.py          \\ glob a dir of .png -> compressed BeebAsm file
 
 assets/                      \\ source artwork -- editable in any pixel editor
-  level<1..4>/               \\ tile_00..17.png (16x32 native, per-scenario palette)
+  level<1..4>/
+    tiles/                   \\ 18 x 16x32-px tile PNGs, per-scenario palette
+    (future: hazards_stage<1,2>/, explosions/, enemies/)
+  (future: shared/{player,flames,pickups,graphix_hazards}/)
 
 data/                        \\ generated BeebAsm sources, ready to INCLUDE
   level<1..4>/
     tiles.6502               \\ scheme C RLE'd 18-tile catalog (one per level)
 ```
 
-`build.sh` / Makefile lands when there's something for BeebAsm to
-chew on beyond `boot.6502`. Until then, the encoders are invoked
-directly per level (see "Regenerating the data" below).
+Run `./build.sh` from `ultimate/` to regenerate everything in
+`data/` from the PNG sources in `assets/`. The script is also the
+landing pad for BeebAsm assembly + SSD packaging when those land.
 
 ## Sprite RLE — scheme C
 
@@ -78,6 +82,11 @@ short version that matters for code:
   stream. The flag byte is exported as a separate equate
   (e.g. `tile_00_rle_flag = &20`) and consumed at decode-start to
   self-mod the literal-path `EOR #imm`.
+* **Per-sprite shape equates**: alongside the flag, the encoder
+  emits `<name>_width = W` (in MODE 5 byte-columns) and
+  `<name>_height = H` (in pixels = bytes per column). The runtime
+  reads these for plot loops, metadata tables, and the decoder
+  column-walk.
 * **Encoded stream semantics:**
   * `b < 8`  → run code. `count = b + 3` (so 3..10). The NEXT
     stream byte is the run's source value, shipped **raw** (NOT
@@ -85,8 +94,8 @@ short version that matters for code:
     discriminates it).
   * `b >= 8` → literal. Emit `b EOR flag_byte` once.
 * **Runs never cross sprite-column boundaries.** Each
-  `.tile_NN_col_M` (or `.hazard_XX_col_M`) label is a fresh decoder
-  re-entry point for one MODE 5 column (32 source bytes).
+  `.<name>_col_M` label is a fresh decoder re-entry point for one
+  MODE 5 column (`<name>_height` source bytes).
 * **Per-sprite FLAG** in 0..31 is chosen so no source byte has
   top-5-bits == FLAG. Empirically always possible (every 4×32
   sprite in the corpus has 3+ free 5-bit prefixes).
@@ -98,8 +107,8 @@ short version that matters for code:
 
 ### Encoder optimisations beyond the survey
 
-`tools/encode_tiles.py` ships two extras on top of the spec-exact
-encoder in `../tools/sprite_rle.py`:
+`tools/encode_sprites.py` ships two extras on top of the spec-exact
+encoder in `tools/sprite_rle.py`:
 
 * **All-RLE long-run split.** For runs > 10 bytes the spec encoder
   caps at 10 and lets the residue spill as literals (e.g. 32 zeros →
@@ -111,7 +120,7 @@ encoder in `../tools/sprite_rle.py`:
 * **Within-sprite column coalescing.** If two or more columns of a
   sprite encode to the same byte stream (e.g. tile_06's blank
   all-zero columns, or tile_02's vertically-uniform pattern), the
-  stream is emitted ONCE and the duplicate `.tile_NN_col_M` labels
+  stream is emitted ONCE and the duplicate `.<name>_col_M` labels
   are stacked above it so they all resolve to the same address.
   The user's per-column offset table populates from the labels — no
   runtime change.
@@ -138,25 +147,38 @@ have no coalescing opportunities AND a handful of runs of length
 
 ## Regenerating the data
 
-`tools/encode_tiles.py` encodes one level per invocation:
-
 ```bash
-python3 tools/encode_tiles.py --src assets/level1 --out data/level1/tiles.6502 \
-        --palette black,red,yellow,white     --label "Level 1" --expected-bytes 1547
-python3 tools/encode_tiles.py --src assets/level2 --out data/level2/tiles.6502 \
-        --palette black,blue,cyan,white      --label "Level 2" --expected-bytes 1231
-python3 tools/encode_tiles.py --src assets/level3 --out data/level3/tiles.6502 \
-        --palette black,red,green,white      --label "Level 3" --expected-bytes 1267
-python3 tools/encode_tiles.py --src assets/level4 --out data/level4/tiles.6502 \
-        --palette black,red,magenta,white    --label "Level 4" --expected-bytes 1835
+./build.sh
 ```
 
-Palette colours may be BBC physical names (`black`, `red`, `green`,
-`yellow`, `blue`, `magenta`, `cyan`, `white`) or 6-digit hex (with
-or without leading `#`). The first colour is pixel value 0 (always
-black for Nevryon's MODE 5 sprites). `--expected-bytes` is
-optional; when given, the encoder asserts the output size equals
-that value — useful as a regression check in a build script.
+regenerates every `data/*.6502` from the PNGs in `assets/`. The
+script lives at `ultimate/build.sh` and codifies the
+per-asset-category invocations of `tools/encode_sprites.py`. It is
+re-runnable; each invocation has a `--expected-bytes N` clause that
+asserts the encoded size hasn't drifted from the committed
+baseline.
+
+If you intentionally re-paint artwork and the encoded size changes,
+bump the matching `--expected-bytes` value in `build.sh` to the new
+figure shown in the script's output. (The build script is the
+single source of truth for "what size should each blob be" — the
+encoder itself has no level table baked in.)
+
+### tools/encode_sprites.py — what it does
+
+* Globs `*.png` from `--src` (top-level, sorted alphabetically).
+* Auto-detects each PNG's dimensions; rejects any whose width isn't
+  a multiple of 4 (MODE 5 = 4 px per byte).
+* The PNG's filename stem becomes the BeebAsm symbol prefix —
+  `tile_06.png` → `tile_06_width`, `tile_06_height`,
+  `tile_06_rle_flag`, `.tile_06_col_0..3`. The stem must match
+  `[A-Za-z_][A-Za-z0-9_]*`.
+* Validates every pixel against `--palette` (4 colours, comma-
+  separated, BBC physical names or 6-digit hex). Off-palette pixels
+  error with their `(x, y)` coordinates so they're easy to find in
+  an editor.
+* Round-trips every sprite through `tools/sprite_rle.decode_sprite`
+  before writing the output file.
 
 ## 2bpp → 4bpp expansion
 

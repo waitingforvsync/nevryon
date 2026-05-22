@@ -6,6 +6,103 @@ left off, focused on the remake.
 
 ---
 
+## 2026-05-22 — Session 3: generic sprite encoder + asset subfolders + build.sh
+
+Rich asked for the encoder to stop being tile-specific: it should
+glob a directory of PNGs (any names, any sizes), require width
+divisible by 4, derive symbols from the PNG filenames, and export
+per-sprite width/height equates so the BeebAsm runtime can pick
+them up directly. Also: asset folders get a per-category subfolder
+(starting with `tiles/`), and `build.sh` should regenerate `data/`
+from `assets/` (and grow to assembly + SSD packaging later).
+
+### Tool changes
+
+`tools/encode_tiles.py` -> `tools/encode_sprites.py`
+(`git mv`'d; history preserved).
+
+* Reads `*.png` from `--src`, top-level, sorted alphabetically. No
+  more hardcoded `tile_00..tile_17` list.
+* Auto-detects each PNG's dimensions. Width must be a multiple of
+  4 (MODE 5 = 4 px per byte); otherwise errors with the actual
+  width. Heights are unconstrained.
+* Symbol prefix = PNG filename stem. Validated against
+  `[A-Za-z_][A-Za-z0-9_]*` up front -- any bad filename errors
+  before the script starts writing.
+* For each sprite, the output now contains three equates plus the
+  column labels:
+  ```
+  <name>_width    = <W_cols>      \\ in MODE 5 byte-columns
+  <name>_height   = <H_px>        \\ in pixels (= bytes per column)
+  <name>_rle_flag = &XX           \\ FLAG_BYTE = FLAG << 3
+  .<name>_col_0..M-1
+      EQUB ...
+  ```
+* Per-column encoding uses the per-sprite height (no longer
+  hardcoded at 32). Round-trip still goes through the spec
+  `decode_sprite` from `tools/sprite_rle.py` with the actual H
+  passed through.
+
+### Asset reshuffle
+
+```
+assets/level<N>/tile_*.png  ->  assets/level<N>/tiles/tile_*.png
+```
+
+via `git mv` (preserved history for all 72 PNGs). Future
+categories land alongside: `hazards_stage<1,2>/`, `explosions/`,
+`enemies/`. Cross-game-shared sprites (player, flames, pickups,
+GRAPHIX hazards) will live under `assets/shared/<category>/` when
+their encoder paths arrive.
+
+### build.sh
+
+New `ultimate/build.sh` at the project root. Three phases marked
+inline; phase 1 (encode assets -> data) is wired up, phases 2
+(BeebAsm assembly) and 3 (SSD packaging) are stubs awaiting the
+6502 source to actually land. Each encode invocation passes
+`--expected-bytes` for regression checks; the build script is now
+the single source of truth for "what size should this blob be".
+
+```
+==[ Phase 1 ]== encode assets/ -> data/
+wrote data/level1/tiles.6502   18 sprite(s), 1547 B / 2304 B (67%)
+wrote data/level2/tiles.6502   18 sprite(s), 1231 B / 2304 B (53%)
+wrote data/level3/tiles.6502   18 sprite(s), 1267 B / 2304 B (54%)
+wrote data/level4/tiles.6502   18 sprite(s), 1835 B / 2304 B (79%)
+==[ Phase 2 ]== assemble BeebAsm  (TODO)
+==[ Phase 3 ]== build SSD disk image  (TODO)
+build complete.
+```
+
+All four catalogs land byte-identical to the previous session
+(1 547 / 1 231 / 1 267 / 1 835 B); the only diff in the `.6502`
+files is the two new equates per sprite. Worked example for the
+blank tile, level 1:
+
+```
+\\ tile_06: 4x32 (16x32 px), 8 bytes (6% of raw 128 B, 1 unique col)
+tile_06_width    = 4
+tile_06_height   = 32
+tile_06_rle_flag = &08
+.tile_06_col_0
+.tile_06_col_1
+.tile_06_col_2
+.tile_06_col_3
+    EQUB &07, &00, &07, &00, &06, &00, &00, &00
+```
+
+### Next
+
+* CRTC vertical-rupture for the HUD split.
+* Hardware-scroll setup.
+* Start on the runtime decoder + 2bpp->4bpp expander + a first
+  metadata table (probably level 1 tiles) that consumes the new
+  `<name>_width / _height / _rle_flag` equates the encoder is now
+  exporting.
+
+---
+
 ## 2026-05-22 — Session 2: tile catalogs for levels 2-4 + CLI refactor
 
 Extended the tile pipeline to all four levels. Rich asked the
