@@ -4,6 +4,148 @@ Newest entries at the top.
 
 ---
 
+## 2026-05-22 — Session 40: animating-sprite trim survey, palette-aware metadata model
+
+Extended the RLE survey to the variable-shape categories (player,
+small flying enemies + their hit frames, engine flame, pickups),
+and reworked the per-sprite metadata model to reflect that
+**every sprite is 2bpp source going through the 2bpp→4bpp LUT
+into a 4bpp MODE 2 unpack buffer** — so even sprites that skip
+the RLE step still need palette bytes for the LUT setup.
+
+### Trim of fully-blank rows / columns
+
+Added `trim_borders(sprite, w, h)` to `tools/sprite_rle.py`:
+strips fully-zero outer columns from left/right and fully-zero
+outer rows from top/bottom, returns the trimmed bytes + new
+shape. The 4×32 hazards / tiles / explosion frames don't trim
+(they fully populate their plot envelope, and they're stationary
+so the position can't shift), and the 3 GRAPHIX hazards
+(`gfx_hazard_slot15/16/19`) also stay at 16×32 because they're
+stationary plotted obstacles. Only animating / moving sprites
+get trimmed:
+
+| Category | Original | Trimmed shape (typical) |
+|----------|----------|-------------------------|
+| `player` (6×22, 132 B) | 6×22 | 4×12 (48 B) in all 4 scenarios |
+| `enemy_NN` (4×24, 96 B) | 4×24 | 2×14..3×15 (28–45 B) |
+| `enemy_hit_NN` (4×24, 96 B) | 4×24 | 2×8..2×16 (16–32 B) |
+| `flame` (8×8, 64 B) | 8×8 | 5×7..8×8 (35–64 B) |
+| `pickup` (2×16, 32 B) | 2×16 | **no trim available** — pickups fully fill their bounding box |
+
+### Trim does ~95 % of the work; RLE on top is marginally a loss
+
+Cross-checked trim-alone vs trim + RLE for the animating
+categories (both with their actual metadata needs):
+
+| Category | raw | trim-only + meta | trim+RLE + meta | RLE on top |
+|----------|----:|----:|----:|----:|
+| player (4) | 528 | **212** | 220 | +8 (+3.8 %) |
+| enemy_hit (12) | 1 152 | **408** | 437 | +29 (+7.1 %) |
+| enemy (16) | 1 536 | **682** | 721 | +39 (+5.7 %) |
+| flame (3) | 192 | **170** | 190 | +20 (+11.8 %) |
+| pickup (4) | 128 | **148** | 151 | +3 (+2.0 %) |
+
+For these categories the col_offsets table costs more than the
+residual run-encoding wins. **Decision**: animating sprites ship
+as **trimmed raw 2bpp bytes** (LUT-expanded but not RLE-decoded).
+
+The 4×32 sprites (tiles, LEVD hazards, explosion frames, GRAPHIX
+hazards) continue to use trim + RLE — they have substantial run
+structure and no trim available, so RLE earns its keep (e.g.
+GRAPHIX hazards: 399 B raw+meta → 325 B RLE+meta, −16.9 %).
+
+### Metadata model — palette colours per sprite
+
+Reworked per-sprite metadata. Two flavours, stored in **separate
+per-type tables** the calling code indexes by sprite-id:
+
+* **Trim + RLE** (4×32 main):
+  `flag (1) + base_addr (2) + col_offsets[W] + palette[3]` =
+  **6 + W bytes/sprite** (= 10 for 4×32).
+* **Trim, no RLE** (animating sprites):
+  `base_addr (2) + palette[3]` = **5 bytes/sprite**.
+
+The 3 palette bytes per sprite are the `{A, X, Y}` arguments to
+`init_colour_lut`. Two follow-ons:
+
+1. **Per-sprite palette freedom.** Each sprite picks its own 3
+   non-background colours. The 4 pickup variants
+   (red/yellow/checker/white) likely become a single sprite +
+   4 palette tables once we look properly — but the bytes do
+   differ today, so leaving them as 4 distinct sprites for now.
+2. **Free white-flash-on-hit.** Drawing a flashed enemy/player
+   is a palette swap to all-white, same compressed bytes — no
+   need to ship a separate hit-frame variant. (The 4×24
+   `enemy_hit_*` frames in the original engine are a separate
+   anim entirely — different pose, not just colour-flashed —
+   so they stay as distinct frames.)
+
+### 2bpp→4bpp LUT runs regardless of RLE
+
+Clarified in `docs/sprite_rle_notes.md` that the LUT is the
+*format converter* (2bpp source → 4bpp output), not part of the
+RLE codec. Sprites that opt out of RLE (animating ones) STILL
+go through the LUT per source byte. RLE skips only the per-byte
+"run vs literal" branch + the FLAG-XOR. Palette bytes are part
+of every sprite's metadata because every sprite goes through the
+LUT.
+
+### Per-stage memory footprint (full 56-sprite set)
+
+56 sprites per stage = 41 4×32 main (RLE+LUT) + 15 trimmed
+animating (raw+LUT):
+
+| Stage | 4×32 main | +player | +enemy×4 | +hit×3 | +flame | +pickup | **total** | raw | % raw |
+|-------|----------:|--------:|---------:|-------:|-------:|--------:|----------:|----:|------:|
+| L1S1 | 4 356 | 55 | 170 | 110 | 190 | 151 | **5 032** | 6 372 | 79.0 % |
+| L1S2 | 4 465 | 55 | 170 | 110 | 190 | 151 | **5 141** | 6 372 | 80.7 % |
+| L2S1 | 3 772 | 55 | 183 | 114 | 190 | 151 | **4 465** | 6 372 | 70.1 % |
+| L2S2 | 3 719 | 55 | 183 | 114 | 190 | 151 | **4 412** | 6 372 | 69.2 % |
+| L3S1 | 4 008 | 55 | 188 | 100 | 190 | 151 | **4 692** | 6 372 | 73.6 % |
+| L3S2 | 3 988 | 55 | 188 | 100 | 190 | 151 | **4 672** | 6 372 | 73.3 % |
+| L4S1 | 4 707 | 55 | 180 | 113 | 190 | 151 | **5 396** | 6 372 | 84.7 % |
+| L4S2 | 4 589 | 55 | 180 | 113 | 190 | 151 | **5 278** | 6 372 | 82.8 % |
+
+Worst stage **L4S1 = 5 396 B (5.27 KB)** = 84.7 % of raw. Avg
+**4 886 B** (4.77 KB). The 4×32 main contribution went up vs
+session 39's numbers because metadata is now 10 B/sprite instead
+of 7 B (added 3 palette bytes per sprite, removed nothing).
+
+### "Third enemy type from GRAPHIX"
+
+The 3 GRAPHIX hazard sprites (slots 15/16/19 at &3700/&3780/&4360)
+— Rich asked these be added to the variable-shape table when we
+were first surveying. They went in briefly, but then came back
+out: GRAPHIX hazards are stationary plot envelopes, must stay at
+16×32, so they continue to live in the 4×32 main bucket.
+
+### Pickup-bytes check
+
+Quick MD5 of the 4 pickup sprites (`pickup_red/yellow/checker/white`)
+showed the bytes are NOT identical — they're 4 distinct sprite
+designs, not pure palette variants. So we genuinely ship 4 sprite
+blobs, not 1+4-palettes. (Could revisit this later when we look
+at compressing the design itself — e.g. if `red` and `yellow`
+share most pixels, maybe shape + 2 palettes.)
+
+### Files
+
+* **modified**: `tools/sprite_rle.py` — added `trim_borders`,
+  variable-shape `encode_sprite(w, h)`, `survey_other` CLI
+  subcommand. Refactored `sprite_meta_bytes` to model the two
+  metadata flavours; `SPRITE_META_NO_RLE = 5`. Imports unchanged.
+* **modified**: `docs/sprite_rle_notes.md` — added the
+  variable-shape survey section, the trim-vs-RLE break-even, the
+  metadata model rewrite, and the clarification that the
+  2bpp→4bpp LUT always runs (not part of the RLE codec).
+
+Pickup white at `&4750` — confirmed in `file_layout.md` as the
+"4th pickup variant" — kept in the survey; doesn't materially
+change the footprint either way.
+
+---
+
 ## 2026-05-21 — Session 39: scheme-C survey extended, hazard terminology, per-level README hazard-ptr fix
 
 Wrapping the sprite-RLE thread for now: built the first cut of

@@ -293,16 +293,19 @@ hazards, and all six explosion frames per scenario:
 | GRAPHIX hazards (3) |       3 |    384 |    299 |                320 |
 | **TOTAL**           |     211 | 27 008 | **19 871** (73.6 %) | **21 360** (79.1 %) |
 
-### Per-stage memory footprint
+### Per-stage memory footprint (4×32 sprites only)
 
-41 sprites loaded simultaneously per stage = 18 tiles + 14 LEVD
-hazards + 6 explosions + 3 GRAPHIX hazards. Tiles and explosion
-frames are scenario-shared between the two stages; GRAPHIX
-hazards are game-shared.
+41 4×32 sprites loaded simultaneously per stage = 18 tiles + 14
+LEVD hazards + 6 explosions + 3 GRAPHIX hazards. Tiles and
+explosion frames are scenario-shared between the two stages;
+GRAPHIX hazards are game-shared.
 
-Raw per stage = 41 sprites × 128 B = **5 248 B**, same for every
-stage. The `% raw` column is the compressed `total` (data + meta)
-as a fraction of that.
+This is the original "4×32-only" view (the variable-shape sprites
+— player, enemies, flames, pickups — are added in the next section).
+Per-sprite metadata in this table is the original 7 B model
+(`{flag, base_addr, col_offsets[4]}`); the actual model is now
+10 B/sprite for 4×32 (adds 3 palette bytes — see below) which
+shifts these numbers up by 41 × 3 = 123 B/stage.
 
 |  Stage |  tiles | hazards | expl | GFX |   data | meta | total |  raw  | % raw  |
 |--------|-------:|--------:|-----:|----:|-------:|-----:|------:|------:|-------:|
@@ -319,12 +322,127 @@ Worst stage **L4S1 = 4 584 B** (87.3 % of raw). Best stage **L2S2
 = 3 596 B** (68.5 % of raw). Average **4 078 B per stage**
 (4.0 KB, 77.7 % of raw).
 
+### Variable-shape sprites with border trim
+
+Five sprite categories are smaller-than-4×32 or animate / move
+about the screen, so they're stored at a tighter shape with
+**trim of fully-blank outer rows and columns**:
+
+| Category | Per-sprite shape | Stored size | Notes |
+|----------|------------------|-------------|-------|
+| `player` | 6×22 (132 B) | trims to 4×12 (48 B) in all 4 scenarios | 1 per scenario, shared S1/S2 |
+| `enemy_NN` | 4×24 (96 B) | trims to 2×14..3×15 (28–45 B) | 4 frames per scenario |
+| `enemy_hit_NN` | 4×24 (96 B) | trims to 2×8..2×16 (16–32 B) | 3 frames per scenario |
+| `flame` | 8×8 (64 B) | trims to 5×7..8×8 (35–64 B) | 3 frames, game-shared |
+| `pickup` | 2×16 (32 B) | no trim available (no blank borders) | 4 frames, game-shared |
+
+The 3 GRAPHIX hazards (`gfx_hazard_slot15/16/19`) are NOT trimmed
+— they're stationary plotted obstacles, the 16×32 (= 4×32 byte)
+shape is their actual visual size, and any trim would shift the
+plot position. Same goes for tiles, LEVD hazards, and explosion
+frames (already in the 4×32 main bucket). **Rule: only
+animating / moving sprites get border-trimmed.**
+
+Trim is a much bigger lever than RLE for these categories.
+Aggregate over the 39 trimmed sprites:
+
+| Category    | Sprites | Raw   | Trim-raw | Enc  | Meta | Total | % raw |
+|-------------|--------:|------:|---------:|-----:|-----:|------:|------:|
+| player      |       4 |   528 |      192 |  180 |   40 |   220 | 41.7 %|
+| enemy_hit   |      12 | 1 152 |      348 |  341 |   96 |   437 | 37.9 %|
+| enemy       |      16 | 1 536 |      602 |  585 |  136 |   721 | 46.9 %|
+| flame       |       3 |   192 |      155 |  152 |   38 |   190 | 99.0 %|
+| pickup      |       4 |   128 |      128 |  119 |   32 |   151 |118.0 %|
+| **TOTAL**   |    **39** | **3 536** | **1 425** | **1 377** | **342** | **1 719** | **48.6 %** |
+
+Trim does ~95 % of the saving on player / enemy / enemy_hit and
+RLE on top is marginally a net loss vs trim-alone (the
+col_offsets metadata costs a few bytes per sprite that outweighs
+the residual run wins). The break-even analysis:
+
+| Category | raw | trim + meta (no RLE) | trim + RLE + meta | RLE-on-top |
+|----------|----:|----:|----:|----:|
+| player (4) | 528 | 212 | 220 | +8 (+3.8 %) |
+| enemy_hit (12) | 1 152 | 408 | 437 | +29 (+7.1 %) |
+| enemy (16) | 1 536 | 682 | 721 | +39 (+5.7 %) |
+| flame (3) | 192 | 170 | 190 | +20 (+11.8 %) |
+| pickup (4) | 128 | 148 | 151 | +3 (+2.0 %) |
+
+vs the 4×32-only bucket where trim does nothing (everything is
+already at the engine's plot envelope):
+
+| Category | raw + meta | RLE + meta | RLE saving |
+|----------|----:|----:|----:|
+| GRAPHIX hazards (3) | 399 | 325 | **−66 (−16.9 %)** |
+
+**Implication:** animating sprites get **trim + raw blit** (skip
+the RLE step entirely, ship the trimmed 2bpp bytes); 4×32 set
+gets **RLE + LUT**. Both paths still feed every source byte
+through the 2bpp→4bpp LUT — the LUT is the format converter,
+not part of the compressor.
+
+### Metadata model (updated 2026-05-22)
+
+Stored in **separate per-type tables** indexed by sprite-id
+(tile_number, hazard_number, enemy_frame, etc.). Two flavours:
+
+* **Trim + RLE (4×32 main sprites)**:
+  `flag (1) + base_addr (2) + col_offsets[W] + palette[3]`
+  = **6 + W bytes/sprite** (= 10 for 4×32).
+  W parallel col_offset tables; sprites of width ≥ N populate
+  `col_offset_table[N]`.
+* **Trim, no RLE (animating sprites)**:
+  `base_addr (2) + palette[3]`
+  = **5 bytes/sprite**. Column stride = `h_trim`, known from
+  the per-type shape table; no flag, no col_offsets.
+
+The 3 palette colour bytes are per-sprite (= the {A, X, Y}
+arguments to `init_colour_lut`). Two big consequences:
+
+1. **Per-sprite palette freedom.** Every sprite picks its own
+   three non-background colours; the engine isn't forced into
+   the scenario's globally-fixed 4-colour palette.
+2. **Free white-flash-on-hit.** A "flashed" enemy/player variant
+   is just a palette-table swap — same compressed (or trimmed)
+   bytes, three different palette entries. No second sprite
+   needed.
+
+### Per-stage memory footprint (full 56-sprite set)
+
+Combining the 4×32 main bucket (now with the 10 B/sprite
+metadata) and the 15 trimmed variable-shape sprites per stage:
+
+| Stage | 4×32 main | +player | +enemy×4 | +hit×3 | +flame | +pickup | **total** | raw | % raw |
+|-------|----------:|--------:|---------:|-------:|-------:|--------:|----------:|----:|------:|
+| L1S1 | 4 356 | 55 | 170 | 110 | 190 | 151 | **5 032** | 6 372 | 79.0 % |
+| L1S2 | 4 465 | 55 | 170 | 110 | 190 | 151 | **5 141** | 6 372 | 80.7 % |
+| L2S1 | 3 772 | 55 | 183 | 114 | 190 | 151 | **4 465** | 6 372 | 70.1 % |
+| L2S2 | 3 719 | 55 | 183 | 114 | 190 | 151 | **4 412** | 6 372 | 69.2 % |
+| L3S1 | 4 008 | 55 | 188 | 100 | 190 | 151 | **4 692** | 6 372 | 73.6 % |
+| L3S2 | 3 988 | 55 | 188 | 100 | 190 | 151 | **4 672** | 6 372 | 73.3 % |
+| L4S1 | 4 707 | 55 | 180 | 113 | 190 | 151 | **5 396** | 6 372 | 84.7 % |
+| L4S2 | 4 589 | 55 | 180 | 113 | 190 | 151 | **5 278** | 6 372 | 82.8 % |
+
+56 sprites per stage = 41 (4×32 main, untrimmed, RLE) + 15
+(trimmed animating, raw blit through LUT). Raw per stage = 41 ×
+128 + (132 + 7×96 + 3×64 + 4×32) = 6 372 B (6.22 KB).
+
+Worst stage **L4S1 = 5 396 B (5.27 KB) = 84.7 % of raw**.
+Average **4 886 B (4.77 KB)**. The game-shared block (3 flames
++ 4 pickups = 341 B) lives in RAM once for the whole game.
+
 ## 2bpp → 4bpp expansion (Rich's design)
 
-The hot path inside both decoders. One MODE 5 source byte
+The hot path inside every unpacker, **regardless of whether RLE is
+in play**. Source bytes are always 2bpp MODE 5; the unpacked
+sprite buffer is always 4bpp MODE 2. One MODE 5 source byte
 (4 pixels × 2 bpp) becomes two MODE 2 output bytes (2 pixels
 × 4 bpp), one written to each of two adjacent destination
-columns.
+columns. So even a sprite shipped as raw (no RLE) still feeds
+every source byte through the LUT — what RLE skips is the
+per-byte run/literal branch + the FLAG-XOR, never the LUT
+lookup. (See "When to skip the RLE step" below for which
+sprite categories opt out of RLE.)
 
 The LUT lives in zero page at 16 sparse addresses derived
 from the source byte's bit layout. The expansion does AND +
