@@ -1,0 +1,13 @@
+\\ !Boot file
+
+ORG &400
+
+	CLI
+	LDA #15:LDX #0:JSR &FFF4
+	LDX #0:.loop LDA cmd+1,X:JSR &FFE3:INX:CMP #13:BNE loop:JSR &FFE7
+	LDX #LO(cmd):LDY #HI(cmd):JMP &FFF7
+
+.cmd EQUS "/NEVRYON ULTIMATE", 13
+
+SAVE "!BOOT", &400, P%
+CLEAR &400, P%
