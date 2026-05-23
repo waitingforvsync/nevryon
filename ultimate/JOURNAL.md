@@ -6,6 +6,59 @@ left off, focused on the remake.
 
 ---
 
+## 2026-05-23 — Session 7: recolour GRAPHIX hazards to per-scenario palettes
+
+Quick follow-up to session 6. The 3 game-shared GRAPHIX hazards
+(`hazard_15.png`, `hazard_16.png`, `hazard_19.png`) were copied
+into every (level, stage) bundle in the L1 palette
+(black / red / yellow / white) -- session 5 used a fallback palette
+to encode them in non-L1 sets, and session 6 dropped that mechanism
+in favour of auto-detection, leaving the hazards as red/yellow in
+all four scenarios.
+
+That was correct for the byte data but wrong visually: the original
+engine renders these sprites through the level palette, so they
+should pick up each scenario's primary + secondary colours. Now
+that each sprite carries its own `_colour0..3` metadata, we want
+the PNGs themselves to show what the runtime will draw.
+
+Recoloured `assets/level<2,3,4>/stage<1,2>/hazards/hazard_<15,16,19>.png`
+in place (18 PNGs total, L1 untouched):
+
+|     | pixel role 1 | pixel role 2 |
+|----:|-------------:|-------------:|
+|  L2 | red -> blue  | yellow -> cyan    |
+|  L3 | red          | yellow -> green   |
+|  L4 | red          | yellow -> magenta |
+
+Encoded bytes for these hazards are unchanged -- the brightness
+order pins each colour to the same logical index regardless of
+which physical colour fills each role -- so all six regenerated
+hazard `.6502` files differ only in their `_colour1` / `_colour2`
+equates:
+
+```
+\\ before (session 6):
+level2_stage1_hazard_15_colour1 = colour_red
+level2_stage1_hazard_15_colour2 = colour_yellow
+
+\\ after:
+level2_stage1_hazard_15_colour1 = colour_blue
+level2_stage1_hazard_15_colour2 = colour_cyan
+```
+
+The shape bytes (`flag`, column streams) and the encoded sizes
+(102 / 99 / 98 B) match session 6 to the byte.
+
+### Next
+
+Same backlog as session 6:
+* Enemies / hit frames (4 + 3 per scenario, 4x24).
+* Animating-sprite categories (player, flames, pickups) needing
+  trim + raw-blit support in the encoder.
+
+---
+
 ## 2026-05-23 — Session 6: auto-detect per-sprite palette + colour equates
 
 Rich asked to drop `--palette` / `--fallback-palette` entirely and

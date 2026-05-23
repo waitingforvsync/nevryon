@@ -318,8 +318,8 @@ level2_stage1_hazard_15_width    = 4
 level2_stage1_hazard_15_height   = 32
 level2_stage1_hazard_15_rle_flag = &10
 level2_stage1_hazard_15_colour0  = colour_black
-level2_stage1_hazard_15_colour1  = colour_red
-level2_stage1_hazard_15_colour2  = colour_yellow
+level2_stage1_hazard_15_colour1  = colour_blue
+level2_stage1_hazard_15_colour2  = colour_cyan
 level2_stage1_hazard_15_colour3  = colour_white
 .level2_stage1_hazard_15_col_0
     EQUB &EF, &EF, &EC, &01, &F8, &F0, &F0, &00, &D0, &02, &B0, &82, &95, &C0, &D1, &D2
@@ -339,8 +339,8 @@ level2_stage1_hazard_16_width    = 4
 level2_stage1_hazard_16_height   = 32
 level2_stage1_hazard_16_rle_flag = &20
 level2_stage1_hazard_16_colour0  = colour_black
-level2_stage1_hazard_16_colour1  = colour_red
-level2_stage1_hazard_16_colour2  = colour_yellow
+level2_stage1_hazard_16_colour1  = colour_blue
+level2_stage1_hazard_16_colour2  = colour_cyan
 level2_stage1_hazard_16_colour3  = colour_white
 .level2_stage1_hazard_16_col_0
     EQUB &DF, &DF, &DC, &01, &F8, &C0, &C0, &00, &C1, &03, &83, &A5, &E1, &E1, &E2, &C0
@@ -360,8 +360,8 @@ level2_stage1_hazard_19_width    = 4
 level2_stage1_hazard_19_height   = 32
 level2_stage1_hazard_19_rle_flag = &18
 level2_stage1_hazard_19_colour0  = colour_black
-level2_stage1_hazard_19_colour1  = colour_red
-level2_stage1_hazard_19_colour2  = colour_yellow
+level2_stage1_hazard_19_colour1  = colour_blue
+level2_stage1_hazard_19_colour2  = colour_cyan
 level2_stage1_hazard_19_colour3  = colour_white
 .level2_stage1_hazard_19_col_0
     EQUB &02, &00, &16, &1B, &19, &04, &00, &6D, &6E, &04, &00, &19, &1B, &16, &02, &00
