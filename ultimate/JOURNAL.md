@@ -6,6 +6,46 @@ left off, focused on the remake.
 
 ---
 
+## 2026-05-23 — Session 9: split HUD into top/bottom char-row halves
+
+The HUD shipped in session 8 as one 40 x 16 sprite, which meant each
+column was 16 bytes -- two MODE 2 char-rows' worth of scanlines.
+Rich wants the decoder to write straight into screen RAM in char-
+row strips, so the column height should match one char-row (8
+scanlines, 8 bytes per column).
+
+Split `assets/hud/hud.png` into `hud_top.png` and `hud_bottom.png`
+(40 x 8 each) via PIL crop, deleted the original. The encoder now
+emits two sprites in `data/hud.6502`:
+
+```
+hud_bottom  40x8   flag=&28   173/320 B ( 54%)  [black,red,cyan,white]
+hud_top     40x8   flag=&28   169/320 B ( 52%)  [black,red,cyan,white]
+```
+
+Total 342 B vs the previous 348 B as one big sprite -- the column
+boundaries the encoder enforces (runs never cross them) line up
+slightly differently with the split, so a few all-black runs at
+the row 8 boundary now coalesce or split apart, saving 6 B net.
+
+Both halves are 40 unique columns minus 17 coalesced (top) and 17
+coalesced (bottom) = 23 unique columns each. Palette is identical
+to session 8's single-sprite version (`[black, red, cyan, white]`
+via brightness order, matching the original SCOREBD's logical 0..3).
+
+(Note on file ordering: PNG glob sorts alphabetically, so
+`hud_bottom` appears before `hud_top` in the output file. Symbols
+are addressed by name at runtime so the order doesn't matter; if
+the visual file ordering bothers anyone, the PNGs can be renamed
+e.g. `hud_0_top.png` / `hud_1_bottom.png`.)
+
+### Next
+
+Same backlog as session 8: enemies + animating-sprite categories
+(player, flames, pickups) needing trim + raw-blit support.
+
+---
+
 ## 2026-05-23 — Session 8: HUD bitmap
 
 Brought the score / status HUD across as the first game-shared
