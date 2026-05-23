@@ -61,9 +61,10 @@ tools/                       \\ build-time Python utilities (self-contained)
 assets/                      \\ source artwork -- editable in any pixel editor;
                              \\ palette is auto-detected per sprite (BBC
                              \\ physical colours, up to 4 distinct per image)
-  hud/                       \\ game-shared HUD bitmap, split as hud_top
-                             \\ + hud_bottom (160x8 each) so each column
-                             \\ decodes into one MODE 2 char-row directly
+  hud/                       \\ game-shared HUD bitmap, split as hud0
+                             \\ (top) + hud1 (bottom), 160x8 each, so
+                             \\ each column decodes into one MODE 2
+                             \\ char-row directly
   level<1..4>/
     tiles/                   \\ 18 x 16x32-px tile PNGs
     explosions/              \\ 6 x 16x32-px player-death frames
@@ -170,10 +171,10 @@ index across all four scenarios. The PNGs are repainted to match
 each scenario's palette so the `_colour*` metadata fields name the
 right physical colour for each level.
 
-Plus the game-shared HUD bitmap, split as `hud_top` + `hud_bottom`
-(40 × 8 byte-cols each, 320 B raw each = 640 B total): **342 B
-encoded** (169 + 173, 53 %), palette [black, red, cyan, white]. The
-split aligns each column's decode pass with a single MODE 2
+Plus the game-shared HUD bitmap, split as `hud0` (top) + `hud1`
+(bottom), 40 × 8 byte-cols each, 320 B raw each = 640 B total:
+**342 B encoded** (169 + 173, 53 %), palette [black, red, cyan, white].
+The split aligns each column's decode pass with a single MODE 2
 char-row so the unpacked output can be written straight into the
 HUD region of screen RAM without straddling row boundaries.
 

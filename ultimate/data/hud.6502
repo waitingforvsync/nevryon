@@ -24,149 +24,149 @@
 \\ Unused slots are tagged colour_unused. The colour_<name> symbols are
 \\ defined elsewhere in the BeebAsm project.
 
-\\ hud_bottom: 40x8 (160x8 px), 173 bytes (54% of raw 320 B; 23 unique cols)
-hud_bottom_width    = 40
-hud_bottom_height   = 8
-hud_bottom_rle_flag = &28
-hud_bottom_colour0  = colour_black
-hud_bottom_colour1  = colour_red
-hud_bottom_colour2  = colour_cyan
-hud_bottom_colour3  = colour_white
-.hud_bottom_col_0
-    EQUB &D8, &D8, &8D, &72, &27, &27, &28, &28
-.hud_bottom_col_1
-    EQUB &E9, &F8, &BC, &71, &34, &34, &28, &28
-.hud_bottom_col_2
-    EQUB &25, &38, &38, &F5, &38, &38, &25, &28
-.hud_bottom_col_3
-    EQUB &25, &78, &78, &7D, &78, &B8, &24, &28
-.hud_bottom_col_4
-    EQUB &2D, &68, &68, &6C, &68, &68, &25, &28
-.hud_bottom_col_5
-    EQUB &25, &B8, &B8, &B1, &B8, &B8, &25, &28
-.hud_bottom_col_6
-    EQUB &34, &78, &78, &A1, &2B, &2B, &28, &28
-.hud_bottom_col_7
-.hud_bottom_col_8
-.hud_bottom_col_9
-.hud_bottom_col_10
-.hud_bottom_col_11
-.hud_bottom_col_12
-.hud_bottom_col_13
-.hud_bottom_col_14
-.hud_bottom_col_31
-.hud_bottom_col_32
-.hud_bottom_col_33
-.hud_bottom_col_34
-.hud_bottom_col_35
-.hud_bottom_col_36
-.hud_bottom_col_37
-.hud_bottom_col_38
-.hud_bottom_col_39
-    EQUB &D8, &D8, &72, &8D, &27, &27, &28, &28
-.hud_bottom_col_15
-    EQUB &DB, &EB, &60, &8D, &27, &27, &28, &28
-.hud_bottom_col_16
-    EQUB &58, &00, &50, &00, &40, &6C
-.hud_bottom_col_17
-    EQUB &9B, &AB, &A8, &00, &A0, &98, &93
-.hud_bottom_col_18
-    EQUB &F4, &34, &01, &10, &F8, &F5
-.hud_bottom_col_19
-    EQUB &00, &20, &48, &68, &E8, &A8, &A0
-.hud_bottom_col_20
-    EQUB &D7, &27, &28, &98, &00, &90, &B1
-.hud_bottom_col_21
-    EQUB &F4, &34, &28, &00, &10, &18, &0A
-.hud_bottom_col_22
-    EQUB &9B, &AB, &A8, &88, &08, &08, &18, &1B
-.hud_bottom_col_23
-    EQUB &F4, &34, &38, &00, &50, &F8, &F5
-.hud_bottom_col_24
-    EQUB &C8, &00, &60, &00, &20, &0A
-.hud_bottom_col_25
-    EQUB &E4, &24, &28, &8C, &26, &26, &28, &28
-.hud_bottom_col_26
-.hud_bottom_col_30
-    EQUB &26, &88, &A8, &6C, &08, &88, &26, &28
-.hud_bottom_col_27
-    EQUB &22, &88, &88, &C6, &88, &88, &22, &28
-.hud_bottom_col_28
-    EQUB &26, &68, &68, &6C, &68, &68, &26, &28
-.hud_bottom_col_29
-    EQUB &26, &88, &88, &C6, &A8, &A8, &20, &28
-
-\\ hud_top: 40x8 (160x8 px), 169 bytes (52% of raw 320 B; 24 unique cols)
-hud_top_width    = 40
-hud_top_height   = 8
-hud_top_rle_flag = &28
-hud_top_colour0  = colour_black
-hud_top_colour1  = colour_red
-hud_top_colour2  = colour_cyan
-hud_top_colour3  = colour_white
-.hud_top_col_0
+\\ hud0: 40x8 (160x8 px), 169 bytes (52% of raw 320 B; 24 unique cols)
+hud0_width    = 40
+hud0_height   = 8
+hud0_rle_flag = &28
+hud0_colour0  = colour_black
+hud0_colour1  = colour_red
+hud0_colour2  = colour_cyan
+hud0_colour3  = colour_white
+.hud0_col_0
     EQUB &28, &28, &D8, &D2, &DD, &D7, &D2, &DD
-.hud_top_col_1
+.hud0_col_1
     EQUB &29, &38, &F8, &E0, &EC, &F4, &E1, &EC
-.hud_top_col_2
+.hud0_col_2
     EQUB &25, &78, &38, &B1, &78, &78, &24, &28
-.hud_top_col_3
+.hud0_col_3
     EQUB &25, &78, &38, &39, &38, &78, &24, &28
-.hud_top_col_4
+.hud0_col_4
     EQUB &25, &78, &78, &7D, &78, &78, &25, &28
-.hud_top_col_5
+.hud0_col_5
     EQUB &25, &78, &78, &B1, &78, &78, &2C, &28
-.hud_top_col_6
+.hud0_col_6
     EQUB &24, &28, &18, &92, &19, &39, &34, &39
-.hud_top_col_7
-.hud_top_col_8
-.hud_top_col_9
-.hud_top_col_10
-.hud_top_col_11
-.hud_top_col_12
-.hud_top_col_13
-.hud_top_col_14
-.hud_top_col_31
-.hud_top_col_32
-.hud_top_col_33
-.hud_top_col_34
-.hud_top_col_35
-.hud_top_col_36
-.hud_top_col_37
-.hud_top_col_38
-.hud_top_col_39
+.hud0_col_7
+.hud0_col_8
+.hud0_col_9
+.hud0_col_10
+.hud0_col_11
+.hud0_col_12
+.hud0_col_13
+.hud0_col_14
+.hud0_col_31
+.hud0_col_32
+.hud0_col_33
+.hud0_col_34
+.hud0_col_35
+.hud0_col_36
+.hud0_col_37
+.hud0_col_38
+.hud0_col_39
     EQUB &28, &28, &D8, &DD, &D2, &D7, &DD, &D2
-.hud_top_col_15
+.hud0_col_15
     EQUB &28, &28, &D9, &DE, &D3, &D7, &DD, &E0
-.hud_top_col_16
+.hud0_col_16
     EQUB &6C, &00, &40, &00, &60, &58
-.hud_top_col_17
+.hud0_col_17
     EQUB &93, &98, &01, &A0, &98, &A8
-.hud_top_col_18
+.hud0_col_18
     EQUB &F5, &F8, &01, &10, &B8, &38
-.hud_top_col_19
+.hud0_col_19
     EQUB &0A, &04, &20
-.hud_top_col_20
+.hud0_col_20
     EQUB &C6, &D8, &01, &90, &D8, &28
-.hud_top_col_21
+.hud0_col_21
     EQUB &6C, &01, &40, &00, &20
-.hud_top_col_22
+.hud0_col_22
     EQUB &93, &98, &02, &A0, &A8
-.hud_top_col_23
+.hud0_col_23
     EQUB &B1, &F8, &F8, &01, &50, &38
-.hud_top_col_24
+.hud0_col_24
     EQUB &0A, &00, &20, &00, &A0, &C8
-.hud_top_col_25
+.hud0_col_25
     EQUB &28, &28, &CC, &C2, &C6, &C6, &CC, &28
-.hud_top_col_26
+.hud0_col_26
     EQUB &26, &88, &88, &C6, &A8, &A8, &20, &28
-.hud_top_col_27
+.hud0_col_27
     EQUB &26, &88, &88, &82, &88, &88, &2E, &28
-.hud_top_col_28
+.hud0_col_28
     EQUB &22, &88, &88, &C4, &C8, &C8, &2E, &28
-.hud_top_col_29
+.hud0_col_29
     EQUB &26, &A8, &A8, &E4, &A8, &A8, &2E, &28
-.hud_top_col_30
+.hud0_col_30
     EQUB &26, &88, &88, &E4, &88, &88, &22, &28
+
+\\ hud1: 40x8 (160x8 px), 173 bytes (54% of raw 320 B; 23 unique cols)
+hud1_width    = 40
+hud1_height   = 8
+hud1_rle_flag = &28
+hud1_colour0  = colour_black
+hud1_colour1  = colour_red
+hud1_colour2  = colour_cyan
+hud1_colour3  = colour_white
+.hud1_col_0
+    EQUB &D8, &D8, &8D, &72, &27, &27, &28, &28
+.hud1_col_1
+    EQUB &E9, &F8, &BC, &71, &34, &34, &28, &28
+.hud1_col_2
+    EQUB &25, &38, &38, &F5, &38, &38, &25, &28
+.hud1_col_3
+    EQUB &25, &78, &78, &7D, &78, &B8, &24, &28
+.hud1_col_4
+    EQUB &2D, &68, &68, &6C, &68, &68, &25, &28
+.hud1_col_5
+    EQUB &25, &B8, &B8, &B1, &B8, &B8, &25, &28
+.hud1_col_6
+    EQUB &34, &78, &78, &A1, &2B, &2B, &28, &28
+.hud1_col_7
+.hud1_col_8
+.hud1_col_9
+.hud1_col_10
+.hud1_col_11
+.hud1_col_12
+.hud1_col_13
+.hud1_col_14
+.hud1_col_31
+.hud1_col_32
+.hud1_col_33
+.hud1_col_34
+.hud1_col_35
+.hud1_col_36
+.hud1_col_37
+.hud1_col_38
+.hud1_col_39
+    EQUB &D8, &D8, &72, &8D, &27, &27, &28, &28
+.hud1_col_15
+    EQUB &DB, &EB, &60, &8D, &27, &27, &28, &28
+.hud1_col_16
+    EQUB &58, &00, &50, &00, &40, &6C
+.hud1_col_17
+    EQUB &9B, &AB, &A8, &00, &A0, &98, &93
+.hud1_col_18
+    EQUB &F4, &34, &01, &10, &F8, &F5
+.hud1_col_19
+    EQUB &00, &20, &48, &68, &E8, &A8, &A0
+.hud1_col_20
+    EQUB &D7, &27, &28, &98, &00, &90, &B1
+.hud1_col_21
+    EQUB &F4, &34, &28, &00, &10, &18, &0A
+.hud1_col_22
+    EQUB &9B, &AB, &A8, &88, &08, &08, &18, &1B
+.hud1_col_23
+    EQUB &F4, &34, &38, &00, &50, &F8, &F5
+.hud1_col_24
+    EQUB &C8, &00, &60, &00, &20, &0A
+.hud1_col_25
+    EQUB &E4, &24, &28, &8C, &26, &26, &28, &28
+.hud1_col_26
+.hud1_col_30
+    EQUB &26, &88, &A8, &6C, &08, &88, &26, &28
+.hud1_col_27
+    EQUB &22, &88, &88, &C6, &88, &88, &22, &28
+.hud1_col_28
+    EQUB &26, &68, &68, &6C, &68, &68, &26, &28
+.hud1_col_29
+    EQUB &26, &88, &88, &C6, &A8, &A8, &20, &28
 
 \\ ---- totals: 342 encoded / 640 raw (53%); 33 duplicate columns coalesced ----
