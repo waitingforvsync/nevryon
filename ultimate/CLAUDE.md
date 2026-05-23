@@ -61,6 +61,7 @@ tools/                       \\ build-time Python utilities (self-contained)
 assets/                      \\ source artwork -- editable in any pixel editor;
                              \\ palette is auto-detected per sprite (BBC
                              \\ physical colours, up to 4 distinct per image)
+  hud/                       \\ game-shared HUD bitmap (160x16 px)
   level<1..4>/
     tiles/                   \\ 18 x 16x32-px tile PNGs
     explosions/              \\ 6 x 16x32-px player-death frames
@@ -72,6 +73,7 @@ assets/                      \\ source artwork -- editable in any pixel editor;
   (future: shared/{player,flames,pickups}/)
 
 data/                        \\ generated BeebAsm sources, ready to INCLUDE
+  hud.6502                   \\ scheme C RLE'd HUD bitmap (game-shared)
   level<1..4>/
     tiles.6502               \\ scheme C RLE'd 18-tile catalog (one per level)
     explosions.6502          \\ scheme C RLE'd 6-frame death explosion
@@ -161,11 +163,16 @@ level), per-(level, stage) hazards (17 × 128 B = 2 176 B):
 
 The 3 GRAPHIX hazards (slots 15 / 16 / 19) appear in every (level,
 stage) hazard bundle with the same encoded size (299 B = 102 + 99 +
-98), since they're painted in L1 colours (black / red / yellow /
-white) and the encoder lays them out with the same logical
-assignment regardless of scenario. Each sprite carries its own
-`_colour0..3` metadata so the runtime renders them in their painted
-colours.
+98), since the brightness order pegs each colour to the same logical
+index across all four scenarios. The PNGs are repainted to match
+each scenario's palette so the `_colour*` metadata fields name the
+right physical colour for each level.
+
+Plus the game-shared HUD bitmap (160 × 16 px, 40 × 16 byte-cols,
+640 B raw): **348 B encoded** (54 %), palette
+[black, red, cyan, white]. 16 of 40 columns coalesce (the HUD has
+lots of repeated all-black or all-pattern columns in the static
+background).
 
 ## Regenerating the data
 

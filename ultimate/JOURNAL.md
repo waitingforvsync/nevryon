@@ -6,6 +6,58 @@ left off, focused on the remake.
 
 ---
 
+## 2026-05-23 — Session 8: HUD bitmap
+
+Brought the score / status HUD across as the first game-shared
+asset. Copied `../work/scorebd_native.png` (the rendered $.SCOREBD
+bitmap at native scale, 160 x 16 px, 4 colours: black / red / cyan /
+white) into `assets/hud/hud.png`. Note the singleton-directory
+layout: the encoder still requires a directory of PNGs, so the HUD
+sits alone in its own `hud/` folder rather than at the assets root.
+
+`build.sh` Phase 1 grew one more invocation, with no `--name-prefix`
+since there's exactly one HUD for the whole game:
+
+```
+$ENCODE_SPRITES --src assets/hud --out data/hud.6502 --label "HUD"
+```
+
+Encoded as `data/hud.6502`: **348 B encoded / 640 B raw (54 %)**,
+with 16 of 40 byte-columns coalesced (the static background has
+plenty of repeated columns). Brightness-ordered colour assignment
+lands on `[black, red, cyan, white]` -> logical 0,1,2,3 -- which is
+exactly the original $.SCOREBD palette
+(`VDU 19,3,7;0; 19,2,6;0; 19,1,1;0;` in Loader2 line 990 in the
+original game), so the metadata equates emit:
+
+```
+hud_width    = 40
+hud_height   = 16
+hud_rle_flag = &28
+hud_colour0  = colour_black
+hud_colour1  = colour_red
+hud_colour2  = colour_cyan
+hud_colour3  = colour_white
+.hud_col_0
+    EQUB ...
+.hud_col_1
+...
+```
+
+(Aside: my first instinct was to allow `--src` to be either a file
+or a directory, so the HUD could live as `assets/hud.png` at the
+assets-root. Rich pointed out that's not necessary -- a singleton
+directory works fine and keeps the encoder's API minimal.)
+
+### Next
+
+Same as session 7's backlog:
+* Enemies / hit frames (4 + 3 per scenario, 4x24).
+* Animating-sprite categories (player, flames, pickups) needing
+  trim + raw-blit support in the encoder.
+
+---
+
 ## 2026-05-23 — Session 7: recolour GRAPHIX hazards to per-scenario palettes
 
 Quick follow-up to session 6. The 3 game-shared GRAPHIX hazards

@@ -71,6 +71,13 @@ $ENCODE_SPRITES --src assets/level4/stage1/hazards --out data/level4/stage1/haza
 $ENCODE_SPRITES --src assets/level4/stage2/hazards --out data/level4/stage2/hazards.6502 \
     --label "Level 4 stage 2 hazards" --name-prefix level4_stage2
 
+# Game-shared HUD bitmap (160x16 px = 40x16 byte-columns). Lives in
+# the static 2-line strip below the playfield (CRTC vertical-rupture
+# split). No --name-prefix: there's exactly one HUD for the whole
+# game, so the bare "hud_" symbols don't collide with anything.
+$ENCODE_SPRITES --src assets/hud --out data/hud.6502 \
+    --label "HUD"
+
 # Future encode invocations land here as the asset categories arrive:
 #   * assets/level<N>/enemies/           -> data/level<N>/enemies.6502
 #   * assets/shared/{player,flames,pickups}/ -> data/shared/*.6502
