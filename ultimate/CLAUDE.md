@@ -58,10 +58,12 @@ tools/                       \\ build-time Python utilities (self-contained)
   sprite_rle.py              \\ scheme C: encode_*, decode_*, pick_flag
   encode_sprites.py          \\ glob a dir of .png -> compressed BeebAsm file
 
-assets/                      \\ source artwork -- editable in any pixel editor
+assets/                      \\ source artwork -- editable in any pixel editor;
+                             \\ palette is auto-detected per sprite (BBC
+                             \\ physical colours, up to 4 distinct per image)
   level<1..4>/
-    tiles/                   \\ 18 x 16x32-px tile PNGs, per-scenario palette
-    explosions/              \\ 6 x 16x32-px player-death frames, per-scenario
+    tiles/                   \\ 18 x 16x32-px tile PNGs
+    explosions/              \\ 6 x 16x32-px player-death frames
     stage<1,2>/
       hazards/               \\ 14 per-stage hazard PNGs (hazard_00..13) +
                              \\ 3 game-shared GRAPHIX hazard PNGs
@@ -95,6 +97,14 @@ short version that matters for code:
   `<name>_height = H` (in pixels = bytes per column). The runtime
   reads these for plot loops, metadata tables, and the decoder
   column-walk.
+* **Per-sprite palette equates**: the encoder emits four
+  `<name>_colour0`..`<name>_colour3` equates, each set to a symbol
+  like `colour_red` / `colour_unused`. The 4 colours actually
+  present in the PNG are sorted by brightness (`black < blue <
+  red < magenta < green < cyan < yellow < white`) and assigned to
+  logical 0..N-1; remaining slots are `colour_unused`. The
+  `colour_<name>` symbols are defined elsewhere in the BeebAsm
+  project as the actual palette-latch byte values.
 * **Encoded stream semantics:**
   * `b < 8`  → run code. `count = b + 3` (so 3..10). The NEXT
     stream byte is the run's source value, shipped **raw** (NOT
@@ -136,41 +146,26 @@ encoder in `tools/sprite_rle.py`:
 Both transforms keep the output spec-conformant: the local
 `tools/sprite_rle.decode_sprite` round-trips every sprite.
 
-### Per-level encoded sizes
+### Per-set encoded sizes
 
-Tiles (18 sprites × 128 B raw / level) and explosions (6 sprites ×
-128 B / level):
+Tiles (18 sprites × 128 B raw / level), explosions (6 × 128 B /
+level), per-(level, stage) hazards (17 × 128 B = 2 176 B):
 
-| Level | Palette                  | Tiles enc / raw    | Explosions enc / raw |
-|------:|--------------------------|-------------------:|---------------------:|
-|     1 | black/red/yellow/white   |   1 547 / 2 304    |        553 /   768   |
-|     2 | black/blue/cyan/white    |   1 231 / 2 304    |        371 /   768   |
-|     3 | black/red/green/white    |   1 267 / 2 304    |        645 /   768   |
-|     4 | black/red/magenta/white  |   1 835 / 2 304    |        653 /   768   |
-|       |                          | **5 880** / 9 216  |  **2 222** / 3 072   |
+| Level | Tiles enc / raw | Explosions enc / raw | Hazards S1 | Hazards S2 |
+|------:|----------------:|---------------------:|-----------:|-----------:|
+|     1 |   1 547 / 2 304 |        553 /   768   |   1 634    |   1 658    |
+|     2 |   1 231 / 2 304 |        371 /   768   |   1 672    |   1 622    |
+|     3 |   1 267 / 2 304 |        645 /   768   |   1 666    |   1 542    |
+|     4 |   1 835 / 2 304 |        653 /   768   |   1 694    |   1 660    |
+|       | **5 880** / 9 216 |  **2 222** / 3 072 | **6 666**  | **6 482**  |
 
-Hazards: each (level, stage) bundle is the 14 stage-specific
-hazards (LEVD2 / LEVD3 slots 0..13) plus the 3 shared GRAPHIX
-hazards (slots 15 / 16 / 19) duplicated in, encoded under a
-black/red/yellow/white fallback palette. 17 sprites × 128 B raw =
-2 176 B per stage:
-
-| Level | Stage 1 enc / raw | Stage 2 enc / raw |
-|------:|------------------:|------------------:|
-|     1 |    1 634 / 2 176  |    1 658 / 2 176  |
-|     2 |    1 672 / 2 176  |    1 622 / 2 176  |
-|     3 |    1 666 / 2 176  |    1 542 / 2 176  |
-|     4 |    1 694 / 2 176  |    1 660 / 2 176  |
-|       | **6 666** / 8 704 | **6 482** / 8 704 |
-
-Three of the four levels match the spec-exact tile survey figures
-in `../docs/sprite_rle_notes.md` to the byte; L1 tiles save 216 B
-via within-sprite column coalescing, L2 explosions save 4 B for
-the same reason, and L2 tiles is +9 B (the all-RLE-tail rule's
-+1 B-per-run cost on a sprite set with no coalescing opportunities).
-Hazard sets all run a bit larger than the bare LEVD-only survey
-numbers because the 3 GRAPHIX hazards (~ 299 B encoded) are folded
-into every stage's bundle now.
+The 3 GRAPHIX hazards (slots 15 / 16 / 19) appear in every (level,
+stage) hazard bundle with the same encoded size (299 B = 102 + 99 +
+98), since they're painted in L1 colours (black / red / yellow /
+white) and the encoder lays them out with the same logical
+assignment regardless of scenario. Each sprite carries its own
+`_colour0..3` metadata so the runtime renders them in their painted
+colours.
 
 ## Regenerating the data
 
@@ -191,26 +186,25 @@ clone can assemble without running the encoders.
   a multiple of 4 (MODE 5 = 4 px per byte).
 * The PNG's filename stem becomes the BeebAsm symbol prefix —
   `tile_06.png` → `tile_06_width`, `tile_06_height`,
-  `tile_06_rle_flag`, `.tile_06_col_0..3`. The stem (and the
-  optional `--name-prefix` joined to it) must match
-  `[A-Za-z_][A-Za-z0-9_]*`.
+  `tile_06_rle_flag`, `tile_06_colour0..3`, `.tile_06_col_0..3`.
+  The stem (and the optional `--name-prefix` joined to it) must
+  match `[A-Za-z_][A-Za-z0-9_]*`.
 * `--name-prefix PREFIX` (optional) prepends `PREFIX_` to every
-  generated symbol, so the four per-level data files in this repo
-  carry `level1_` / `level2_` / etc. prefixes and can be INCLUDE'd
-  side-by-side without colliding (`level1_tile_06_rle_flag` vs
-  `level2_tile_06_rle_flag`).
-* Validates every pixel against `--palette` (4 colours, comma-
-  separated, BBC physical names or 6-digit hex). Off-palette pixels
-  error with their `(x, y)` coordinates so they're easy to find in
-  an editor.
-* Accepts one or more `--fallback-palette` arguments. If a sprite's
-  pixels don't all match the primary palette, the encoder tries
-  each fallback in order; the first palette covering every pixel of
-  that sprite is the one used. The chosen palette index is noted in
-  the per-sprite header comment (`fallback palette N`). Use case:
-  copying "general" sprites (e.g. GRAPHIX-hosted hazards rendered
-  in L1 colours) into another scenario's asset set without
-  repainting.
+  generated symbol, so the per-level data files in this repo carry
+  `level1_` / `level2_` / etc. prefixes and can be INCLUDE'd
+  side-by-side without colliding.
+* **Auto-detects each sprite's palette from its pixels.** Every
+  distinct RGB in the image must be one of the 8 BBC physical
+  colours (black, red, green, yellow, blue, magenta, cyan, white);
+  any other RGB errors with `(x, y)` coordinates. There must be no
+  more than 4 distinct colours (MODE 5 limit); otherwise the
+  encoder errors with the full colour list. The used colours are
+  sorted by brightness (`black < blue < red < magenta < green <
+  cyan < yellow < white`) and assigned to logical 0..N-1;
+  remaining slots are `colour_unused`. So painting a sprite with
+  any allowed colour-set in any pixel editor works; the encoder
+  picks the byte mapping and the runtime metadata records which
+  colour is in each slot.
 * Round-trips every sprite through `tools/sprite_rle.decode_sprite`
   before writing the output file.
 

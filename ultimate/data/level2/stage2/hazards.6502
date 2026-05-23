@@ -17,11 +17,21 @@
 \\     decoder never falls into its slower literal path for run tails.
 \\   * Columns that encode to identical bytes share their stream: their
 \\     .<name>_col_M labels are stacked at the same address.
+\\
+\\ Per-sprite palette is auto-detected from the PNG pixels and assigned
+\\ to logical colours 0..3 in brightness order
+\\ (black < blue < red < magenta < green < cyan < yellow < white).
+\\ Unused slots are tagged colour_unused. The colour_<name> symbols are
+\\ defined elsewhere in the BeebAsm project.
 
 \\ level2_stage2_hazard_00: 4x32 (16x32 px), 114 bytes (89% of raw 128 B)
 level2_stage2_hazard_00_width    = 4
 level2_stage2_hazard_00_height   = 32
 level2_stage2_hazard_00_rle_flag = &18
+level2_stage2_hazard_00_colour0  = colour_black
+level2_stage2_hazard_00_colour1  = colour_blue
+level2_stage2_hazard_00_colour2  = colour_cyan
+level2_stage2_hazard_00_colour3  = colour_white
 .level2_stage2_hazard_00_col_0
     EQUB &01, &00, &00, &10, &28, &29, &29, &18, &18, &00, &10, &18, &18, &00, &10, &18
     EQUB &08, &28, &02, &31, &18, &6B, &EB, &EE
@@ -39,6 +49,10 @@ level2_stage2_hazard_00_rle_flag = &18
 level2_stage2_hazard_01_width    = 4
 level2_stage2_hazard_01_height   = 32
 level2_stage2_hazard_01_rle_flag = &18
+level2_stage2_hazard_01_colour0  = colour_black
+level2_stage2_hazard_01_colour1  = colour_blue
+level2_stage2_hazard_01_colour2  = colour_cyan
+level2_stage2_hazard_01_colour3  = colour_white
 .level2_stage2_hazard_01_col_0
     EQUB &90, &DC, &63, &78, &0C, &0C, &08, &28, &29, &29, &18, &18, &00, &10, &18, &18
     EQUB &00, &10, &18, &08, &28, &02, &31, &18, &6B, &EB, &EE
@@ -56,6 +70,10 @@ level2_stage2_hazard_01_rle_flag = &18
 level2_stage2_hazard_02_width    = 4
 level2_stage2_hazard_02_height   = 32
 level2_stage2_hazard_02_rle_flag = &18
+level2_stage2_hazard_02_colour0  = colour_black
+level2_stage2_hazard_02_colour1  = colour_blue
+level2_stage2_hazard_02_colour2  = colour_cyan
+level2_stage2_hazard_02_colour3  = colour_white
 .level2_stage2_hazard_02_col_0
     EQUB &18, &08, &08, &18, &00, &10, &28, &29, &29, &18, &18, &00, &10, &18, &18, &00
     EQUB &10, &18, &08, &28, &02, &31, &18, &6B, &EB, &EE
@@ -73,6 +91,10 @@ level2_stage2_hazard_02_rle_flag = &18
 level2_stage2_hazard_03_width    = 4
 level2_stage2_hazard_03_height   = 32
 level2_stage2_hazard_03_rle_flag = &40
+level2_stage2_hazard_03_colour0  = colour_black
+level2_stage2_hazard_03_colour1  = colour_blue
+level2_stage2_hazard_03_colour2  = colour_cyan
+level2_stage2_hazard_03_colour3  = colour_white
 .level2_stage2_hazard_03_col_0
     EQUB &07, &00, &00, &00, &B5, &BF, &BA, &B0, &E5, &1A, &4F, &06, &00, &00, &00
 .level2_stage2_hazard_03_col_1
@@ -88,6 +110,10 @@ level2_stage2_hazard_03_rle_flag = &40
 level2_stage2_hazard_04_width    = 4
 level2_stage2_hazard_04_height   = 32
 level2_stage2_hazard_04_rle_flag = &10
+level2_stage2_hazard_04_colour0  = colour_black
+level2_stage2_hazard_04_colour1  = colour_blue
+level2_stage2_hazard_04_colour2  = colour_cyan
+level2_stage2_hazard_04_colour3  = colour_white
 .level2_stage2_hazard_04_col_0
     EQUB &EF, &01, &F8, &1F, &12, &C0, &C9, &C4, &CD, &CD, &C9, &C4, &C9, &05, &D0, &59
     EQUB &84, &59, &95, &58, &1D, &1B, &1B, &16
@@ -105,6 +131,10 @@ level2_stage2_hazard_04_rle_flag = &10
 level2_stage2_hazard_05_width    = 4
 level2_stage2_hazard_05_height   = 32
 level2_stage2_hazard_05_rle_flag = &10
+level2_stage2_hazard_05_colour0  = colour_black
+level2_stage2_hazard_05_colour1  = colour_blue
+level2_stage2_hazard_05_colour2  = colour_cyan
+level2_stage2_hazard_05_colour3  = colour_white
 .level2_stage2_hazard_05_col_0
     EQUB &00, &00, &74, &72, &74, &76, &76, &74, &72, &74, &70, &70, &10, &67, &64, &75
     EQUB &57, &56, &56, &74, &74, &70, &70, &34, &52, &34, &52, &16, &16, &19, &86
@@ -122,6 +152,10 @@ level2_stage2_hazard_05_rle_flag = &10
 level2_stage2_hazard_06_width    = 4
 level2_stage2_hazard_06_height   = 32
 level2_stage2_hazard_06_rle_flag = &20
+level2_stage2_hazard_06_colour0  = colour_black
+level2_stage2_hazard_06_colour1  = colour_blue
+level2_stage2_hazard_06_colour2  = colour_cyan
+level2_stage2_hazard_06_colour3  = colour_white
 .level2_stage2_hazard_06_col_0
     EQUB &00, &10, &07, &00, &04, &00, &01, &10, &74, &74, &00, &D8, &C8, &D8, &D8
 .level2_stage2_hazard_06_col_1
@@ -138,6 +172,10 @@ level2_stage2_hazard_06_rle_flag = &20
 level2_stage2_hazard_07_width    = 4
 level2_stage2_hazard_07_height   = 32
 level2_stage2_hazard_07_rle_flag = &10
+level2_stage2_hazard_07_colour0  = colour_black
+level2_stage2_hazard_07_colour1  = colour_blue
+level2_stage2_hazard_07_colour2  = colour_cyan
+level2_stage2_hazard_07_colour3  = colour_white
 .level2_stage2_hazard_07_col_0
     EQUB &02, &00, &20, &40, &40, &A0, &E0, &E0, &1F, &45, &67, &B2, &97, &E0, &60, &20
     EQUB &03, &00, &20, &60, &60, &E0, &E8, &BF, &BA
@@ -155,6 +193,10 @@ level2_stage2_hazard_07_rle_flag = &10
 level2_stage2_hazard_08_width    = 4
 level2_stage2_hazard_08_height   = 32
 level2_stage2_hazard_08_rle_flag = &90
+level2_stage2_hazard_08_colour0  = colour_black
+level2_stage2_hazard_08_colour1  = colour_blue
+level2_stage2_hazard_08_colour2  = colour_cyan
+level2_stage2_hazard_08_colour3  = colour_white
 .level2_stage2_hazard_08_col_0
     EQUB &02, &00, &80, &B0, &B0, &C0, &E0, &97, &B2, &B2, &90, &81, &85, &D3, &E0, &A0
     EQUB &03, &00, &A0, &E0, &E0, &60, &60, &3F, &3A
@@ -172,6 +214,10 @@ level2_stage2_hazard_08_rle_flag = &90
 level2_stage2_hazard_09_width    = 4
 level2_stage2_hazard_09_height   = 32
 level2_stage2_hazard_09_rle_flag = &18
+level2_stage2_hazard_09_colour0  = colour_black
+level2_stage2_hazard_09_colour1  = colour_blue
+level2_stage2_hazard_09_colour2  = colour_cyan
+level2_stage2_hazard_09_colour3  = colour_white
 .level2_stage2_hazard_09_col_0
     EQUB &E7, &90, &94, &17, &07, &00, &07, &00, &00, &00, &E7, &90, &94, &17, &18
 .level2_stage2_hazard_09_col_1
@@ -187,6 +233,10 @@ level2_stage2_hazard_09_rle_flag = &18
 level2_stage2_hazard_10_width    = 4
 level2_stage2_hazard_10_height   = 32
 level2_stage2_hazard_10_rle_flag = &38
+level2_stage2_hazard_10_colour0  = colour_black
+level2_stage2_hazard_10_colour1  = colour_blue
+level2_stage2_hazard_10_colour2  = colour_cyan
+level2_stage2_hazard_10_colour3  = colour_white
 .level2_stage2_hazard_10_col_0
     EQUB &07, &00, &03, &00, &29, &29, &0A, &4C, &D0, &E0, &AC, &8A, &8A, &8B, &88, &99
     EQUB &22, &33, &34, &73
@@ -204,6 +254,10 @@ level2_stage2_hazard_10_rle_flag = &38
 level2_stage2_hazard_11_width    = 4
 level2_stage2_hazard_11_height   = 32
 level2_stage2_hazard_11_rle_flag = &18
+level2_stage2_hazard_11_colour0  = colour_black
+level2_stage2_hazard_11_colour1  = colour_blue
+level2_stage2_hazard_11_colour2  = colour_cyan
+level2_stage2_hazard_11_colour3  = colour_white
 .level2_stage2_hazard_11_col_0
     EQUB &01, &00, &F6, &E9, &0A, &C8, &D0, &CD, &C5, &C5, &C1, &CC, &C1, &05, &D0, &51
     EQUB &8C, &51, &8C, &51, &15, &15, &1A, &35
@@ -221,6 +275,10 @@ level2_stage2_hazard_11_rle_flag = &18
 level2_stage2_hazard_12_width    = 4
 level2_stage2_hazard_12_height   = 32
 level2_stage2_hazard_12_rle_flag = &20
+level2_stage2_hazard_12_colour0  = colour_black
+level2_stage2_hazard_12_colour1  = colour_blue
+level2_stage2_hazard_12_colour2  = colour_cyan
+level2_stage2_hazard_12_colour3  = colour_white
 .level2_stage2_hazard_12_col_0
     EQUB &07, &00, &03, &00, &30, &30, &00, &31, &01, &73, &D6, &D7, &00, &F6, &20, &49
 .level2_stage2_hazard_12_col_1
@@ -237,6 +295,10 @@ level2_stage2_hazard_12_rle_flag = &20
 level2_stage2_hazard_13_width    = 4
 level2_stage2_hazard_13_height   = 32
 level2_stage2_hazard_13_rle_flag = &30
+level2_stage2_hazard_13_colour0  = colour_black
+level2_stage2_hazard_13_colour1  = colour_blue
+level2_stage2_hazard_13_colour2  = colour_cyan
+level2_stage2_hazard_13_colour3  = colour_white
 .level2_stage2_hazard_13_col_0
     EQUB &05, &00, &00, &00, &C0, &C0, &CF, &D4, &DA, &E1, &00, &D0, &00, &B0, &19, &3D
     EQUB &3E, &C0, &30, &3F, &30, &C0, &C0
@@ -250,10 +312,14 @@ level2_stage2_hazard_13_rle_flag = &30
     EQUB &01, &00, &CF, &C0, &39, &50, &52, &54, &56, &56, &52, &54, &52, &05, &60, &72
     EQUB &14, &72, &14, &72, &36, &36, &39, &A6
 
-\\ level2_stage2_hazard_15: 4x32 (16x32 px), 102 bytes (79% of raw 128 B; fallback palette 1)
+\\ level2_stage2_hazard_15: 4x32 (16x32 px), 102 bytes (79% of raw 128 B)
 level2_stage2_hazard_15_width    = 4
 level2_stage2_hazard_15_height   = 32
 level2_stage2_hazard_15_rle_flag = &10
+level2_stage2_hazard_15_colour0  = colour_black
+level2_stage2_hazard_15_colour1  = colour_red
+level2_stage2_hazard_15_colour2  = colour_yellow
+level2_stage2_hazard_15_colour3  = colour_white
 .level2_stage2_hazard_15_col_0
     EQUB &EF, &EF, &EC, &01, &F8, &F0, &F0, &00, &D0, &02, &B0, &82, &95, &C0, &D1, &D2
     EQUB &F0, &F1, &04, &F0, &1F
@@ -267,10 +333,14 @@ level2_stage2_hazard_15_rle_flag = &10
     EQUB &EF, &02, &F0, &68, &24, &24, &00, &1A, &84, &0C, &84, &0C, &84, &0C, &00, &1A
     EQUB &24, &24, &68, &68, &01, &E1, &D3, &1F, &1F
 
-\\ level2_stage2_hazard_16: 4x32 (16x32 px), 99 bytes (77% of raw 128 B; fallback palette 1)
+\\ level2_stage2_hazard_16: 4x32 (16x32 px), 99 bytes (77% of raw 128 B)
 level2_stage2_hazard_16_width    = 4
 level2_stage2_hazard_16_height   = 32
 level2_stage2_hazard_16_rle_flag = &20
+level2_stage2_hazard_16_colour0  = colour_black
+level2_stage2_hazard_16_colour1  = colour_red
+level2_stage2_hazard_16_colour2  = colour_yellow
+level2_stage2_hazard_16_colour3  = colour_white
 .level2_stage2_hazard_16_col_0
     EQUB &DF, &DF, &DC, &01, &F8, &C0, &C0, &00, &C1, &03, &83, &A5, &E1, &E1, &E2, &C0
     EQUB &C1, &04, &F0, &2F
@@ -284,10 +354,14 @@ level2_stage2_hazard_16_rle_flag = &20
     EQUB &DF, &02, &F0, &58, &14, &14, &3A, &32, &3A, &34, &38, &34, &38, &34, &38, &32
     EQUB &3A, &32, &14, &14, &58, &58, &01, &E1, &E3, &2F, &2F
 
-\\ level2_stage2_hazard_19: 4x32 (16x32 px), 98 bytes (76% of raw 128 B; fallback palette 1)
+\\ level2_stage2_hazard_19: 4x32 (16x32 px), 98 bytes (76% of raw 128 B)
 level2_stage2_hazard_19_width    = 4
 level2_stage2_hazard_19_height   = 32
 level2_stage2_hazard_19_rle_flag = &18
+level2_stage2_hazard_19_colour0  = colour_black
+level2_stage2_hazard_19_colour1  = colour_red
+level2_stage2_hazard_19_colour2  = colour_yellow
+level2_stage2_hazard_19_colour3  = colour_white
 .level2_stage2_hazard_19_col_0
     EQUB &02, &00, &16, &1B, &19, &04, &00, &6D, &6E, &04, &00, &19, &1B, &16, &02, &00
 .level2_stage2_hazard_19_col_1

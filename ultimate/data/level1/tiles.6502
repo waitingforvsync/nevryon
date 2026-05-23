@@ -17,11 +17,21 @@
 \\     decoder never falls into its slower literal path for run tails.
 \\   * Columns that encode to identical bytes share their stream: their
 \\     .<name>_col_M labels are stacked at the same address.
+\\
+\\ Per-sprite palette is auto-detected from the PNG pixels and assigned
+\\ to logical colours 0..3 in brightness order
+\\ (black < blue < red < magenta < green < cyan < yellow < white).
+\\ Unused slots are tagged colour_unused. The colour_<name> symbols are
+\\ defined elsewhere in the BeebAsm project.
 
 \\ level1_tile_00: 4x32 (16x32 px), 60 bytes (46% of raw 128 B)
 level1_tile_00_width    = 4
 level1_tile_00_height   = 32
 level1_tile_00_rle_flag = &20
+level1_tile_00_colour0  = colour_black
+level1_tile_00_colour1  = colour_red
+level1_tile_00_colour2  = colour_yellow
+level1_tile_00_colour3  = colour_white
 .level1_tile_00_col_0
     EQUB &07, &00, &07, &00, &05, &00, &31, &12, &55, &DA
 .level1_tile_00_col_1
@@ -36,6 +46,10 @@ level1_tile_00_rle_flag = &20
 level1_tile_01_width    = 4
 level1_tile_01_height   = 32
 level1_tile_01_rle_flag = &18
+level1_tile_01_colour0  = colour_black
+level1_tile_01_colour1  = colour_red
+level1_tile_01_colour2  = colour_yellow
+level1_tile_01_colour3  = colour_white
 .level1_tile_01_col_0
     EQUB &06, &00, &00, &00, &09, &2A, &6D, &E2, &EC, &F1, &CA, &BD, &53, &9E, &15, &12
     EQUB &0C, &30, &48, &A8, &68, &E8, &E9, &EA
@@ -53,6 +67,10 @@ level1_tile_01_rle_flag = &18
 level1_tile_02_width    = 4
 level1_tile_02_height   = 32
 level1_tile_02_rle_flag = &10
+level1_tile_02_colour0  = colour_black
+level1_tile_02_colour1  = colour_red
+level1_tile_02_colour2  = colour_yellow
+level1_tile_02_colour3  = colour_white
 .level1_tile_02_col_0
 .level1_tile_02_col_1
 .level1_tile_02_col_2
@@ -64,6 +82,10 @@ level1_tile_02_rle_flag = &10
 level1_tile_03_width    = 4
 level1_tile_03_height   = 32
 level1_tile_03_rle_flag = &10
+level1_tile_03_colour0  = colour_black
+level1_tile_03_colour1  = colour_red
+level1_tile_03_colour2  = colour_yellow
+level1_tile_03_colour3  = colour_white
 .level1_tile_03_col_0
 .level1_tile_03_col_1
 .level1_tile_03_col_2
@@ -75,6 +97,10 @@ level1_tile_03_rle_flag = &10
 level1_tile_04_width    = 4
 level1_tile_04_height   = 32
 level1_tile_04_rle_flag = &18
+level1_tile_04_colour0  = colour_black
+level1_tile_04_colour1  = colour_red
+level1_tile_04_colour2  = colour_yellow
+level1_tile_04_colour3  = colour_white
 .level1_tile_04_col_0
     EQUB &07, &00, &03, &00, &90, &DC, &F2, &ED, &EA, &61, &AC, &42, &35, &0E, &13, &1D
     EQUB &1A, &99, &D8, &F8
@@ -89,6 +115,10 @@ level1_tile_04_rle_flag = &18
 level1_tile_05_width    = 4
 level1_tile_05_height   = 32
 level1_tile_05_rle_flag = &18
+level1_tile_05_colour0  = colour_black
+level1_tile_05_colour1  = colour_red
+level1_tile_05_colour2  = colour_yellow
+level1_tile_05_colour3  = colour_white
 .level1_tile_05_col_0
     EQUB &90, &DC, &FA, &ED, &EA, &61, &AC, &42, &35, &0E, &13, &1D, &9A, &59, &B8, &C8
     EQUB &F8, &E8, &E0, &EC, &EA, &E1, &EC, &E2, &ED, &E2, &ED, &EA, &E1, &EC, &EA, &E9
@@ -106,6 +136,10 @@ level1_tile_05_rle_flag = &18
 level1_tile_06_width    = 4
 level1_tile_06_height   = 32
 level1_tile_06_rle_flag = &08
+level1_tile_06_colour0  = colour_black
+level1_tile_06_colour1  = colour_unused
+level1_tile_06_colour2  = colour_unused
+level1_tile_06_colour3  = colour_unused
 .level1_tile_06_col_0
 .level1_tile_06_col_1
 .level1_tile_06_col_2
@@ -116,6 +150,10 @@ level1_tile_06_rle_flag = &08
 level1_tile_07_width    = 4
 level1_tile_07_height   = 32
 level1_tile_07_rle_flag = &18
+level1_tile_07_colour0  = colour_black
+level1_tile_07_colour1  = colour_red
+level1_tile_07_colour2  = colour_yellow
+level1_tile_07_colour3  = colour_white
 .level1_tile_07_col_0
     EQUB &03, &00, &08, &08, &28, &28, &29, &00, &71, &68, &18, &E7, &E2, &ED, &E8, &E8
     EQUB &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
@@ -133,6 +171,10 @@ level1_tile_07_rle_flag = &18
 level1_tile_08_width    = 4
 level1_tile_08_height   = 32
 level1_tile_08_rle_flag = &10
+level1_tile_08_colour0  = colour_black
+level1_tile_08_colour1  = colour_red
+level1_tile_08_colour2  = colour_yellow
+level1_tile_08_colour3  = colour_white
 .level1_tile_08_col_0
 .level1_tile_08_col_3
     EQUB &05, &00, &EF, &E0, &E0, &1F, &01, &00, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F
@@ -148,6 +190,10 @@ level1_tile_08_rle_flag = &10
 level1_tile_09_width    = 4
 level1_tile_09_height   = 32
 level1_tile_09_rle_flag = &20
+level1_tile_09_colour0  = colour_black
+level1_tile_09_colour1  = colour_red
+level1_tile_09_colour2  = colour_yellow
+level1_tile_09_colour3  = colour_white
 .level1_tile_09_col_0
     EQUB &DF, &03, &F8, &01, &F0, &1C, &00, &74, &20, &DF, &DA, &D5, &D0, &D0, &7A, &85
     EQUB &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
@@ -165,6 +211,10 @@ level1_tile_09_rle_flag = &20
 level1_tile_10_width    = 4
 level1_tile_10_height   = 32
 level1_tile_10_rle_flag = &10
+level1_tile_10_colour0  = colour_black
+level1_tile_10_colour1  = colour_red
+level1_tile_10_colour2  = colour_yellow
+level1_tile_10_colour3  = colour_white
 .level1_tile_10_col_0
     EQUB &05, &00, &EF, &E0, &E0, &1F, &01, &00, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F
     EQUB &1F, &15, &1A, &10, &10, &EF, &E0, &1F
@@ -182,6 +232,10 @@ level1_tile_10_rle_flag = &10
 level1_tile_11_width    = 4
 level1_tile_11_height   = 32
 level1_tile_11_rle_flag = &10
+level1_tile_11_colour0  = colour_black
+level1_tile_11_colour1  = colour_red
+level1_tile_11_colour2  = colour_yellow
+level1_tile_11_colour3  = colour_white
 .level1_tile_11_col_0
     EQUB &05, &00, &23, &03, &32, &10, &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15
     EQUB &1A, &10, &10, &EF, &E0, &1F
@@ -199,6 +253,10 @@ level1_tile_11_rle_flag = &10
 level1_tile_12_width    = 4
 level1_tile_12_height   = 32
 level1_tile_12_rle_flag = &18
+level1_tile_12_colour0  = colour_black
+level1_tile_12_colour1  = colour_red
+level1_tile_12_colour2  = colour_yellow
+level1_tile_12_colour3  = colour_white
 .level1_tile_12_col_0
     EQUB &04, &00, &09, &2A, &7D, &D2, &84, &30, &48, &A8, &18, &E7, &E2, &ED, &E8, &E8
     EQUB &42, &BD, &17, &17, &1D, &12, &18, &18, &E7, &E8, &17
@@ -216,6 +274,10 @@ level1_tile_12_rle_flag = &18
 level1_tile_13_width    = 4
 level1_tile_13_height   = 32
 level1_tile_13_rle_flag = &10
+level1_tile_13_colour0  = colour_black
+level1_tile_13_colour1  = colour_red
+level1_tile_13_colour2  = colour_yellow
+level1_tile_13_colour3  = colour_white
 .level1_tile_13_col_0
     EQUB &EF, &E8, &9F, &10, &67, &64, &EC, &01, &F0, &2C, &00, &74, &10, &EF, &EA, &E5
     EQUB &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
@@ -233,6 +295,10 @@ level1_tile_13_rle_flag = &10
 level1_tile_14_width    = 4
 level1_tile_14_height   = 32
 level1_tile_14_rle_flag = &48
+level1_tile_14_colour0  = colour_black
+level1_tile_14_colour1  = colour_red
+level1_tile_14_colour2  = colour_yellow
+level1_tile_14_colour3  = colour_white
 .level1_tile_14_col_0
     EQUB &3F, &3C, &4F, &48, &00, &34, &B8, &B8, &A8, &A8, &64, &6C, &7C, &7C, &48, &B7
     EQUB &B2, &BD, &B8, &B8, &12, &ED, &47, &47, &4D, &42, &48, &48, &B7, &B8, &47
@@ -250,6 +316,10 @@ level1_tile_14_rle_flag = &48
 level1_tile_15_width    = 4
 level1_tile_15_height   = 32
 level1_tile_15_rle_flag = &10
+level1_tile_15_colour0  = colour_black
+level1_tile_15_colour1  = colour_red
+level1_tile_15_colour2  = colour_yellow
+level1_tile_15_colour3  = colour_white
 .level1_tile_15_col_0
     EQUB &EF, &E8, &9F, &10, &EF, &E8, &E8, &01, &F0, &2C, &00, &74, &10, &EF, &EA, &E5
     EQUB &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &10, &EF, &E0, &1F
@@ -267,6 +337,10 @@ level1_tile_15_rle_flag = &10
 level1_tile_16_width    = 4
 level1_tile_16_height   = 32
 level1_tile_16_rle_flag = &20
+level1_tile_16_colour0  = colour_black
+level1_tile_16_colour1  = colour_red
+level1_tile_16_colour2  = colour_yellow
+level1_tile_16_colour3  = colour_white
 .level1_tile_16_col_0
     EQUB &20, &20, &30, &30, &11, &11, &99, &A4, &97, &D0, &D0, &1C, &00, &74, &20, &DF
     EQUB &DA, &D5, &D0, &D0, &7A, &85, &2F, &2F, &25, &2A, &20, &20, &DF, &D0, &2F
@@ -284,6 +358,10 @@ level1_tile_16_rle_flag = &20
 level1_tile_17_width    = 4
 level1_tile_17_height   = 32
 level1_tile_17_rle_flag = &10
+level1_tile_17_colour0  = colour_black
+level1_tile_17_colour1  = colour_red
+level1_tile_17_colour2  = colour_yellow
+level1_tile_17_colour3  = colour_white
 .level1_tile_17_col_0
 .level1_tile_17_col_3
     EQUB &EF, &EA, &E5, &E0, &E0, &4A, &B5, &1F, &1F, &15, &1A, &10, &40, &B0, &01, &F0

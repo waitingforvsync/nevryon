@@ -17,11 +17,21 @@
 \\     decoder never falls into its slower literal path for run tails.
 \\   * Columns that encode to identical bytes share their stream: their
 \\     .<name>_col_M labels are stacked at the same address.
+\\
+\\ Per-sprite palette is auto-detected from the PNG pixels and assigned
+\\ to logical colours 0..3 in brightness order
+\\ (black < blue < red < magenta < green < cyan < yellow < white).
+\\ Unused slots are tagged colour_unused. The colour_<name> symbols are
+\\ defined elsewhere in the BeebAsm project.
 
 \\ level1_explosion_00: 4x32 (16x32 px), 89 bytes (69% of raw 128 B)
 level1_explosion_00_width    = 4
 level1_explosion_00_height   = 32
 level1_explosion_00_rle_flag = &18
+level1_explosion_00_colour0  = colour_black
+level1_explosion_00_colour1  = colour_red
+level1_explosion_00_colour2  = colour_yellow
+level1_explosion_00_colour3  = colour_white
 .level1_explosion_00_col_0
     EQUB &00, &00, &08, &08, &05, &00, &03, &01, &05, &00, &08, &29, &29, &19, &18
 .level1_explosion_00_col_1
@@ -38,6 +48,10 @@ level1_explosion_00_rle_flag = &18
 level1_explosion_01_width    = 4
 level1_explosion_01_height   = 32
 level1_explosion_01_rle_flag = &18
+level1_explosion_01_colour0  = colour_black
+level1_explosion_01_colour1  = colour_red
+level1_explosion_01_colour2  = colour_yellow
+level1_explosion_01_colour3  = colour_white
 .level1_explosion_01_col_0
     EQUB &18, &08, &29, &09, &28, &19, &00, &00, &00, &01, &1B, &0A, &1A, &18, &18, &1A
     EQUB &0A, &0A, &00, &01, &01, &00, &08, &29, &28, &19, &18
@@ -55,6 +69,10 @@ level1_explosion_01_rle_flag = &18
 level1_explosion_02_width    = 4
 level1_explosion_02_height   = 32
 level1_explosion_02_rle_flag = &18
+level1_explosion_02_colour0  = colour_black
+level1_explosion_02_colour1  = colour_red
+level1_explosion_02_colour2  = colour_yellow
+level1_explosion_02_colour3  = colour_white
 .level1_explosion_02_col_0
     EQUB &18, &08, &29, &09, &02, &00, &00, &01, &05, &00, &00, &01, &01, &00, &08, &29
     EQUB &28, &19, &18
@@ -72,6 +90,10 @@ level1_explosion_02_rle_flag = &18
 level1_explosion_03_width    = 4
 level1_explosion_03_height   = 32
 level1_explosion_03_rle_flag = &18
+level1_explosion_03_colour0  = colour_black
+level1_explosion_03_colour1  = colour_red
+level1_explosion_03_colour2  = colour_yellow
+level1_explosion_03_colour3  = colour_white
 .level1_explosion_03_col_0
     EQUB &18, &08, &29, &09, &02, &00, &19, &19, &07, &00, &19, &19, &01, &00, &08, &29
     EQUB &28, &19, &18
@@ -89,6 +111,10 @@ level1_explosion_03_rle_flag = &18
 level1_explosion_04_width    = 4
 level1_explosion_04_height   = 32
 level1_explosion_04_rle_flag = &18
+level1_explosion_04_colour0  = colour_black
+level1_explosion_04_colour1  = colour_red
+level1_explosion_04_colour2  = colour_yellow
+level1_explosion_04_colour3  = colour_white
 .level1_explosion_04_col_0
     EQUB &28, &6B, &09, &19, &18, &18, &19, &19, &07, &00, &00, &00, &19, &19, &00, &00
     EQUB &28, &58, &58, &1A, &18, &18
@@ -106,6 +132,10 @@ level1_explosion_04_rle_flag = &18
 level1_explosion_05_width    = 4
 level1_explosion_05_height   = 32
 level1_explosion_05_rle_flag = &18
+level1_explosion_05_colour0  = colour_black
+level1_explosion_05_colour1  = colour_red
+level1_explosion_05_colour2  = colour_yellow
+level1_explosion_05_colour3  = colour_white
 .level1_explosion_05_col_0
     EQUB &28, &49, &18, &19, &18, &18, &19, &19, &07, &00, &00, &00, &19, &19, &00, &00
     EQUB &28, &18, &58, &1A, &18, &18

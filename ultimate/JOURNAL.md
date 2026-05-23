@@ -6,6 +6,106 @@ left off, focused on the remake.
 
 ---
 
+## 2026-05-23 — Session 6: auto-detect per-sprite palette + colour equates
+
+Rich asked to drop `--palette` / `--fallback-palette` entirely and
+let the encoder figure each sprite's palette out from its own
+pixels. Goal: paint sprite colours in any pixel editor and have
+them flow through to runtime without touching the build script.
+
+### Rules
+
+* Each pixel must be one of the 8 BBC physical colours (black, red,
+  green, yellow, blue, magenta, cyan, white); any other RGB is an
+  error with the offending `(x, y)` reported.
+* At most 4 distinct colours per sprite (the MODE 5 hardware limit);
+  otherwise an error with the full colour list.
+* Used colours are sorted by brightness order
+  `black < blue < red < magenta < green < cyan < yellow < white`
+  and assigned to logical 0..N-1; remaining logical slots are
+  `colour_unused`.
+
+The brightness order matches the BBC's natural luminance ranking
+(black-0, blue-29, red-76, magenta-105, green-150, cyan-179,
+yellow-226, white-255 under ITU-R BT.601 weights), and -- happily
+-- the original scenario palettes already used colour orderings
+consistent with it, so 13 of the 16 main palette assignments stay
+byte-identical to the previous session.
+
+### Per-sprite output
+
+Each sprite now emits four extra equates between the rle_flag and
+the column labels:
+
+```
+\\ level1_tile_06: 4x32 (16x32 px), 8 bytes (6% of raw 128 B; 1 unique col)
+level1_tile_06_width    = 4
+level1_tile_06_height   = 32
+level1_tile_06_rle_flag = &08
+level1_tile_06_colour0  = colour_black
+level1_tile_06_colour1  = colour_unused
+level1_tile_06_colour2  = colour_unused
+level1_tile_06_colour3  = colour_unused
+.level1_tile_06_col_0
+.level1_tile_06_col_1
+.level1_tile_06_col_2
+.level1_tile_06_col_3
+    EQUB &07, &00, &07, &00, &06, &00, &00, &00
+```
+
+The `colour_<bbc-name>` / `colour_unused` symbols are defined
+elsewhere in the BeebAsm project as the actual MODE 2 palette-latch
+byte values; the encoder only knows their names.
+
+### Bytes changed
+
+For sprites that used all 4 of their scenario palette (most of the
+4×32 set), the brightness-order assignment matches the previous
+explicit palette order, so the encoded bytes are unchanged.
+
+A handful of sprites use a subset of their scenario palette --
+e.g. L2's `tile_06` uses `{black, cyan, white}` (no blue) -- and
+now the encoder compacts those 3 into logical 0/1/2 with logical 3
+unused, rather than reserving the L2-palette's "blue" slot. The
+RLE byte structure is similar but the actual byte values shift,
+so 6 of the 16 data files re-encoded with a different byte stream
+(same length, since RLE structure tracks runs not values).
+
+The 3 GRAPHIX shared hazards (slots 15 / 16 / 19) now report their
+true painted colours `[black, red, yellow, white]` in every (level,
+stage) bundle, and `--fallback-palette` is gone -- the auto-detect
+just sees those 4 colours and lays them out directly.
+
+### Build script cleanup
+
+`build.sh` lost all `--palette` and `--fallback-palette` flags; the
+16 invocations now only specify `--src`, `--out`, `--label`, and
+`--name-prefix`. The build comment header explains the auto-detect
++ brightness-order rules so anyone reading the script understands
+what palette each generated `.6502` file will use.
+
+### Stdout
+
+`encode_sprites.py` per-sprite stats now annotate the detected
+colours after the byte counts, e.g.:
+
+```
+level1_tile_06        4x32  flag=&08    8/128 B (  6%)  [black]
+level2_tile_06        4x32  flag=&18   41/128 B ( 32%)  [black,cyan,white]
+level1_stage1_hazard_19  4x32  flag=&18   98/128 B ( 76%)  [black,red,yellow,white]
+```
+
+so colour assignments are visible at a glance after each build.
+
+### Next
+
+* Enemies / hit frames (4 + 3 per scenario, 4×24).
+* Animating-sprite categories (player, flames, pickups) -- these
+  want the trim + raw-blit path per ../docs/sprite_rle_notes.md
+  "When to skip the RLE step", which the encoder doesn't have yet.
+
+---
+
 ## 2026-05-23 — Session 5: per-(level, stage) hazards + GRAPHIX dup'd in
 
 Added the third asset category: hazards. Each (level, stage) gets

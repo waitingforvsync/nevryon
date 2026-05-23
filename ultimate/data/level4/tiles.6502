@@ -17,11 +17,21 @@
 \\     decoder never falls into its slower literal path for run tails.
 \\   * Columns that encode to identical bytes share their stream: their
 \\     .<name>_col_M labels are stacked at the same address.
+\\
+\\ Per-sprite palette is auto-detected from the PNG pixels and assigned
+\\ to logical colours 0..3 in brightness order
+\\ (black < blue < red < magenta < green < cyan < yellow < white).
+\\ Unused slots are tagged colour_unused. The colour_<name> symbols are
+\\ defined elsewhere in the BeebAsm project.
 
 \\ level4_tile_00: 4x32 (16x32 px), 65 bytes (50% of raw 128 B)
 level4_tile_00_width    = 4
 level4_tile_00_height   = 32
 level4_tile_00_rle_flag = &20
+level4_tile_00_colour0  = colour_black
+level4_tile_00_colour1  = colour_red
+level4_tile_00_colour2  = colour_magenta
+level4_tile_00_colour3  = colour_white
 .level4_tile_00_col_0
     EQUB &07, &00, &07, &00, &04, &00, &30, &11, &11, &52, &D4
 .level4_tile_00_col_1
@@ -37,6 +47,10 @@ level4_tile_00_rle_flag = &20
 level4_tile_01_width    = 4
 level4_tile_01_height   = 32
 level4_tile_01_rle_flag = &20
+level4_tile_01_colour0  = colour_black
+level4_tile_01_colour1  = colour_red
+level4_tile_01_colour2  = colour_magenta
+level4_tile_01_colour3  = colour_white
 .level4_tile_01_col_0
     EQUB &05, &00, &00, &00, &10, &53, &52, &11, &52, &D6, &DD, &D4, &5A, &16, &1B, &19
     EQUB &18, &3C, &3C, &2E, &3C, &19, &19, &52, &D5
@@ -54,6 +68,10 @@ level4_tile_01_rle_flag = &20
 level4_tile_02_width    = 4
 level4_tile_02_height   = 32
 level4_tile_02_rle_flag = &20
+level4_tile_02_colour0  = colour_black
+level4_tile_02_colour1  = colour_red
+level4_tile_02_colour2  = colour_magenta
+level4_tile_02_colour3  = colour_white
 .level4_tile_02_col_0
     EQUB &07, &00, &03, &00, &D0, &DF, &D0, &1E, &33, &3D, &A5, &E2, &C1, &C0, &E1, &B3
     EQUB &16, &45, &C8, &EA
@@ -71,6 +89,10 @@ level4_tile_02_rle_flag = &20
 level4_tile_03_width    = 4
 level4_tile_03_height   = 32
 level4_tile_03_rle_flag = &28
+level4_tile_03_colour0  = colour_black
+level4_tile_03_colour1  = colour_red
+level4_tile_03_colour2  = colour_magenta
+level4_tile_03_colour3  = colour_white
 .level4_tile_03_col_0
     EQUB &D8, &D7, &D8, &27, &38, &26, &C8, &C9, &C8, &38, &D9, &D6, &D8, &27, &29, &08
     EQUB &F8, &C4, &CC, &DA, &D9, &14, &3E, &BA, &AB, &A9, &4A, &CC, &C1, &AF, &24, &18
@@ -88,6 +110,10 @@ level4_tile_03_rle_flag = &28
 level4_tile_04_width    = 4
 level4_tile_04_height   = 32
 level4_tile_04_rle_flag = &08
+level4_tile_04_colour0  = colour_black
+level4_tile_04_colour1  = colour_red
+level4_tile_04_colour2  = colour_magenta
+level4_tile_04_colour3  = colour_white
 .level4_tile_04_col_0
     EQUB &07, &00, &03, &00, &F8, &F7, &F8, &36, &1B, &D9, &C5, &EE, &FA, &E8, &C9, &9B
     EQUB &3E, &6D, &60, &42
@@ -103,6 +129,10 @@ level4_tile_04_rle_flag = &08
 level4_tile_05_width    = 4
 level4_tile_05_height   = 32
 level4_tile_05_rle_flag = &20
+level4_tile_05_colour0  = colour_black
+level4_tile_05_colour1  = colour_red
+level4_tile_05_colour2  = colour_magenta
+level4_tile_05_colour3  = colour_white
 .level4_tile_05_col_0
     EQUB &A0, &E8, &C4, &C4, &D2, &59, &5C, &16, &16, &37, &29, &2D, &2B, &3A, &3A, &10
     EQUB &D0, &DF, &D0, &1E, &33, &F1, &ED, &C6, &D2, &C0, &E1, &B3, &16, &45, &48, &6A
@@ -120,6 +150,10 @@ level4_tile_05_rle_flag = &20
 level4_tile_06_width    = 4
 level4_tile_06_height   = 32
 level4_tile_06_rle_flag = &08
+level4_tile_06_colour0  = colour_black
+level4_tile_06_colour1  = colour_unused
+level4_tile_06_colour2  = colour_unused
+level4_tile_06_colour3  = colour_unused
 .level4_tile_06_col_0
 .level4_tile_06_col_1
 .level4_tile_06_col_2
@@ -130,6 +164,10 @@ level4_tile_06_rle_flag = &08
 level4_tile_07_width    = 4
 level4_tile_07_height   = 32
 level4_tile_07_rle_flag = &20
+level4_tile_07_colour0  = colour_black
+level4_tile_07_colour1  = colour_red
+level4_tile_07_colour2  = colour_magenta
+level4_tile_07_colour3  = colour_white
 .level4_tile_07_col_0
     EQUB &07, &00, &00, &00, &30, &10, &60, &93, &DC, &D0, &1C, &33, &3D, &A5, &E2, &C1
     EQUB &C0, &E1, &B3, &16, &45, &C8, &EA
@@ -147,6 +185,10 @@ level4_tile_07_rle_flag = &20
 level4_tile_08_width    = 4
 level4_tile_08_height   = 32
 level4_tile_08_rle_flag = &10
+level4_tile_08_colour0  = colour_black
+level4_tile_08_colour1  = colour_red
+level4_tile_08_colour2  = colour_magenta
+level4_tile_08_colour3  = colour_white
 .level4_tile_08_col_0
     EQUB &00, &00, &D0, &E8, &EE, &E1, &E0, &E0, &2C, &17, &02, &00, &90, &F8, &E6, &69
     EQUB &24, &0A, &95, &D2, &F1, &F0, &F0, &C0, &A1, &A1, &62, &E4
@@ -164,6 +206,10 @@ level4_tile_08_rle_flag = &10
 level4_tile_09_width    = 4
 level4_tile_09_height   = 32
 level4_tile_09_rle_flag = &20
+level4_tile_09_colour0  = colour_black
+level4_tile_09_colour1  = colour_red
+level4_tile_09_colour2  = colour_magenta
+level4_tile_09_colour3  = colour_white
 .level4_tile_09_col_0
     EQUB &00, &00, &E0, &D8, &DE, &D1, &D0, &D0, &1C, &27, &02, &00, &A0, &C8, &D6, &59
     EQUB &14, &3A, &A5, &E2, &C1, &C0, &C0, &F0, &91, &91, &52, &D4
@@ -181,6 +227,10 @@ level4_tile_09_rle_flag = &20
 level4_tile_10_width    = 4
 level4_tile_10_height   = 32
 level4_tile_10_rle_flag = &20
+level4_tile_10_colour0  = colour_black
+level4_tile_10_colour1  = colour_red
+level4_tile_10_colour2  = colour_magenta
+level4_tile_10_colour3  = colour_white
 .level4_tile_10_col_0
     EQUB &07, &00, &01, &00, &10, &51, &D7, &DE, &D0, &D0, &3E, &23, &2D, &E1, &E0, &22
     EQUB &E3, &CD, &D0, &C1, &E2, &2D
@@ -198,6 +248,10 @@ level4_tile_10_rle_flag = &20
 level4_tile_11_width    = 4
 level4_tile_11_height   = 32
 level4_tile_11_rle_flag = &10
+level4_tile_11_colour0  = colour_black
+level4_tile_11_colour1  = colour_red
+level4_tile_11_colour2  = colour_magenta
+level4_tile_11_colour3  = colour_white
 .level4_tile_11_col_0
     EQUB &00, &00, &D0, &E8, &EE, &E3, &E0, &68, &2C, &24, &17, &11, &00, &00, &90, &F8
     EQUB &E6, &69, &24, &0A, &95, &D2, &F1, &F0, &F0, &C0, &A1, &A1, &62, &E4
@@ -215,6 +269,10 @@ level4_tile_11_rle_flag = &10
 level4_tile_12_width    = 4
 level4_tile_12_height   = 32
 level4_tile_12_rle_flag = &28
+level4_tile_12_colour0  = colour_black
+level4_tile_12_colour1  = colour_red
+level4_tile_12_colour2  = colour_magenta
+level4_tile_12_colour3  = colour_white
 .level4_tile_12_col_0
     EQUB &A8, &A8, &A0, &E0, &EC, &C8, &CA, &35, &3D, &3D, &28, &B9, &9B, &1B, &18, &39
     EQUB &8B, &93, &E8, &13, &0B, &9B, &7D, &6E, &4A, &88, &A8, &B9, &5A, &DC, &E3, &26
@@ -232,6 +290,10 @@ level4_tile_12_rle_flag = &28
 level4_tile_13_width    = 4
 level4_tile_13_height   = 32
 level4_tile_13_rle_flag = &28
+level4_tile_13_colour0  = colour_black
+level4_tile_13_colour1  = colour_red
+level4_tile_13_colour2  = colour_magenta
+level4_tile_13_colour3  = colour_white
 .level4_tile_13_col_0
     EQUB &E8, &C4, &00, &F2, &15, &3E, &3E, &2B, &21, &AC, &EA, &C9, &38, &E8, &C4, &CC
     EQUB &CC, &C8, &52, &50, &51, &1C, &2B, &20, &AD, &A9, &39, &99, &D6, &D8, &27
@@ -249,6 +311,10 @@ level4_tile_13_rle_flag = &28
 level4_tile_14_width    = 4
 level4_tile_14_height   = 32
 level4_tile_14_rle_flag = &28
+level4_tile_14_colour0  = colour_black
+level4_tile_14_colour1  = colour_red
+level4_tile_14_colour2  = colour_magenta
+level4_tile_14_colour3  = colour_white
 .level4_tile_14_col_0
     EQUB &C8, &D6, &DB, &D8, &14, &3E, &2B, &21, &24, &AE, &EB, &D8, &C8, &28, &D8, &D7
     EQUB &D8, &D8, &36, &2B, &21, &A9, &AC, &E8, &F8, &B8, &19, &5B, &DE, &C5, &E2, &24
@@ -266,6 +332,10 @@ level4_tile_14_rle_flag = &28
 level4_tile_15_width    = 4
 level4_tile_15_height   = 32
 level4_tile_15_rle_flag = &30
+level4_tile_15_colour0  = colour_black
+level4_tile_15_colour1  = colour_red
+level4_tile_15_colour2  = colour_magenta
+level4_tile_15_colour3  = colour_white
 .level4_tile_15_col_0
     EQUB &D0, &CE, &C1, &C0, &D0, &1C, &32, &22, &31, &30, &B0, &C0, &CF, &C0, &2E, &31
     EQUB &C3, &CC, &C0, &C0, &48, &01, &65, &00, &B2, &E0, &A0, &81, &43
@@ -283,6 +353,10 @@ level4_tile_15_rle_flag = &30
 level4_tile_16_width    = 4
 level4_tile_16_height   = 32
 level4_tile_16_rle_flag = &20
+level4_tile_16_colour0  = colour_black
+level4_tile_16_colour1  = colour_red
+level4_tile_16_colour2  = colour_magenta
+level4_tile_16_colour3  = colour_white
 .level4_tile_16_col_0
     EQUB &E0, &CC, &D2, &D1, &D0, &D0, &58, &1C, &36, &23, &29, &A1, &10, &11, &D3, &DE
     EQUB &D0, &C1, &A7, &2C, &21, &23, &3E, &C0, &C0, &E0, &A0, &30, &D1, &DE, &D0, &2F
@@ -300,6 +374,10 @@ level4_tile_16_rle_flag = &20
 level4_tile_17_width    = 4
 level4_tile_17_height   = 32
 level4_tile_17_rle_flag = &50
+level4_tile_17_colour0  = colour_black
+level4_tile_17_colour1  = colour_red
+level4_tile_17_colour2  = colour_magenta
+level4_tile_17_colour3  = colour_white
 .level4_tile_17_col_0
     EQUB &B0, &AE, &A1, &A0, &A0, &6C, &42, &42, &51, &50, &D0, &A0, &AF, &A0, &4E, &51
     EQUB &A3, &AC, &A0, &A0, &28, &01, &65, &00, &B2, &80, &C0, &E1, &23
